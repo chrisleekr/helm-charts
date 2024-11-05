@@ -1,0 +1,69 @@
+stages:
+  - testing
+  - build development
+  - bump production
+  - build production
+
+testing-helm:
+  stage: testing
+  image: alpine/helm:3
+  interruptible: true
+  script:
+    - helm template ./chart/binance-trading-bot > ./template.yaml
+    - helm lint ./chart/binance-trading-bot
+  artifacts:
+    paths:
+      - ./template.yaml
+
+publish-helm-dev:
+  stage: build development
+  image: alpine/helm:3
+  interruptible: true
+  except:
+    - master
+    - development
+  before_script:
+    - helm plugin install https://github.com/chartmuseum/helm-push.git
+    - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
+  script:
+    - VERSION=$(yq e '.version' ./chart/binance-trading-bot/Chart.yaml)
+    # TODO: Fix the version number
+    - helm cm-push ./chart/binance-trading-bot --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
+
+# Comment out as bumping the version will be done in Github actions.
+# bump-helm-version:
+#   stage: bump production
+#   image: node:lts-alpine
+#   only:
+#     - master
+#   interruptible: true
+#   before_script:
+#     - apk update
+#     - apk add yq git
+#     - npm install -g semver
+#   script:
+#     - |
+#       VERSION=$(yq e '.version' ./chart/binance-trading-bot/Chart.yaml)
+#       VERSION=$(semver -i patch $VERSION)
+#       yq e -i '.version = "'${VERSION}'"' ./chart/binance-trading-bot/Chart.yaml
+#       # Set CI_PUSH_TOKEN in the repo variables after generating the token
+#       echo "https://${GITLAB_USER_LOGIN}:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git"
+#       git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
+#       git config --global user.email "$GITLAB_USER_EMAIL"
+#       git config --global user.name "$GITLAB_USER_NAME"
+#       git commit -am "bump: helm chart version to ${VERSION} [skip ci]"
+#       git push origin HEAD:"${CI_COMMIT_REF_NAME}"
+
+publish-helm:
+  stage: build production
+  image: alpine/helm:3
+  # dependencies:
+  #   - bump-helm-version
+  only:
+    - master
+  before_script:
+    - helm plugin install https://github.com/chartmuseum/helm-push.git
+    - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
+  script:
+    - git pull
+    - helm cm-push ./chart/binance-trading-bot gitlab

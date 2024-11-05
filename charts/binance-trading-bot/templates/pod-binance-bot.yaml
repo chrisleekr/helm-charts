@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: binance-trading-bot
+    app: {{ include "binance-trading-bot.fullname" . }}
+spec:
+  {{- with .Values.binanceBot.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  serviceAccountName: {{ include "binance-trading-bot.serviceAccountName" . }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}
+  containers:
+    - name: {{ .Chart.Name }}
+      {{- with .Values.binanceBot.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      image: "{{ .Values.binanceBot.image.repository }}:{{ .Values.binanceBot.image.tag | default .Chart.AppVersion }}"
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      ports:
+        - name: http
+          containerPort: {{ .Values.binanceBot.service.port }}
+          protocol: TCP
+      livenessProbe:
+        {{- toYaml .Values.binanceBot.livenessProbe | nindent 8 }}
+      readinessProbe:
+        {{- toYaml .Values.binanceBot.readinessProbe | nindent 8 }}
+      {{- with .Values.binanceBot.startupProbe }}
+      startupProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.binanceBot.resources }}
+      resources:
+        {{- toYaml .Values.binanceBot.resources | nindent 8 }}
+      {{- end }}
+      envFrom:
+        - configMapRef:
+            name: {{ include "binance-trading-bot.fullname" . }}-config
+        - secretRef:
+            name: {{ if .Values.binanceBot.secrets.existingSecret }}{{ .Values.binanceBot.secrets.existingSecret }}{{ else }}{{ include "binance-trading-bot.fullname" . }}-secrets{{ end }}
+      env:
+        - name: BINANCE_REDIS_HOST
+          value: {{ include "binance-trading-bot.fullname" . }}-redis.{{ .Release.Namespace }}.svc
+        - name: BINANCE_MONGO_HOST
+          value: {{ include "binance-trading-bot.fullname" . }}-mongodb.{{ .Release.Namespace }}.svc
+        - name: BINANCE_TRADINGVIEW_HOST
+          value: {{ include "binance-trading-bot.fullname" . }}-tradingview.{{ .Release.Namespace }}.svc
+        - name: BINANCE_REDIS_PASSWORD
+          valueFrom:
+            {{- if .Values.redis.secrets.existingSecret }}
+            secretKeyRef:
+              name: {{ .Values.redis.secrets.existingSecret }}
+              key: {{ .Values.redis.secrets.secretKey }}
+            {{- else }}
+            secretKeyRef:
+              name: {{ include "binance-trading-bot.fullname" . }}-redis-secret
+              key: redis-password
+            {{- end }}
+  {{- with .Values.binanceBot.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}
+  {{- with .Values.binanceBot.affinity }}
+  affinity:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}
+  {{- with .Values.binanceBot.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}

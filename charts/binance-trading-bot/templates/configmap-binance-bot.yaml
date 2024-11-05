@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-config
+data:
+  BINANCE_MODE: {{ .Values.binanceBot.config.mode | quote }}
+  BINANCE_TZ: {{ .Values.binanceBot.config.timezone | quote }}
+  BINANCE_DEMO_MODE: {{ .Values.binanceBot.config.demoMode | quote }}
+
+  # Redis configuration
+  BINANCE_REDIS_PORT: {{ .Values.binanceBot.config.redis.port | quote }}
+  BINANCE_REDIS_DB: {{ .Values.binanceBot.config.redis.db | quote }}
+
+  # MongoDB configuration
+  BINANCE_MONGO_PORT: {{ .Values.binanceBot.config.mongo.port | quote }}
+  BINANCE_MONGO_DATABASE: {{ .Values.binanceBot.config.mongo.database | quote }}
+
+  # TradingView configuration
+  BINANCE_TRADINGVIEW_PORT: {{ .Values.binanceBot.config.tradingview.port | quote }}
+
+  # Slack configuration
+  BINANCE_SLACK_ENABLED: {{ .Values.binanceBot.config.slack.enabled | quote }}
+  BINANCE_SLACK_CHANNEL: {{ .Values.binanceBot.config.slack.channel | quote }}
+  BINANCE_SLACK_USERNAME: {{ .Values.binanceBot.config.slack.username | quote }}
+
+  # Feature toggles
+  BINANCE_FEATURE_TOGGLE_NOTIFY_ORDER_CONFIRM: {{ .Values.binanceBot.config.featureToggle.notifyOrderConfirm | quote }}
+  BINANCE_FEATURE_TOGGLE_NOTIFY_DEBUG: {{ .Values.binanceBot.config.featureToggle.notifyDebug | quote }}
+  BINANCE_FEATURE_TOGGLE_NOTIFY_ORDER_EXECUTE: {{ .Values.binanceBot.config.featureToggle.notifyOrderExecute | quote }}
+
+  # Authentication
+  BINANCE_AUTHENTICATION_ENABLED: {{ .Values.binanceBot.config.authentication.enabled | quote }}
+  BINANCE_AUTHENTICATION_LOGIN_LIMITER_MAX_CONSECUTIVE_FAILS: {{ .Values.binanceBot.config.authentication.loginLimiter.maxConsecutiveFails | quote }}
+  BINANCE_AUTHENTICATION_LOGIN_LIMITER_DURATION: {{ .Values.binanceBot.config.authentication.loginLimiter.duration | quote }}
+  BINANCE_AUTHENTICATION_LOGIN_LIMITER_BLOCK_DURATION: {{ .Values.binanceBot.config.authentication.loginLimiter.blockDuration | quote }}
+
+  # Jobs configuration
+  BINANCE_JOBS_ALIVE_ENABLED: {{ .Values.binanceBot.config.jobs.alive.enabled | quote }}
+  BINANCE_JOBS_ALIVE_CRONTIME: {{ .Values.binanceBot.config.jobs.alive.cronTime | quote }}
+  BINANCE_JOBS_ALIVE_PRICE_SYMBOL: {{ .Values.binanceBot.config.jobs.alive.priceSymbol | quote }}
+  BINANCE_JOBS_ALIVE_BALANCE_SYMBOLS: {{ .Values.binanceBot.config.jobs.alive.balanceSymbols | quote }}

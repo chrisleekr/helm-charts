@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-redis
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+    app: {{ include "binance-trading-bot.fullname" . }}-redis
+spec:
+  {{- with .Values.redis.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.redis.sysctl }}
+  initContainers:
+    - name: sysctl-conf
+      image: "busybox:latest"  # Much smaller image
+      securityContext:
+        privileged: true
+      command:
+        - /bin/sh
+        - -c
+        - |
+          {{- range $key, $value := .Values.redis.sysctl }}
+          sysctl -w {{ $key }}={{ $value }}
+          {{- end }}
+  {{- end }}
+  containers:
+    - name: redis
+      securityContext:
+        {{- with .Values.redis.securityContext }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      command:
+        - redis-server
+        - /usr/local/etc/redis/redis.conf
+        - --requirepass
+        - $(REDIS_PASSWORD)
+      env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            {{- if .Values.redis.secrets.existingSecret }}
+            secretKeyRef:
+              name: {{ .Values.redis.secrets.existingSecret }}
+              key: {{ .Values.redis.secrets.secretKey }}
+            {{- else }}
+            secretKeyRef:
+              name: {{ include "binance-trading-bot.fullname" . }}-redis-secret
+              key: redis-password
+            {{- end }}
+      ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+      {{- with .Values.redis.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        - name: redis-data
+          mountPath: /data
+          {{- if .Values.redis.persistentVolume.subPath }}
+          subPath: {{ .Values.redis.persistentVolume.subPath }}
+          {{- end }}
+        - name: redis-config
+          mountPath: /usr/local/etc/redis/redis.conf
+          subPath: redis.conf
+      {{- with .Values.redis.livenessProbe }}
+      livenessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.readinessProbe }}
+      readinessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.startupProbe }}
+      startupProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumes:
+    - name: redis-data
+      {{- if .Values.redis.persistentVolume.enabled }}
+      persistentVolumeClaim:
+        {{- if .Values.redis.persistentVolume.existingClaim }}
+        claimName: {{ .Values.redis.persistentVolume.existingClaim }}
+        {{- else }}
+        claimName: {{ include "binance-trading-bot.fullname" . }}-redis
+        {{- end }}
+      {{- else }}
+      emptyDir: {}
+      {{- end }}
+    - name: redis-config
+      configMap:
+        name: {{ include "binance-trading-bot.fullname" . }}-redis-config

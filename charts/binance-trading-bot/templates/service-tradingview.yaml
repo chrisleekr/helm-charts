@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-tradingview
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tradingview
+spec:
+  type: {{ .Values.tradingview.service.type }}
+  ports:
+    - port: {{ .Values.tradingview.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tradingview

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-redis-config
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+data:
+  redis.conf: |
+    # Your redis.conf content here
+    # You might want to add this to values.yaml and template it from there

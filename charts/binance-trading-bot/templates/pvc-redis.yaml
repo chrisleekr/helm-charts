@@ -1,0 +1,30 @@
+{{- if and .Values.redis.persistentVolume.enabled (not .Values.redis.persistentVolume.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-redis
+  {{- with .Values.redis.persistentVolume.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- range .Values.redis.persistentVolume.accessModes }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistentVolume.size | quote }}
+  {{- if .Values.redis.persistentVolume.storageClass }}
+  {{- if (eq "-" .Values.redis.persistentVolume.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.redis.persistentVolume.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.redis.persistentVolume.volumeBindingMode }}
+  volumeBindingMode: {{ .Values.redis.persistentVolume.volumeBindingMode | quote }}
+  {{- end }}
+{{- end }}

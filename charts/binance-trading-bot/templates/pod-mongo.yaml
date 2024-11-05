@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-mongodb
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+    app: {{ include "binance-trading-bot.fullname" . }}-mongodb
+spec:
+  {{- with .Values.mongo.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: mongodb
+      securityContext:
+        {{- with .Values.mongo.securityContext }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      ports:
+        - name: mongodb
+          containerPort: 27017
+          protocol: TCP
+      {{- with .Values.mongo.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+          {{- if .Values.mongo.persistentVolume.subPath }}
+          subPath: {{ .Values.mongo.persistentVolume.subPath }}
+          {{- end }}
+      {{- with .Values.mongo.livenessProbe }}
+      livenessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mongo.readinessProbe }}
+      readinessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mongo.startupProbe }}
+      startupProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumes:
+    - name: mongo-data
+      {{- if .Values.mongo.persistentVolume.enabled }}
+      persistentVolumeClaim:
+        {{- if .Values.mongo.persistentVolume.existingClaim }}
+        claimName: {{ .Values.mongo.persistentVolume.existingClaim }}
+        {{- else }}
+        claimName: {{ include "binance-trading-bot.fullname" . }}-mongodb
+        {{- end }}
+      {{- else }}
+      emptyDir: {}
+      {{- end }}

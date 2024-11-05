@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}-tradingview
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tradingview
+    app: {{ include "binance-trading-bot.fullname" . }}-tradingview
+spec:
+  {{- with .Values.tradingview.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: tradingview
+      {{- with .Values.tradingview.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      image: "{{ .Values.tradingview.image.repository }}:{{ .Values.tradingview.image.tag }}"
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+      env:
+        - name: BINANCE_TRADINGVIEW_LOG_LEVEL
+          value: "INFO"
+      {{- with .Values.tradingview.livenessProbe }}
+      livenessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tradingview.readinessProbe }}
+      readinessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tradingview.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tradingview.startupProbe }}
+      startupProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,43 @@
+{{- if .Values.binanceBot.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+  {{- with .Values.binanceBot.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.binanceBot.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.binanceBot.ingress.tls }}
+  tls:
+    {{- range .Values.binanceBot.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.binanceBot.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            {{- with .pathType }}
+            pathType: {{ . }}
+            {{- end }}
+            backend:
+              service:
+                name: {{ include "binance-trading-bot.fullname" $ }}
+                port:
+                  number: {{ $.Values.binanceBot.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

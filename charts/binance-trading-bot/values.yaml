@@ -1,0 +1,336 @@
+# Default values for binance-trading-bot.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+imagePullPolicy: IfNotPresent
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+redis:
+  image:
+    repository: redis
+    tag: 6.2.4
+  sysctl:
+    net.core.somaxconn: 1024
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  persistentVolume:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    annotations: {}
+    existingClaim: ""
+    mountPath: /data
+    size: 32Gi
+    # storageClass: "-"
+    # volumeBindingMode: ""
+    subPath: ""
+  securityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false # Redis needs write access
+    runAsNonRoot: true
+    runAsUser: 1001 # Redis official container user
+  podSecurityContext: {}
+  config: |
+    # Redis configuration content
+    # Add your redis.conf content here
+  secrets:
+    # If existingSecret is not set, password will be used
+    password: ""
+    existingSecret: "binance-trading-bot-redis-secrets"
+    secretKey: "redis-password"
+  livenessProbe:
+    tcpSocket:
+      port: redis
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  readinessProbe:
+    tcpSocket:
+      port: redis
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  startupProbe:
+    tcpSocket:
+      port: redis
+    failureThreshold: 30
+    periodSeconds: 10
+
+mongo:
+  image:
+    repository: mongo
+    tag: 3.2.20-jessie
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  persistentVolume:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    annotations: {}
+    existingClaim: ""
+    mountPath: /data
+    size: 32Gi
+    # storageClass: "-"
+    # volumeBindingMode: ""
+    subPath: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+  securityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false # MongoDB needs write access
+    runAsNonRoot: true
+    runAsUser: 999 # MongoDB official container user
+  livenessProbe:
+    tcpSocket:
+      port: mongodb
+    initialDelaySeconds: 30
+    periodSeconds: 20
+  readinessProbe:
+    tcpSocket:
+      port: mongodb
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  startupProbe:
+    tcpSocket:
+      port: mongodb
+    failureThreshold: 30
+    periodSeconds: 10
+
+binanceBot:
+  image:
+    repository: chrisleekr/binance-trading-bot
+    tag: latest
+  livenessProbe:
+    httpGet:
+      path: /status
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    timeoutSeconds: 5
+  readinessProbe:
+    httpGet:
+      path: /status
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  startupProbe:
+    httpGet:
+      path: /status
+      port: http
+    failureThreshold: 30
+    periodSeconds: 10
+  # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+  service:
+    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+    type: ClusterIP
+    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    port: 80
+  # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+  ingress:
+    enabled: false
+    className: ""
+    annotations:
+      {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: binance.chart-example.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  securityContext:
+    privileged: true # binance-trading-bot needs port 80... could be configured better!
+  podSecurityContext: {}
+
+  # Application configuration
+  secrets:
+    existingSecret: "binance-trading-bot-secrets" # Make it empty if wants to create from config.binance.live.apiKey and config.binance.live.secretKey
+
+  config:
+    mode: "test" # or "live"
+    timezone: "Australia/Melbourne"
+    demoMode: false
+
+    binance:
+      live:
+        apiKey: ""
+        secretKey: ""
+      test:
+        apiKey: ""
+        secretKey: ""
+
+    redis:
+      host: "binance-trading-bot-redis" # Service name
+      port: 6379
+      db: 0
+
+    mongo:
+      host: "binance-trading-bot-mongodb" # Service name
+      port: 27017
+      database: "binance-bot"
+
+    tradingview:
+      host: "binance-trading-bot-tradingview" # Service name
+      port: 8080
+
+    slack:
+      enabled: false
+      webhookUrl: ""
+      channel: "binance-bot"
+      username: "Binance Bot"
+
+    localTunnel:
+      enabled: false
+      subdomain: ""
+
+    featureToggle:
+      notifyOrderConfirm: false
+      notifyDebug: false
+      notifyOrderExecute: false
+
+    authentication:
+      enabled: false
+      password:
+        existingSecret: ""
+        secretKey: "auth-password"
+      loginLimiter:
+        maxConsecutiveFails: 5
+        duration: 300
+        blockDuration: 900
+
+    jobs:
+      alive:
+        enabled: true
+        cronTime: "0 * * * * *"
+        priceSymbol: "BTCUSDT"
+        balanceSymbols: "BTC,USDT"
+
+      trailingTrade:
+        enabled: true
+        cronTime: "* * * * * *"
+        symbols: [] # Will be filled as JSON array
+        botOptions:
+          authentication:
+            lockList: false
+            lockAfter: 120
+          autoTriggerBuy:
+            enabled: false
+            triggerAfter: 20
+            conditions:
+              whenLessThanATHRestriction: true
+              afterDisabledPeriod: true
+          orderLimit:
+            enabled: false
+            maxBuyOpenOrders: 3
+            maxOpenTrades: 5
+        candles:
+          interval: "1m"
+          limit: 100
+        buy:
+          enabled: true
+          triggerPercentage: 1.0
+          stopPercentage: 1.02
+          limitPercentage: 1.021
+          athRestriction:
+            enabled: true
+            candles:
+              interval: "1d"
+              limit: 30
+            restrictionPercentage: 0.9
+        sell:
+          enabled: true
+          triggerPercentage: 1.06
+          stopPercentage: 0.98
+          limitPercentage: 0.979
+          stopLoss:
+            enabled: false
+            maxLossPercentage: 0.8
+            disableBuyMinutes: 360
+            orderType: "market"
+          conservativeMode:
+            enabled: false
+            factor: 0.5
+
+tradingview:
+  image:
+    repository: chrisleekr/binance-trading-bot
+    tag: tradingview
+  livenessProbe:
+    httpGet:
+      path: /status
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+  readinessProbe:
+    httpGet:
+      path: /status
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  startupProbe:
+    httpGet:
+      path: /status
+      port: http
+    failureThreshold: 30
+    periodSeconds: 30
+  # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+  service:
+    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+    type: ClusterIP
+    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    port: 8080
+  resources:
+    limits:
+      cpu: 300m
+      memory: 384Mi
+    requests:
+      cpu: 150m
+      memory: 192Mi
+  podSecurityContext:
+    fsGroup: 2000
+  securityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
