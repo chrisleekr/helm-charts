@@ -1,0 +1,32 @@
+apiVersion: v1
+entries:
+  binance-trading-bot:
+  - apiVersion: v2
+    appVersion: 0.0.98
+    created: "2024-11-05T04:24:00.907752333Z"
+    description: A Helm chart for Binance Trading Bot
+    digest: 68f0784c7ed3c79de3b30246c00aa764bf57b129743985bc9ea7817ea38a69d9
+    icon: https://raw.githubusercontent.com/chrisleekr/binance-trading-bot/refs/heads/master/public/favicon.ico
+    keywords:
+    - bot
+    - trading-bot
+    - cryptocurrency
+    - binance
+    - binance-api
+    - crypto-trading
+    - technical-analysis-indicators
+    - binance-trading-bot
+    - grid-trading
+    - tradingview
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - email: git@chrislee.kr
+      name: Chris Lee
+    name: binance-trading-bot
+    sources:
+    - https://github.com/chrisleekr/binance-trading-bot
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-0.1.0/binance-trading-bot-0.1.0.tgz
+    version: 0.1.0
+generated: "2024-11-05T04:24:00.907762633Z"
