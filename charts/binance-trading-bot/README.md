@@ -30,13 +30,13 @@ To install via Helm, run the following command.
 
 ```bash
 helm upgrade --install trading -n trading --create-namespace \
-  --repo https://helm.chrislee.kr/binance-trading-bot/ binance-trading-bot
+  --repo https://chrisleekr.github.io/helm-charts/binance-trading-bot/ binance-trading-bot
 ```
 
 Alternatively, add the Helm repository first and scan for updates.
 
 ```bash
-helm repo add binance-trading-bot https://helm.chrislee.kr/binance-trading-bot/
+helm repo add chrisleekr https://chrisleekr.github.io/helm-charts
 helm repo update
 ```
 
