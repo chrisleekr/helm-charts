@@ -9,8 +9,8 @@ testing-helm:
   image: alpine/helm:3
   interruptible: true
   script:
-    - helm template ./chart/binance-trading-bot > ./template.yaml
-    - helm lint ./chart/binance-trading-bot
+    - helm template ./charts/binance-trading-bot > ./template.yaml
+    - helm lint ./charts/binance-trading-bot
   artifacts:
     paths:
       - ./template.yaml
@@ -26,9 +26,9 @@ publish-helm-dev:
     - helm plugin install https://github.com/chartmuseum/helm-push.git
     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
   script:
-    - VERSION=$(yq e '.version' ./chart/binance-trading-bot/Chart.yaml)
+    - VERSION=$(yq e '.version' ./charts/binance-trading-bot/Chart.yaml)
     # TODO: Fix the version number
-    - helm cm-push ./chart/binance-trading-bot --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
+    - helm cm-push ./charts/binance-trading-bot --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
 
 # Comment out as bumping the version will be done in Github actions.
 # bump-helm-version:
@@ -43,9 +43,9 @@ publish-helm-dev:
 #     - npm install -g semver
 #   script:
 #     - |
-#       VERSION=$(yq e '.version' ./chart/binance-trading-bot/Chart.yaml)
+#       VERSION=$(yq e '.version' ./charts/binance-trading-bot/Chart.yaml)
 #       VERSION=$(semver -i patch $VERSION)
-#       yq e -i '.version = "'${VERSION}'"' ./chart/binance-trading-bot/Chart.yaml
+#       yq e -i '.version = "'${VERSION}'"' ./charts/binance-trading-bot/Chart.yaml
 #       # Set CI_PUSH_TOKEN in the repo variables after generating the token
 #       echo "https://${GITLAB_USER_LOGIN}:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git"
 #       git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
@@ -66,4 +66,4 @@ publish-helm:
     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
   script:
     - git pull
-    - helm cm-push ./chart/binance-trading-bot gitlab
+    - helm cm-push ./charts/binance-trading-bot gitlab
