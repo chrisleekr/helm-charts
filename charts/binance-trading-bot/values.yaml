@@ -16,6 +16,7 @@ redis:
   image:
     repository: redis
     tag: 6.2.4
+  podAnnotations: {}
   sysctl:
     net.core.somaxconn: 1024
   resources:
@@ -36,14 +37,8 @@ redis:
     # storageClass: "-"
     # volumeBindingMode: ""
     subPath: ""
-  securityContext:
-    capabilities:
-      drop:
-        - ALL
-    readOnlyRootFilesystem: false # Redis needs write access
-    runAsNonRoot: true
-    runAsUser: 1001 # Redis official container user
   podSecurityContext: {}
+  securityContext: {}
   config: |
     # Redis configuration content
     # Add your redis.conf content here
@@ -62,16 +57,12 @@ redis:
       port: redis
     initialDelaySeconds: 5
     periodSeconds: 10
-  startupProbe:
-    tcpSocket:
-      port: redis
-    failureThreshold: 30
-    periodSeconds: 10
 
 mongo:
   image:
     repository: mongo
     tag: 3.2.20-jessie
+  podAnnotations: {}
   resources:
     limits:
       cpu: 500m
@@ -94,13 +85,7 @@ mongo:
     runAsNonRoot: true
     runAsUser: 999
     fsGroup: 999
-  securityContext:
-    capabilities:
-      drop:
-        - ALL
-    readOnlyRootFilesystem: false # MongoDB needs write access
-    runAsNonRoot: true
-    runAsUser: 999 # MongoDB official container user
+  securityContext: {}
   livenessProbe:
     tcpSocket:
       port: mongodb
@@ -110,36 +95,26 @@ mongo:
     tcpSocket:
       port: mongodb
     initialDelaySeconds: 10
-    periodSeconds: 10
-  startupProbe:
-    tcpSocket:
-      port: mongodb
-    failureThreshold: 30
     periodSeconds: 10
 
 binanceBot:
   image:
     repository: chrisleekr/binance-trading-bot
     tag: latest
+  podAnnotations: {}
   livenessProbe:
     httpGet:
       path: /status
       port: http
     initialDelaySeconds: 30
-    periodSeconds: 20
+    periodSeconds: 30
     timeoutSeconds: 5
   readinessProbe:
     httpGet:
       path: /status
       port: http
     initialDelaySeconds: 10
-    periodSeconds: 10
-  startupProbe:
-    httpGet:
-      path: /status
-      port: http
-    failureThreshold: 30
-    periodSeconds: 10
+    periodSeconds: 30
   # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
   service:
     # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
@@ -173,10 +148,12 @@ binanceBot:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  securityContext:
-    privileged: true # binance-trading-bot needs port 80... could be configured better!
   podSecurityContext: {}
+  securityContext:
+    privileged: true
 
+  # Additional environment variables to add to the container
+  env: {}
   # Application configuration
   secrets:
     existingSecret: "binance-trading-bot-secrets" # Make it empty if wants to create from config.binance.live.apiKey and config.binance.live.secretKey
@@ -185,6 +162,8 @@ binanceBot:
     mode: "test" # or "live"
     timezone: "Australia/Melbourne"
     demoMode: false
+
+    logLevel: "INFO"
 
     binance:
       live:
@@ -290,6 +269,7 @@ tradingview:
   image:
     repository: chrisleekr/binance-trading-bot
     tag: tradingview
+  podAnnotations: {}
   livenessProbe:
     httpGet:
       path: /status
@@ -302,12 +282,6 @@ tradingview:
       path: /status
       port: http
     initialDelaySeconds: 30
-    periodSeconds: 30
-  startupProbe:
-    httpGet:
-      path: /status
-      port: http
-    failureThreshold: 30
     periodSeconds: 30
   # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
   service:

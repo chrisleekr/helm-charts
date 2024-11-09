@@ -6,6 +6,8 @@ metadata:
     {{- include "binance-trading-bot.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongodb
     app: {{ include "binance-trading-bot.fullname" . }}-mongodb
+  annotations:
+    {{- toYaml .Values.mongo.podAnnotations | nindent 4 }}
 spec:
   {{- with .Values.mongo.podSecurityContext }}
   securityContext:

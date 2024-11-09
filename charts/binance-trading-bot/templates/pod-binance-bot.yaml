@@ -6,6 +6,8 @@ metadata:
     {{- include "binance-trading-bot.labels" . | nindent 4 }}
     app.kubernetes.io/component: binance-trading-bot
     app: {{ include "binance-trading-bot.fullname" . }}
+  annotations:
+    {{- toYaml .Values.binanceBot.podAnnotations | nindent 4 }}
 spec:
   {{- with .Values.binanceBot.podSecurityContext }}
   securityContext:
@@ -63,6 +65,9 @@ spec:
               name: {{ include "binance-trading-bot.fullname" . }}-redis-secret
               key: redis-password
             {{- end }}
+        {{- if .Values.binanceBot.env }}
+        {{- toYaml .Values.binanceBot.env | nindent 8 }}
+        {{- end }}
   {{- with .Values.binanceBot.nodeSelector }}
   nodeSelector:
     {{- toYaml . | nindent 8 }}

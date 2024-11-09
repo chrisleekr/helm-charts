@@ -6,6 +6,8 @@ metadata:
     {{- include "binance-trading-bot.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
     app: {{ include "binance-trading-bot.fullname" . }}-redis
+  annotations:
+    {{- toYaml .Values.redis.podAnnotations | nindent 4 }}
 spec:
   {{- with .Values.redis.podSecurityContext }}
   securityContext:
