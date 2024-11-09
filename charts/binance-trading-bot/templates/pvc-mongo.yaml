@@ -7,8 +7,6 @@ metadata:
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  labels:
-    {{- include "binance-trading-bot.labels" . | nindent 4 }}
 spec:
   accessModes:
     {{- range .Values.mongo.persistentVolume.accessModes }}

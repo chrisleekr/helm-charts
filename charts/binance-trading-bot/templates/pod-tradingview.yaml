@@ -6,6 +6,8 @@ metadata:
     {{- include "binance-trading-bot.labels" . | nindent 4 }}
     app.kubernetes.io/component: tradingview
     app: {{ include "binance-trading-bot.fullname" . }}-tradingview
+  annotations:
+    {{- toYaml .Values.tradingview.podAnnotations | nindent 4 }}
 spec:
   {{- with .Values.tradingview.podSecurityContext }}
   securityContext:

@@ -4,6 +4,7 @@ metadata:
   name: {{ include "binance-trading-bot.fullname" . }}
   labels:
     {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: binance-trading-bot
 spec:
   type: {{ .Values.binanceBot.service.type }}
   ports:
@@ -13,3 +14,4 @@ spec:
       name: http
   selector:
     {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: binance-trading-bot
