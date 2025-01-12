@@ -88,6 +88,28 @@ entries:
   ip-lookup:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-01-12T13:47:13.84954109Z"
+    description: A Helm chart for IP lookup service built with TypeScript and Fastify,
+      supporting MaxMind offline database and ipinfo.io.
+    digest: c4dfffd407f3b1ccebf33a8812148f9b0f716b338cdf212efc2565e166340945
+    home: https://github.com/chrisleekr/ip-lookup
+    keywords:
+    - ip-lookup
+    - geolocation
+    - maxmind
+    - ipinfo
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: ip-lookup
+    sources:
+    - https://github.com/chrisleekr/ip-lookup
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.1.4/ip-lookup-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-01-12T13:43:34.160974882Z"
     description: A Helm chart for IP lookup service built with TypeScript and Fastify,
       supporting MaxMind offline database and ipinfo.io.
@@ -130,4 +152,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.1.2/ip-lookup-0.1.2.tgz
     version: 0.1.2
-generated: "2025-01-12T13:43:34.160986834Z"
+generated: "2025-01-12T13:47:13.84956206Z"
