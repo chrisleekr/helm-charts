@@ -1,0 +1,70 @@
+# IP Lookup Jobs
+test-ip-lookup-helm:
+  stage: testing
+  image: alpine/helm:3
+  interruptible: true
+  rules:
+    - changes:
+        - charts/ip-lookup/**/*
+  script:
+    - helm template ./charts/ip-lookup > ./template-ip-lookup.yaml
+    - helm lint ./charts/ip-lookup
+  artifacts:
+    paths:
+      - ./template-ip-lookup.yaml
+
+publish-ip-lookup-helm-dev:
+  stage: build development
+  image: alpine/helm:3
+  interruptible: true
+  rules:
+    - if: $CI_COMMIT_BRANCH != "main"
+      changes:
+        - charts/ip-lookup/**/*
+  before_script:
+    - helm plugin install https://github.com/chartmuseum/helm-push.git
+    - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
+  script:
+    - |
+      VERSION=$(yq e '.version' ./charts/ip-lookup/Chart.yaml)
+      helm cm-push ./charts/ip-lookup --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
+
+bump-ip-lookup-helm-version:
+  stage: bump production
+  image: node:lts-alpine
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - charts/ip-lookup/**/*
+  interruptible: true
+  before_script:
+    - apk update
+    - apk add yq git
+    - npm install -g semver
+  script:
+    - |
+      VERSION=$(yq e '.version' ./charts/ip-lookup/Chart.yaml)
+      VERSION=$(semver -i patch $VERSION)
+      yq e -i '.version = "'${VERSION}'"' ./charts/ip-lookup/Chart.yaml
+
+      git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
+      git config --global user.email "$GITLAB_USER_EMAIL"
+      git config --global user.name "$GITLAB_USER_NAME"
+      git pull origin main
+      git commit -am "bump: ip-lookup helm chart version to ${VERSION} [skip ci]"
+      git push origin HEAD:"${CI_COMMIT_REF_NAME}"
+
+publish-ip-lookup-helm:
+  stage: build production
+  image: alpine/helm:3
+  dependencies:
+    - bump-ip-lookup-helm-version
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - charts/ip-lookup/**/*
+  before_script:
+    - helm plugin install https://github.com/chartmuseum/helm-push.git
+    - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
+  script:
+    - helm cm-push ./charts/ip-lookup gitlab
