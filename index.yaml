@@ -85,4 +85,27 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-0.1.0/binance-trading-bot-0.1.0.tgz
     version: 0.1.0
-generated: "2024-11-09T13:35:48.516359305Z"
+  ip-lookup:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-01-12T11:39:34.215134295Z"
+    description: A Helm chart for IP lookup service built with TypeScript and Fastify,
+      supporting MaxMind offline database and ipinfo.io.
+    digest: 68bf7b4da6315d5c3a91304eb86293a149701b877015837b114b027d5ff4c4b3
+    home: https://github.com/chrisleekr/ip-lookup
+    keywords:
+    - ip-lookup
+    - geolocation
+    - maxmind
+    - ipinfo
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: ip-lookup
+    sources:
+    - https://github.com/chrisleekr/ip-lookup
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.1.2/ip-lookup-0.1.2.tgz
+    version: 0.1.2
+generated: "2025-01-12T11:39:34.215143863Z"
