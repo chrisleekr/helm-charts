@@ -62,13 +62,7 @@ service:
 ingress:
   enabled: true
   className: "nginx"
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    # Add security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Frame-Options: DENY";
-      more_set_headers "X-Content-Type-Options: nosniff";
-      more_set_headers "X-XSS-Protection: 1; mode=block";
+  # annotations: {}
   hosts:
     - host: "ip-lookup.local"
       paths:
