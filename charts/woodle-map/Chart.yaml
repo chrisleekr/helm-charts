@@ -21,11 +21,11 @@ version: 0.0.1
 appVersion: "1.0.0"
 maintainers:
   - name: Chris Lee
-    url: https://gitlab.chrislee.kr/chrisleekr
+    url: https://github.com/chrisleekr
 keywords:
   - woodle-map
   - map
   - geolocation
-home: https://gitlab.chrislee.kr/chrisleekr/woodle-map
+home: https://github.com/chrisleekr/woodle-map
 sources:
-  - https://gitlab.chrislee.kr/chrisleekr/woodle-map
+  - https://github.com/chrisleekr/woodle-map
