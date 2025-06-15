@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "woodle-map.fullname" . }}
+  labels: {{ include "woodle-map.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector: {{ include "woodle-map.selectorLabels" . | nindent 4 }}
