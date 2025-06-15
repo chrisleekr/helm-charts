@@ -21,6 +21,10 @@ spec:
         {{- end }}
       image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
       imagePullPolicy: {{ .Values.imagePullPolicy }}
+      {{- with .Values.mongo.args }}
+      args:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       ports:
         - name: mongodb
           containerPort: 27017

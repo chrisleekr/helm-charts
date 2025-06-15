@@ -1,4 +1,4 @@
-# Default values for ip-lookup.
+# Default values for woodle-map.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -7,7 +7,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: chrisleekr/ip-lookup
+  repository: chrisleekr/woodle-map
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
@@ -29,7 +29,7 @@ serviceAccount:
   annotations: {}
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
-  name: "ip-lookup"
+  name: "woodle-map"
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
@@ -64,13 +64,8 @@ ingress:
   className: "nginx"
   annotations:
     kubernetes.io/ingress.class: nginx
-    # Add security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Frame-Options: DENY";
-      more_set_headers "X-Content-Type-Options: nosniff";
-      more_set_headers "X-XSS-Protection: 1; mode=block";
   hosts:
-    - host: "ip-lookup.local"
+    - host: "woodle-map.local"
       paths:
         - path: /
           pathType: Prefix
@@ -125,19 +120,19 @@ podDisruptionBudget:
 topologySpreadConstraints: []
 
 # Additional volumes on the output Deployment definition.
-volumes:
-  - name: npm-cache
-    emptyDir: {}
+volumes: []
+# - name: npm-cache
+#   emptyDir: {}
 # - name: foo
 #   secret:
 #     secretName: mysecret
 #     optional: false
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts:
-  - name: npm-cache
-    mountPath: "/home/node/.npm"
-    readOnly: false
+volumeMounts: []
+# - name: npm-cache
+#   mountPath: "/home/node/.npm"
+#   readOnly: false
 # - name: foo
 #   mountPath: "/etc/foo"
 #   readOnly: true
@@ -147,3 +142,28 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Environment variables configuration
+# envFrom allows loading all key-value pairs from secrets/configmaps
+envFrom: []
+# Examples:
+# - secretRef:
+#     name: app-secrets
+# - configMapRef:
+#     name: app-config
+
+# env allows loading specific environment variables
+env: []
+# Examples:
+# - name: DATABASE_URL
+#   valueFrom:
+#     secretKeyRef:
+#       name: database-secret
+#       key: url
+# - name: API_KEY
+#   valueFrom:
+#     secretKeyRef:
+#       name: api-secret
+#       key: key
+# - name: STATIC_VALUE
+#   value: "some-static-value"

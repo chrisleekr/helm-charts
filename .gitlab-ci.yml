@@ -7,3 +7,4 @@ stages:
 include:
   - local: .gitlab/ci/helm-binance-trading-bot.yml
   - local: .gitlab/ci/helm-ip-lookup.yml
+  - local: .gitlab/ci/helm-woodle-map.yml
