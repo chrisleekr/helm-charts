@@ -174,4 +174,25 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.1.2/ip-lookup-0.1.2.tgz
     version: 0.1.2
-generated: "2025-06-15T01:03:38.020936493Z"
+  woodle-map:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-06-15T01:08:04.989410289Z"
+    description: A Helm chart for Woodle Map service
+    digest: 51a631c76a1fd5991b52a78a3db66da951070dc85fe6caf63db2785579838ceb
+    home: https://github.com/chrisleekr/woodle-map
+    keywords:
+    - woodle-map
+    - map
+    - geolocation
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: woodle-map
+    sources:
+    - https://github.com/chrisleekr/woodle-map
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
+    version: 0.0.1
+generated: "2025-06-15T01:08:04.989432891Z"
