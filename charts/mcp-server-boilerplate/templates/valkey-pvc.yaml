@@ -1,0 +1,24 @@
+{{- if .Values.valkey.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mcp-server-boilerplate.fullname" . }}-valkey-pvc
+  labels:
+    {{- include "mcp-server-boilerplate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  accessModes:
+    {{- range .Values.valkey.persistence.accessModes }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.valkey.persistence.size | quote }}
+  {{- if .Values.valkey.persistence.storageClass }}
+  {{- if (eq "-" .Values.valkey.persistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.valkey.persistence.storageClass }}
+  {{- end }}
+  {{- end }}
+{{- end }}

@@ -4,7 +4,18 @@ stages:
   - bump production
   - build production
 
+workflow:
+  rules:
+    # If the pipeline is triggered by a merge request, then run the pipeline.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # If the commit is a branch and there is an open merge request, then skip the pipeline.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # If the commit is a branch, then run the pipeline.
+    - if: $CI_COMMIT_BRANCH
+
 include:
   - local: .gitlab/ci/helm-binance-trading-bot.yml
   - local: .gitlab/ci/helm-ip-lookup.yml
   - local: .gitlab/ci/helm-woodle-map.yml
+  - local: .gitlab/ci/helm-mcp-server-boilerplate.yml
