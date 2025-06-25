@@ -174,6 +174,34 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.1.2/ip-lookup-0.1.2.tgz
     version: 0.1.2
+  mcp-server-boilerplate:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-06-25T14:01:52.413032839Z"
+    description: A Helm chart for Model Context Protocol (MCP) server boilerplate
+      built with TypeScript and Streamable HTTP transport with an OAuth Proxy for
+      3rd party authorization servers like Auth0
+    digest: 7fc3665c191a99f570b85764637f4df061567e80ce0ec9052776a7c7a1efb393
+    home: https://github.com/chrisleekr/mcp-server-boilerplate
+    keywords:
+    - mcp
+    - server
+    - boilerplate
+    - typescript
+    - streamable
+    - http
+    - oauth
+    - auth0
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: mcp-server-boilerplate
+    sources:
+    - https://github.com/chrisleekr/mcp-server-boilerplate
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-boilerplate-0.0.1/mcp-server-boilerplate-0.0.1.tgz
+    version: 0.0.1
   woodle-map:
   - apiVersion: v2
     appVersion: 1.0.0
@@ -195,4 +223,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2025-06-15T01:08:04.989432891Z"
+generated: "2025-06-25T14:01:52.413054599Z"
