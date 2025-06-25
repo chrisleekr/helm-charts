@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-server-boilerplate.fullname" . }}-config
+  labels:
+    {{- include "mcp-server-boilerplate.labels" . | nindent 4 }}
+data:
+  MCP_LOG_LEVEL: {{ .Values.mcpServer.config.logLevel | quote }}
+  MCP_CONFIG_SERVER_ENVIRONMENT: {{ .Values.mcpServer.config.environment | quote }}
+
+  # HTTP server configuration
+  MCP_CONFIG_SERVER_HTTP_PORT: {{ .Values.mcpServer.config.http.port | quote }}
+  MCP_CONFIG_SERVER_HTTP_HOST: {{ .Values.mcpServer.config.http.host | quote }}
+  MCP_CONFIG_SERVER_HTTP_ENDPOINT: {{ .Values.mcpServer.config.http.endpoint | quote }}
+
+  # Tools configuration - Project path
+  MCP_CONFIG_TOOLS_PROJECT_PATH: {{ .Values.mcpServer.config.tools.projectPath | quote }}
+
+  # Auth configuration
+  MCP_CONFIG_SERVER_AUTH_ENABLED: {{ .Values.mcpServer.config.auth.enabled | quote }}
+  # OAuth server issuer (your MCP server URL - used in JWT tokens)
+  MCP_CONFIG_SERVER_AUTH_ISSUER: {{ .Values.mcpServer.config.auth.issuer | quote }}
+  # OAuth server base URL (used for generating callback URLs)
+  MCP_CONFIG_SERVER_AUTH_BASE_URL: {{ .Values.mcpServer.config.auth.baseUrl | quote }}
+  # Session lifetime - how long authorization sessions are valid
+  MCP_CONFIG_SERVER_AUTH_SESSION_TTL: {{ .Values.mcpServer.config.auth.sessionTtl | quote }}
+  # Access token lifetime - how long access tokens are valid
+  MCP_CONFIG_SERVER_AUTH_TOKEN_TTL: {{ .Values.mcpServer.config.auth.tokenTtl | quote }}
+  # Refresh token lifetime - how long refresh tokens are valid
+  MCP_CONFIG_SERVER_AUTH_REFRESH_TOKEN_TTL: {{ .Values.mcpServer.config.auth.refreshTokenTtl | quote }}
+  # Your Auth0 domain (found in Auth0 dashboard including protocol)
+  MCP_CONFIG_SERVER_AUTH_AUTH0_DOMAIN: {{ .Values.mcpServer.config.auth.auth0.domain | quote }}
+  # Auth0 application client ID
+  MCP_CONFIG_SERVER_AUTH_AUTH0_CLIENT_ID: {{ .Values.mcpServer.config.auth.auth0.clientId | quote }}
+  # Auth0 API audience (optional - for API authorization)
+  MCP_CONFIG_SERVER_AUTH_AUTH0_AUDIENCE: {{ .Values.mcpServer.config.auth.auth0.audience | quote }}
+  # OAuth scopes to request from Auth0
+  MCP_CONFIG_SERVER_AUTH_AUTH0_SCOPE: {{ .Values.mcpServer.config.auth.auth0.scope | quote }}
+
+  # Storage configuration
+  MCP_CONFIG_STORAGE_TYPE: {{ .Values.mcpServer.config.storage.type | quote }}

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-server-boilerplate.fullname" . }}-valkey
+  labels:
+    {{- include "mcp-server-boilerplate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  type: {{ .Values.valkey.service.type }}
+  ports:
+    - port: {{ .Values.valkey.service.port }}
+      targetPort: valkey
+      protocol: TCP
+      name: valkey
+  selector:
+    {{- include "mcp-server-boilerplate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey

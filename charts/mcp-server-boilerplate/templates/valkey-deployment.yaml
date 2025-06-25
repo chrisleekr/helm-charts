@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-server-boilerplate.fullname" . }}-valkey
+  labels:
+    {{- include "mcp-server-boilerplate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  replicas: {{ .Values.valkey.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mcp-server-boilerplate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: valkey
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-server-boilerplate.labels" . | nindent 8 }}
+        app.kubernetes.io/component: valkey
+    spec:
+      containers:
+        - name: valkey
+          image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
+          imagePullPolicy: {{ .Values.valkey.image.pullPolicy }}
+          ports:
+            - name: valkey
+              containerPort: 6379
+              protocol: TCP
+          {{- if .Values.valkey.auth.enabled }}
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mcp-server-boilerplate.fullname" . }}-valkey-secret
+                  key: password
+          {{- end }}
+          {{- if .Values.valkey.persistence.enabled }}
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+          {{- end }}
+          {{- with .Values.valkey.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+      {{- if .Values.valkey.persistence.enabled }}
+      volumes:
+        - name: valkey-data
+          persistentVolumeClaim:
+            claimName: {{ include "mcp-server-boilerplate.fullname" . }}-valkey-pvc
+      {{- end }}

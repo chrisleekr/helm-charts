@@ -1,9 +1,25 @@
 {
   "cSpell.words": [
+    "automount",
     "chrisleekr",
     "geolocation",
     "interruptible",
+    "nindent",
+    "Streamable",
+    "tolerations",
     "tradingview",
+    "VALKEY",
     "woodle"
-  ]
+  ],
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "[helm]": {
+    "editor.defaultFormatter": "ms-kubernetes-tools.vscode-kubernetes-tools"
+  }
 }
