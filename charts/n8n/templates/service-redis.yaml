@@ -1,0 +1,19 @@
+{{- if and .Values.redis.enabled (not .Values.redis.external.enabled) .Values.redis.internal.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "n8n.fullname" . }}-redis
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: redis
+      protocol: TCP
+      name: redis
+  selector:
+    {{- include "n8n.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+{{- end }}

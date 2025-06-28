@@ -1,0 +1,18 @@
+{{- if and (eq .Values.database.type "postgres") (not .Values.database.postgres.external.enabled) .Values.database.postgres.internal.enabled .Values.database.postgres.internal.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "n8n.fullname" . }}-postgres-data
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.database.postgres.internal.persistence.size }}
+  {{- if .Values.database.postgres.internal.persistence.storageClass }}
+  storageClassName: {{ .Values.database.postgres.internal.persistence.storageClass }}
+  {{- end }}
+{{- end }}

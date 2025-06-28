@@ -1,0 +1,272 @@
+global:
+  # n8n configuration
+  n8n:
+    # Base URL for n8n (important for webhooks and external access)
+    baseUrl: "n8n.chrislee.local"
+    # Editor base URL for n8n (important for webhooks and external access)
+    editorBaseUrl: "https://n8n.chrislee.local"
+    # Webhook URL (if different from base URL)
+    webhookUrl: "https://n8n.chrislee.local"
+    # Timezone
+    timezone: "UTC"
+    # Log level (error, warn, info, verbose, debug, silly)
+    logLevel: "info"
+    # Enable metrics/prometheus endpoint
+    metricsEnabled: false
+
+# Main deployment
+main:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: n8nio/n8n
+    pullPolicy: IfNotPresent
+    tag: "" # Defaults to chart appVersion
+
+  # Environment variables
+  env: []
+  # - name: N8N_CUSTOM_VAR
+  #   value: "custom-value"
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  # Resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+# Worker deployment for queue mode
+worker:
+  enabled: false
+  replicaCount: 1
+
+  image:
+    repository: n8nio/n8n
+    pullPolicy: IfNotPresent
+    tag: "" # Defaults to chart appVersion
+
+  # Environment variables
+  env: []
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  # Resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Webhook deployment for separate webhook handling
+webhook:
+  enabled: false
+  replicaCount: 1
+
+  image:
+    repository: n8nio/n8n
+    pullPolicy: IfNotPresent
+    tag: "" # Defaults to chart appVersion
+
+  # Environment variables
+  env: []
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  # Resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Database configuration
+database:
+  # Type of database: sqlite, postgres
+  type: sqlite
+
+  # PostgreSQL configuration (when type is postgres)
+  postgres:
+    # Use external PostgreSQL instance
+    external:
+      enabled: false
+
+      # External database settings (when external: true)
+      host: ""
+      port: 5432
+      database: "n8n"
+      username: "n8n"
+      password: ""
+      # SSL mode: disable, require, verify-ca, verify-full
+      sslMode: "disable"
+
+    # Internal PostgreSQL deployment (when external: false)
+    internal:
+      enabled: false
+      image:
+        repository: postgres
+        tag: "17.5-alpine3.22"
+        pullPolicy: IfNotPresent
+
+      persistence:
+        enabled: true
+        size: 8Gi
+        storageClass: ""
+
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+# Redis configuration (for queue mode)
+redis:
+  enabled: false
+
+  # Use external Redis instance
+  external:
+    enabled: false
+    # External Redis settings (when external: true)
+    host: ""
+    port: 6379
+    password: ""
+    database: 0
+
+  # Internal Redis deployment (when external: false)
+  internal:
+    enabled: true
+    image:
+      repository: redis
+      tag: "8.0.2-alpine3.21"
+      pullPolicy: IfNotPresent
+
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# Encryption key for n8n (required for production)
+encryption:
+  # Generate a random key if not provided
+  key: ""
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 5678
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: n8n.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: n8n-tls
+  #    hosts:
+  #      - n8n.example.com
+
+# Persistence for n8n data
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+# Service account
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod annotations and labels
+podAnnotations: {}
+podLabels: {}
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Node selector, affinity, and tolerations
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Additional volumes and volume mounts
+extraVolumes: []
+extraVolumeMounts: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []

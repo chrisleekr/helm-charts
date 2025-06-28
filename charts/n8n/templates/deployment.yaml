@@ -1,0 +1,194 @@
+# Main deployment for n8n
+# Responsible for serving UI and puts workflow executions into the queue
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "n8n.fullname" . }}
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    app.kubernetes.io/component: main
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.main.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "n8n.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: main
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "n8n.labels" . | nindent 8 }}
+        app.kubernetes.io/component: main
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "n8n.serviceAccountName" . }}
+      {{- with .Values.main.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.main.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # Use .Chart.AppVersion if no tag is provided
+          image: "{{ .Values.main.image.repository }}:{{ .Values.main.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.main.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: N8N_BASE_URL
+              value: "{{ .Values.global.n8n.baseUrl }}"
+            - name: N8N_EDITOR_BASE_URL
+              value: "{{ .Values.global.n8n.editorBaseUrl }}"
+            {{- if .Values.global.n8n.webhookUrl }}
+            - name: WEBHOOK_URL
+              value: "{{ .Values.global.n8n.webhookUrl }}"
+            {{- end }}
+            - name: GENERIC_TIMEZONE
+              value: "{{ .Values.global.n8n.timezone }}"
+            - name: N8N_LOG_LEVEL
+              value: "{{ .Values.global.n8n.logLevel }}"
+            {{- if .Values.global.n8n.metricsEnabled }}
+            - name: N8N_METRICS
+              value: "true"
+            {{- end }}
+            # Reference: https://docs.n8n.io/hosting/configuration/configuration-examples/encryption-key/
+            {{- if .Values.encryption.key }}
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-secrets
+                  key: encryptionKey
+            {{- end }}
+            {{- if eq .Values.database.type "postgres" }}
+            - name: DB_TYPE
+              value: "postgresdb"
+            # Can use external
+            # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/database/#postgresql
+            {{- if .Values.database.postgres.external.enabled }}
+            - name: DB_POSTGRESDB_HOST
+              value: "{{ .Values.database.postgres.host }}"
+            - name: DB_POSTGRESDB_PORT
+              value: "{{ .Values.database.postgres.port }}"
+            - name: DB_POSTGRESDB_DATABASE
+              value: "{{ .Values.database.postgres.database }}"
+            - name: DB_POSTGRESDB_USER
+              value: "{{ .Values.database.postgres.username }}"
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-secrets
+                  key: externalDatabasePassword
+            - name: DB_POSTGRESDB_SSL_MODE
+              value: "{{ .Values.database.postgres.sslMode }}"
+            # If internal database is enabled, use the provisioned secret
+            {{- else }}
+            - name: DB_POSTGRESDB_HOST
+              value: "{{ include "n8n.fullname" . }}-postgres"
+            - name: DB_POSTGRESDB_PORT
+              value: "5432"
+            - name: DB_POSTGRESDB_DATABASE
+              value: "n8n"
+            - name: DB_POSTGRESDB_USER
+              value: "n8n"
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-postgres
+                  key: password
+            {{- end }}
+            {{- end }}
+            # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/queue-mode/
+            {{- if .Values.redis.enabled }}
+            {{- if .Values.redis.external.enabled }}
+            - name: QUEUE_BULL_REDIS_HOST
+              value: "{{ .Values.redis.host }}"
+            - name: QUEUE_BULL_REDIS_PORT
+              value: "{{ .Values.redis.port }}"
+            - name: QUEUE_BULL_REDIS_DB
+              value: "{{ .Values.redis.database }}"
+            {{- if .Values.redis.password }}
+            - name: QUEUE_BULL_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-secrets
+                  key: redisPassword
+            {{- end }}
+            {{- else }}
+            - name: QUEUE_BULL_REDIS_HOST
+              value: "{{ include "n8n.fullname" . }}-redis"
+            - name: QUEUE_BULL_REDIS_PORT
+              value: "6379"
+            - name: QUEUE_BULL_REDIS_DB
+              value: "0"
+            {{- end }}
+            - name: EXECUTIONS_MODE
+              value: "queue"
+            {{- end }}
+            {{- with .Values.main.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.main.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.main.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.main.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            # User specific data folder - https://docs.n8n.io/hosting/configuration/configuration-examples/user-folder/
+            {{- if .Values.persistence.enabled }}
+            - name: n8n-data
+              mountPath: /home/node/.n8n
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: n8n-data
+          persistentVolumeClaim:
+            claimName: {{ include "n8n.fullname" . }}-data
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
