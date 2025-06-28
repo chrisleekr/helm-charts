@@ -3,7 +3,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "n8n.fullname" . }}
+  name: {{ include "n8n.fullname" . }}-main
   labels:
     {{- include "n8n.labels" . | nindent 4 }}
     app.kubernetes.io/component: main
@@ -86,20 +86,20 @@ spec:
             # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/database/#postgresql
             {{- if .Values.database.postgres.external.enabled }}
             - name: DB_POSTGRESDB_HOST
-              value: "{{ .Values.database.postgres.host }}"
+              value: "{{ .Values.database.postgres.external.host }}"
             - name: DB_POSTGRESDB_PORT
-              value: "{{ .Values.database.postgres.port }}"
+              value: "{{ .Values.database.postgres.external.port }}"
             - name: DB_POSTGRESDB_DATABASE
-              value: "{{ .Values.database.postgres.database }}"
+              value: "{{ .Values.database.postgres.external.database }}"
             - name: DB_POSTGRESDB_USER
-              value: "{{ .Values.database.postgres.username }}"
+              value: "{{ .Values.database.postgres.external.username }}"
             - name: DB_POSTGRESDB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "n8n.fullname" . }}-secrets
                   key: externalDatabasePassword
             - name: DB_POSTGRESDB_SSL_MODE
-              value: "{{ .Values.database.postgres.sslMode }}"
+              value: "{{ .Values.database.postgres.external.sslMode }}"
             # If internal database is enabled, use the provisioned secret
             {{- else }}
             - name: DB_POSTGRESDB_HOST
@@ -121,17 +121,23 @@ spec:
             {{- if .Values.redis.enabled }}
             {{- if .Values.redis.external.enabled }}
             - name: QUEUE_BULL_REDIS_HOST
-              value: "{{ .Values.redis.host }}"
+              value: "{{ .Values.redis.external.host }}"
             - name: QUEUE_BULL_REDIS_PORT
-              value: "{{ .Values.redis.port }}"
+              value: "{{ .Values.redis.external.port }}"
             - name: QUEUE_BULL_REDIS_DB
-              value: "{{ .Values.redis.database }}"
-            {{- if .Values.redis.password }}
+              value: "{{ .Values.redis.external.database }}"
+            {{- if .Values.redis.external.existingSecret }}
             - name: QUEUE_BULL_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "n8n.fullname" . }}-secrets
-                  key: redisPassword
+                  name: {{ .Values.redis.external.existingSecret }}
+                  key: password
+            {{- else }}
+            - name: QUEUE_BULL_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-redis
+                  key: password
             {{- end }}
             {{- else }}
             - name: QUEUE_BULL_REDIS_HOST
