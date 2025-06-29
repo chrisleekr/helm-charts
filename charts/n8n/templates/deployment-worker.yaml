@@ -119,6 +119,7 @@ spec:
                   key: password
             {{- end }}
             {{- end }}
+            {{- end }}
             # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/queue-mode/
             {{- if .Values.redis.enabled }}
             {{- if .Values.redis.external.enabled }}
@@ -141,8 +142,7 @@ spec:
                   name: {{ include "n8n.fullname" . }}-redis-external
                   key: password
             {{- end }}
-            {{- end }}
-            {{- else }}
+            {{- else if .Values.redis.internal.enabled }}
             - name: QUEUE_BULL_REDIS_HOST
               value: "{{ include "n8n.fullname" . }}-redis"
             - name: QUEUE_BULL_REDIS_PORT

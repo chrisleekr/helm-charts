@@ -114,8 +114,8 @@ spec:
             {{- end }}
             - name: DB_POSTGRESDB_SSL_MODE
               value: "{{ .Values.database.postgres.external.sslMode }}"
-            # If internal database is enabled, use the provisioned secret
-            {{- else }}
+            # If internal database is enabled, set
+            {{- else if .Values.database.postgres.internal.enabled }}
             - name: DB_POSTGRESDB_HOST
               value: "{{ include "n8n.fullname" . }}-postgres"
             - name: DB_POSTGRESDB_PORT
@@ -136,6 +136,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "n8n.fullname" . }}-postgres-internal
                   key: password
+            {{- end }}
             {{- end }}
             {{- end }}
             # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/queue-mode/
@@ -160,8 +161,7 @@ spec:
                   name: {{ include "n8n.fullname" . }}-redis-external
                   key: password
             {{- end }}
-            {{- end }}
-            {{- else }}
+            {{- else if .Values.redis.internal.enabled }}
             - name: QUEUE_BULL_REDIS_HOST
               value: "{{ include "n8n.fullname" . }}-redis"
             - name: QUEUE_BULL_REDIS_PORT
