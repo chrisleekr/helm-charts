@@ -291,3 +291,7 @@ initContainers: []
 
 # Sidecar containers
 sidecars: []
+
+# Toolbox configuration
+toolbox:
+  enabled: false

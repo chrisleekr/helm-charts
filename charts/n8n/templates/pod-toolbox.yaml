@@ -1,3 +1,4 @@
+{{- if .Values.toolbox.enabled }}
 # To debug the n8n pod, you can use this pod to get a shell into the n8n container.
 apiVersion: v1
 kind: Pod
@@ -121,3 +122,4 @@ spec:
       {{- with .Values.main.env }}
       {{- toYaml . | nindent 6 }}
       {{- end }}
+{{- end }}
