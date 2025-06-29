@@ -18,10 +18,18 @@ spec:
         {{- include "n8n.labels" . | nindent 8 }}
         app.kubernetes.io/component: redis
     spec:
+      {{- with .Values.redis.internal.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: redis
           image: "{{ .Values.redis.internal.image.repository }}:{{ .Values.redis.internal.image.tag }}"
           imagePullPolicy: {{ .Values.redis.internal.image.pullPolicy }}
+          {{- with .Values.redis.internal.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: redis
               containerPort: 6379
@@ -46,7 +54,7 @@ spec:
               command:
                 - redis-cli
                 - ping
-            initialDelaySeconds: 5
+            initialDelaySeconds: 30
             periodSeconds: 5
             timeoutSeconds: 1
       {{- if .Values.redis.internal.persistence.enabled }}

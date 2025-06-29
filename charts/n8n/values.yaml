@@ -141,6 +141,9 @@ database:
       port: 5432
       database: "n8n"
       username: "n8n"
+      # Use existing secret for postgres password
+      existingSecret: ""
+      # Or set password directly (ignored if existingSecret is set)
       password: ""
       # SSL mode: disable, require, verify-ca, verify-full
       sslMode: "disable"
@@ -148,6 +151,10 @@ database:
     # Internal PostgreSQL deployment (when external: false)
     internal:
       enabled: false
+      # Use existing secret for postgres password
+      existingSecret: ""
+      # Or set password directly (ignored if existingSecret is set)
+      password: ""
       image:
         repository: postgres
         tag: "17.5-alpine3.22"
@@ -176,21 +183,33 @@ redis:
     # External Redis settings (when external: true)
     host: ""
     port: 6379
+    # Use existing secret for redis password
+    existingSecret: ""
+    # Or set password directly (ignored if existingSecret is set)
     password: ""
     database: 0
-    existingSecret: ""
 
   # Internal Redis deployment (when external: false)
   internal:
-    enabled: true
+    enabled: false
     image:
       repository: redis
       tag: "8.0.2-alpine3.21"
       pullPolicy: IfNotPresent
 
+    # Add security contexts for Redis
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      runAsGroup: 999
+      readOnlyRootFilesystem: false
+
+    podSecurityContext:
+      fsGroup: 999
+
     persistence:
       enabled: true
-      size: 2Gi
+      size: 1Gi
       storageClass: ""
 
     resources:
@@ -203,7 +222,9 @@ redis:
 
 # Encryption key for n8n (required for production)
 encryption:
-  # Generate a random key if not provided
+  # Use existing secret for encryption key
+  existingSecret: "n8n-encryption"
+  # Or set key directly (ignored if existingSecret is set)
   key: ""
 
 # Service configuration

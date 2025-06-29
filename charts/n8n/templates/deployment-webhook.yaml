@@ -65,11 +65,17 @@ spec:
             - name: N8N_METRICS
               value: "true"
             {{- end }}
-            {{- if .Values.encryption.key }}
+            {{- if .Values.encryption.existingSecret }}
             - name: N8N_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "n8n.fullname" . }}-secrets
+                  name: {{ .Values.encryption.existingSecret }}
+                  key: encryptionKey
+            {{- else if .Values.encryption.key }}
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-encryption
                   key: encryptionKey
             {{- end }}
             {{- if eq .Values.database.type "postgres" }}
@@ -84,11 +90,19 @@ spec:
               value: "{{ .Values.database.postgres.external.database }}"
             - name: DB_POSTGRESDB_USER
               value: "{{ .Values.database.postgres.external.username }}"
+            {{- if .Values.database.postgres.external.existingSecret }}
             - name: DB_POSTGRESDB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "n8n.fullname" . }}-secrets
-                  key: externalDatabasePassword
+                  name: {{ .Values.database.postgres.external.existingSecret }}
+                  key: password
+            {{- else }}
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-postgres-external
+                  key: password
+            {{- end }}
             - name: DB_POSTGRESDB_SSL_MODE
               value: "{{ .Values.database.postgres.external.sslMode }}"
             {{- else }}
@@ -100,13 +114,22 @@ spec:
               value: "n8n"
             - name: DB_POSTGRESDB_USER
               value: "n8n"
+            {{- if .Values.database.postgres.internal.existingSecret }}
             - name: DB_POSTGRESDB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "n8n.fullname" . }}-postgres
+                  name: {{ .Values.database.postgres.internal.existingSecret }}
+                  key: password
+            {{- else }}
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}-postgres-internal
                   key: password
             {{- end }}
             {{- end }}
+            # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/queue-mode/
+            {{- if .Values.redis.enabled }}
             {{- if .Values.redis.external.enabled }}
             - name: QUEUE_BULL_REDIS_HOST
               value: "{{ .Values.redis.external.host }}"
@@ -120,12 +143,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.redis.external.existingSecret }}
                   key: password
-            {{- else }}
+            {{- else if .Values.redis.external.password }}
             - name: QUEUE_BULL_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "n8n.fullname" . }}-redis
+                  name: {{ include "n8n.fullname" . }}-redis-external
                   key: password
+            {{- end }}
             {{- end }}
             {{- else }}
             - name: QUEUE_BULL_REDIS_HOST
@@ -137,6 +161,7 @@ spec:
             {{- end }}
             - name: EXECUTIONS_MODE
               value: "queue"
+            {{- end }}
             {{- with .Values.webhook.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

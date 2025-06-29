@@ -34,7 +34,11 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
+                  {{- if .Values.database.postgres.internal.existingSecret }}
+                  name: {{ .Values.database.postgres.internal.existingSecret }}
+                  {{- else }}
                   name: {{ include "n8n.fullname" . }}-postgres
+                  {{- end }}
                   key: password
             - name: PGDATA
               value: "/var/lib/postgresql/data/pgdata"
