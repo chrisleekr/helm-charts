@@ -202,6 +202,19 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-boilerplate-0.0.1/mcp-server-boilerplate-0.0.1.tgz
     version: 0.0.1
+  n8n:
+  - apiVersion: v2
+    appVersion: 1.100.1
+    created: "2025-07-01T10:31:34.18008105Z"
+    description: A Helm chart for n8n - Workflow Automation for Technical People
+    digest: 13155865ffe5ef0abaa8dc5312659b9a5b8fbd837a762ebd2afd5f6998af16b2
+    home: https://n8n.io/
+    icon: https://avatars.githubusercontent.com/u/45487711?s=48&v=4
+    name: n8n
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/n8n-0.0.1/n8n-0.0.1.tgz
+    version: 0.0.1
   woodle-map:
   - apiVersion: v2
     appVersion: 1.0.0
@@ -223,4 +236,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2025-06-25T14:01:52.413054599Z"
+generated: "2025-07-01T10:31:34.180100486Z"
