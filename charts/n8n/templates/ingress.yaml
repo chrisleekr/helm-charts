@@ -38,30 +38,29 @@ spec:
                 name: {{ include "n8n.fullname" $ }}-main
                 port:
                   number: {{ $.Values.service.port }}
-          {{- end }}
-
           {{- if $.Values.webhook.enabled }}
-          - path: /webhook
+          - path: {{ .path }}webhook/
             pathType: Prefix
             backend:
               service:
                 name: {{ include "n8n.fullname" $ }}-webhook
                 port:
                   number: {{ $.Values.service.port }}
-          - path: /webhook-test
+          - path: {{ .path }}webhook-test/
             pathType: Prefix
             backend:
               service:
                 name: {{ include "n8n.fullname" $ }}-webhook
                 port:
                   number: {{ $.Values.service.port }}
-          - path: /webhook-waiting
+          - path: {{ .path }}webhook-waiting/
             pathType: Prefix
             backend:
               service:
                 name: {{ include "n8n.fullname" $ }}-webhook
                 port:
                   number: {{ $.Values.service.port }}
+          {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}
