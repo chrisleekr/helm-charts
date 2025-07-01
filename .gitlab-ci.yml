@@ -19,3 +19,4 @@ include:
   - local: .gitlab/ci/helm-ip-lookup.yml
   - local: .gitlab/ci/helm-woodle-map.yml
   - local: .gitlab/ci/helm-mcp-server-boilerplate.yml
+  - local: .gitlab/ci/helm-n8n.yml

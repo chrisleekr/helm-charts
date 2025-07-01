@@ -1,0 +1,125 @@
+{{- if .Values.toolbox.enabled }}
+# To debug the n8n pod, you can use this pod to get a shell into the n8n container.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "n8n.fullname" . }}-toolbox
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    app.kubernetes.io/component: toolbox
+spec:
+  restartPolicy: Never
+  containers:
+  - name: alpine-toolbox
+    image: alpine:latest
+    command: ["sleep", "infinity"]
+    env:
+      - name: N8N_BASE_URL
+        value: "{{ .Values.global.n8n.baseUrl }}"
+      - name: N8N_EDITOR_BASE_URL
+        value: "{{ .Values.global.n8n.editorBaseUrl }}"
+      {{- if .Values.global.n8n.webhookUrl }}
+      - name: WEBHOOK_URL
+        value: "{{ .Values.global.n8n.webhookUrl }}"
+      {{- end }}
+      - name: GENERIC_TIMEZONE
+        value: "{{ .Values.global.n8n.timezone }}"
+      - name: N8N_LOG_LEVEL
+        value: "{{ .Values.global.n8n.logLevel }}"
+      {{- if .Values.global.n8n.metricsEnabled }}
+      - name: N8N_METRICS
+        value: "true"
+      {{- end }}
+      # Reference: https://docs.n8n.io/hosting/configuration/configuration-examples/encryption-key/
+      {{- if .Values.encryption.existingSecret }}
+      - name: N8N_ENCRYPTION_KEY
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.encryption.existingSecret }}
+            key: encryptionKey
+      {{- else if .Values.encryption.key }}
+      - name: N8N_ENCRYPTION_KEY
+        valueFrom:
+          secretKeyRef:
+            name: {{ include "n8n.fullname" . }}-encryption
+            key: encryptionKey
+      {{- end }}
+      {{- if eq .Values.database.type "postgres" }}
+      - name: DB_TYPE
+        value: "postgresdb"
+      # Can use external
+      # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/database/#postgresql
+      {{- if .Values.database.postgres.external.enabled }}
+      - name: DB_POSTGRESDB_HOST
+        value: "{{ .Values.database.postgres.external.host }}"
+      - name: DB_POSTGRESDB_PORT
+        value: "{{ .Values.database.postgres.external.port }}"
+      - name: DB_POSTGRESDB_DATABASE
+        value: "{{ .Values.database.postgres.external.database }}"
+      - name: DB_POSTGRESDB_USER
+        value: "{{ .Values.database.postgres.external.username }}"
+      - name: DB_POSTGRESDB_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ include "n8n.fullname" . }}-secrets
+            key: externalDatabasePassword
+      - name: DB_POSTGRESDB_SSL_MODE
+        value: "{{ .Values.database.postgres.external.sslMode }}"
+      # If internal database is enabled, use the provisioned secret
+      {{- else }}
+      - name: DB_POSTGRESDB_HOST
+        value: "{{ include "n8n.fullname" . }}-postgres"
+      - name: DB_POSTGRESDB_PORT
+        value: "5432"
+      - name: DB_POSTGRESDB_DATABASE
+        value: "n8n"
+      - name: DB_POSTGRESDB_USER
+        value: "n8n"
+      - name: DB_POSTGRESDB_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            {{- if .Values.database.postgres.internal.existingSecret }}
+            name: {{ .Values.database.postgres.internal.existingSecret }}
+            {{- else }}
+            name: {{ include "n8n.fullname" . }}-postgres
+            {{- end }}
+            key: password
+      {{- end }}
+      {{- end }}
+      # Reference: https://docs.n8n.io/hosting/configuration/environment-variables/queue-mode/
+      {{- if .Values.redis.enabled }}
+      {{- if .Values.redis.external.enabled }}
+      - name: QUEUE_BULL_REDIS_HOST
+        value: "{{ .Values.redis.external.host }}"
+      - name: QUEUE_BULL_REDIS_PORT
+        value: "{{ .Values.redis.external.port }}"
+      - name: QUEUE_BULL_REDIS_DB
+        value: "{{ .Values.redis.external.database }}"
+      {{- if .Values.redis.external.existingSecret }}
+      - name: QUEUE_BULL_REDIS_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.redis.external.existingSecret }}
+            key: password
+      {{- else }}
+      - name: QUEUE_BULL_REDIS_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ include "n8n.fullname" . }}-redis
+            key: password
+      {{- end }}
+      {{- else }}
+      - name: QUEUE_BULL_REDIS_HOST
+        value: "{{ include "n8n.fullname" . }}-redis"
+      - name: QUEUE_BULL_REDIS_PORT
+        value: "6379"
+      - name: QUEUE_BULL_REDIS_DB
+        value: "0"
+      {{- end }}
+      - name: EXECUTIONS_MODE
+        value: "queue"
+      {{- end }}
+      {{- with .Values.main.env }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}

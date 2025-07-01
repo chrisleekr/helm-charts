@@ -18,7 +18,8 @@ publish-mcp-server-boilerplate-helm-dev:
   image: alpine/helm:3
   interruptible: true
   rules:
-    - if: $CI_COMMIT_BRANCH != "main"
+    # - if: $CI_COMMIT_BRANCH != "main"
+    - if: $CI_COMMIT_BRANCH != ""
       changes:
         - charts/mcp-server-boilerplate/**/*
   before_script:
@@ -29,42 +30,42 @@ publish-mcp-server-boilerplate-helm-dev:
       VERSION=$(yq e '.version' ./charts/mcp-server-boilerplate/Chart.yaml)
       helm cm-push ./charts/mcp-server-boilerplate --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
 
-bump-mcp-server-boilerplate-helm-version:
-  stage: bump production
-  image: node:lts-alpine
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - charts/mcp-server-boilerplate/**/*
-  interruptible: true
-  before_script:
-    - apk update
-    - apk add yq git
-    - npm install -g semver
-  script:
-    - |
-      VERSION=$(yq e '.version' ./charts/mcp-server-boilerplate/Chart.yaml)
-      VERSION=$(semver -i patch $VERSION)
-      yq e -i '.version = "'${VERSION}'"' ./charts/mcp-server-boilerplate/Chart.yaml
+# bump-mcp-server-boilerplate-helm-version:
+#   stage: bump production
+#   image: node:lts-alpine
+#   rules:
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - charts/mcp-server-boilerplate/**/*
+#   interruptible: true
+#   before_script:
+#     - apk update
+#     - apk add yq git
+#     - npm install -g semver
+#   script:
+#     - |
+#       VERSION=$(yq e '.version' ./charts/mcp-server-boilerplate/Chart.yaml)
+#       VERSION=$(semver -i patch $VERSION)
+#       yq e -i '.version = "'${VERSION}'"' ./charts/mcp-server-boilerplate/Chart.yaml
 
-      git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
-      git config --global user.email "$GITLAB_USER_EMAIL"
-      git config --global user.name "$GITLAB_USER_NAME"
-      git pull origin main
-      git commit -am "bump: mcp-server-boilerplate helm chart version to ${VERSION} [skip ci]"
-      git push origin HEAD:"${CI_COMMIT_REF_NAME}"
+#       git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
+#       git config --global user.email "$GITLAB_USER_EMAIL"
+#       git config --global user.name "$GITLAB_USER_NAME"
+#       git pull origin main
+#       git commit -am "bump: mcp-server-boilerplate helm chart version to ${VERSION} [skip ci]"
+#       git push origin HEAD:"${CI_COMMIT_REF_NAME}"
 
-publish-mcp-server-boilerplate-helm:
-  stage: build production
-  image: alpine/helm:3
-  dependencies:
-    - bump-mcp-server-boilerplate-helm-version
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - charts/mcp-server-boilerplate/**/*
-  before_script:
-    - helm plugin install https://github.com/chartmuseum/helm-push.git
-    - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
-  script:
-    - helm cm-push ./charts/mcp-server-boilerplate gitlab
+# publish-mcp-server-boilerplate-helm:
+#   stage: build production
+#   image: alpine/helm:3
+#   dependencies:
+#     - bump-mcp-server-boilerplate-helm-version
+#   rules:
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - charts/mcp-server-boilerplate/**/*
+#   before_script:
+#     - helm plugin install https://github.com/chartmuseum/helm-push.git
+#     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
+#   script:
+#     - helm cm-push ./charts/mcp-server-boilerplate gitlab

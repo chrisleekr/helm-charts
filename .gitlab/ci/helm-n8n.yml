@@ -1,19 +1,19 @@
-# Binance Trading Bot Jobs
-test-binance-trading-bot-helm:
+# n8n Jobs
+test-n8n-helm:
   stage: testing
   image: alpine/helm:3
   interruptible: true
   rules:
     - changes:
-        - charts/binance-trading-bot/**/*
+        - charts/n8n/**/*
   script:
-    - helm template ./charts/binance-trading-bot > ./template-binance-trading-bot.yaml
-    - helm lint ./charts/binance-trading-bot
+    - helm template ./charts/n8n > ./template-n8n.yaml
+    - helm lint ./charts/n8n
   artifacts:
     paths:
-      - ./template-binance-trading-bot.yaml
+      - ./template-n8n.yaml
 
-publish-binance-trading-bot-helm-dev:
+publish-n8n-helm-dev:
   stage: build development
   image: alpine/helm:3
   interruptible: true
@@ -21,22 +21,22 @@ publish-binance-trading-bot-helm-dev:
     # - if: $CI_COMMIT_BRANCH != "main"
     - if: $CI_COMMIT_BRANCH != ""
       changes:
-        - charts/binance-trading-bot/**/*
+        - charts/n8n/**/*
   before_script:
     - helm plugin install https://github.com/chartmuseum/helm-push.git
     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
   script:
     - |
-      VERSION=$(yq e '.version' ./charts/binance-trading-bot/Chart.yaml)
-      helm cm-push ./charts/binance-trading-bot --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
+      VERSION=$(yq e '.version' ./charts/n8n/Chart.yaml)
+      helm cm-push ./charts/n8n --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
 
-# bump-binance-trading-bot-helm-version:
+# bump-n8n-helm-version:
 #   stage: bump production
 #   image: node:lts-alpine
 #   rules:
 #     - if: $CI_COMMIT_BRANCH == "main"
 #       changes:
-#         - charts/binance-trading-bot/**/*
+#         - charts/n8n/**/*
 #   interruptible: true
 #   before_script:
 #     - apk update
@@ -44,28 +44,28 @@ publish-binance-trading-bot-helm-dev:
 #     - npm install -g semver
 #   script:
 #     - |
-#       VERSION=$(yq e '.version' ./charts/binance-trading-bot/Chart.yaml)
+#       VERSION=$(yq e '.version' ./charts/n8n/Chart.yaml)
 #       VERSION=$(semver -i patch $VERSION)
-#       yq e -i '.version = "'${VERSION}'"' ./charts/binance-trading-bot/Chart.yaml
+#       yq e -i '.version = "'${VERSION}'"' ./charts/n8n/Chart.yaml
 
 #       git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
 #       git config --global user.email "$GITLAB_USER_EMAIL"
 #       git config --global user.name "$GITLAB_USER_NAME"
 #       git pull origin main
-#       git commit -am "bump: binance-trading-bot helm chart version to ${VERSION} [skip ci]"
+#       git commit -am "bump: n8n helm chart version to ${VERSION} [skip ci]"
 #       git push origin HEAD:"${CI_COMMIT_REF_NAME}"
 
-# publish-binance-trading-bot-helm:
+# publish-n8n-helm:
 #   stage: build production
 #   image: alpine/helm:3
 #   dependencies:
-#     - bump-binance-trading-bot-helm-version
+#     - bump-n8n-helm-version
 #   rules:
 #     - if: $CI_COMMIT_BRANCH == "main"
 #       changes:
-#         - charts/binance-trading-bot/**/*
+#         - charts/n8n/**/*
 #   before_script:
 #     - helm plugin install https://github.com/chartmuseum/helm-push.git
 #     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
 #   script:
-#     - helm cm-push ./charts/binance-trading-bot gitlab
+#     - helm cm-push ./charts/n8n gitlab
