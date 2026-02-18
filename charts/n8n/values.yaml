@@ -258,7 +258,7 @@ persistence:
 # Service account
 serviceAccount:
   create: true
-  automount: true
+  automount: false
   annotations: {}
   name: ""
 
