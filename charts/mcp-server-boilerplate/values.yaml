@@ -7,7 +7,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -20,7 +20,7 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -169,7 +169,7 @@ valkey:
     runAsNonRoot: true
     runAsUser: 999
     runAsGroup: 999
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: false  # Valkey requires write access to /data for persistence (RDB/AOF)
     allowPrivilegeEscalation: false
     capabilities:
       drop:
