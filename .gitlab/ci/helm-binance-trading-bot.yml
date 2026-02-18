@@ -1,7 +1,7 @@
 # Binance Trading Bot Jobs
 test-binance-trading-bot-helm:
   stage: testing
-  image: alpine/helm:3
+  image: alpine/helm:3.20.0
   interruptible: true
   rules:
     - changes:
@@ -15,7 +15,7 @@ test-binance-trading-bot-helm:
 
 publish-binance-trading-bot-helm-dev:
   stage: build development
-  image: alpine/helm:3
+  image: alpine/helm:3.20.0
   interruptible: true
   rules:
     # - if: $CI_COMMIT_BRANCH != "main"
@@ -23,7 +23,7 @@ publish-binance-trading-bot-helm-dev:
       changes:
         - charts/binance-trading-bot/**/*
   before_script:
-    - helm plugin install https://github.com/chartmuseum/helm-push.git
+    - helm plugin install https://github.com/chartmuseum/helm-push.git --version v0.11.1
     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
   script:
     - |
