@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "github-app-playground.fullname" . }}
+  labels:
+    {{- include "github-app-playground.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      # Reference the named port from the Deployment so app.port and service stay in sync
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "github-app-playground.selectorLabels" . | nindent 4 }}
