@@ -1,0 +1,27 @@
+{{- if and .Values.workspace.persistence.enabled (not .Values.workspace.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "github-app-playground.fullname" . }}-workspace
+  annotations:
+    # Prevent accidental deletion of workspace data on helm uninstall
+    "helm.sh/resource-policy": keep
+  labels:
+    {{- include "github-app-playground.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workspace
+spec:
+  accessModes:
+    {{- range .Values.workspace.persistence.accessModes }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.workspace.persistence.size | quote }}
+  {{- if .Values.workspace.persistence.storageClass }}
+  {{- if (eq "-" .Values.workspace.persistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.workspace.persistence.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,24 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- /* Use ne nil instead of direct truthiness: integer 0 is falsy in Go templates but is a
+     valid PDB value meaning "all pods may be disrupted". ne nil correctly distinguishes
+     between "not set" and "explicitly set to 0". */}}
+{{- if and (ne .Values.podDisruptionBudget.minAvailable nil) (ne .Values.podDisruptionBudget.maxUnavailable nil) }}
+  {{- fail "podDisruptionBudget: minAvailable and maxUnavailable are mutually exclusive" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "github-app-playground.fullname" . }}
+  labels:
+    {{- include "github-app-playground.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "github-app-playground.selectorLabels" . | nindent 6 }}
+  {{- if ne .Values.podDisruptionBudget.minAvailable nil }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if ne .Values.podDisruptionBudget.maxUnavailable nil }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+{{- end }}
