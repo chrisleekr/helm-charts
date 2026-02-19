@@ -21,14 +21,11 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-      - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.7.0
-
-      - name: Run chart-testing (lint)
-        run: ct lint --config ct.yaml
-
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
+        with:
+          # Prevent pipeline failure when a release tag already exists
+          skip_existing: true
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_GENERATE_RELEASE_NOTES: true

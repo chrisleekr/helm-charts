@@ -2,3 +2,5 @@ remote: origin
 target-branch: main
 chart-dirs:
   - charts
+# Fail if a changed chart's version has not been incremented
+check-version-increment: true
