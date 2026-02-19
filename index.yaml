@@ -88,6 +88,28 @@ entries:
   ip-lookup:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-02-19T10:15:51.636535788Z"
+    description: A Helm chart for IP lookup service built with TypeScript and Fastify,
+      supporting MaxMind offline database and ipinfo.io.
+    digest: 2894ced66ef79220395bff149465a347af3ff3c4ba06287ba8c80e62c8656ada
+    home: https://github.com/chrisleekr/ip-lookup
+    keywords:
+    - ip-lookup
+    - geolocation
+    - maxmind
+    - ipinfo
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: ip-lookup
+    sources:
+    - https://github.com/chrisleekr/ip-lookup
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.1.6/ip-lookup-0.1.6.tgz
+    version: 0.1.6
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-06-15T01:03:38.020916766Z"
     description: A Helm chart for IP lookup service built with TypeScript and Fastify,
       supporting MaxMind offline database and ipinfo.io.
@@ -177,6 +199,33 @@ entries:
   mcp-server-boilerplate:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-02-19T10:15:51.782307034Z"
+    description: A Helm chart for Model Context Protocol (MCP) server boilerplate
+      built with TypeScript and Streamable HTTP transport with an OAuth Proxy for
+      3rd party authorization servers like Auth0
+    digest: 4cf4fe769a1aed87c8d44159bc5560d35e5bee52d75f17d1c02d5590d98a1814
+    home: https://github.com/chrisleekr/mcp-server-boilerplate
+    keywords:
+    - mcp
+    - server
+    - boilerplate
+    - typescript
+    - streamable
+    - http
+    - oauth
+    - auth0
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: mcp-server-boilerplate
+    sources:
+    - https://github.com/chrisleekr/mcp-server-boilerplate
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-boilerplate-0.0.2/mcp-server-boilerplate-0.0.2.tgz
+    version: 0.0.2
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-06-25T14:01:52.413032839Z"
     description: A Helm chart for Model Context Protocol (MCP) server boilerplate
       built with TypeScript and Streamable HTTP transport with an OAuth Proxy for
@@ -205,6 +254,18 @@ entries:
   n8n:
   - apiVersion: v2
     appVersion: 1.100.1
+    created: "2026-02-19T10:15:51.951721277Z"
+    description: A Helm chart for n8n - Workflow Automation for Technical People
+    digest: 780be10f10a6729bde1872c376b303e46178ca3d1058cff75c4184accc162d81
+    home: https://n8n.io/
+    icon: https://avatars.githubusercontent.com/u/45487711?s=48&v=4
+    name: n8n
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/n8n-0.0.2/n8n-0.0.2.tgz
+    version: 0.0.2
+  - apiVersion: v2
+    appVersion: 1.100.1
     created: "2025-07-01T10:31:34.18008105Z"
     description: A Helm chart for n8n - Workflow Automation for Technical People
     digest: 13155865ffe5ef0abaa8dc5312659b9a5b8fbd837a762ebd2afd5f6998af16b2
@@ -216,6 +277,26 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/n8n-0.0.1/n8n-0.0.1.tgz
     version: 0.0.1
   woodle-map:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-02-19T10:15:52.118591649Z"
+    description: A Helm chart for Woodle Map service
+    digest: bf08d6c8f650bdb37fd9c02995522f341b379efd6be1d9356fe6dc4ffcbeafee
+    home: https://github.com/chrisleekr/woodle-map
+    keywords:
+    - woodle-map
+    - map
+    - geolocation
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: woodle-map
+    sources:
+    - https://github.com/chrisleekr/woodle-map
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.2/woodle-map-0.0.2.tgz
+    version: 0.0.2
   - apiVersion: v2
     appVersion: 1.0.0
     created: "2025-06-15T01:08:04.989410289Z"
@@ -236,4 +317,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2025-07-01T10:31:34.180100486Z"
+generated: "2026-02-19T10:15:52.118635442Z"
