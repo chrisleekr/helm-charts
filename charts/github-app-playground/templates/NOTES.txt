@@ -45,19 +45,52 @@
    kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
      | jq 'select(.msg | test("dispatch decision|triage"))'
 
+UPGRADING from chart 0.2.x to 0.3.0 (breaking):
+   Chart 0.3.0 splits `config:` into two top-level blocks. Every sensitive
+   credential / token moved back out of `config:` into a dedicated `secrets:`
+   block so the secret boundary is structurally explicit in values.yaml.
+   `existingSecret` moved with them (it's the escape hatch *for* secrets).
+
+   Renames to apply to your override values before `helm upgrade`:
+     config.existingSecret          -> secrets.existingSecret
+     config.appId                   -> secrets.appId
+     config.privateKey              -> secrets.privateKey
+     config.webhookSecret           -> secrets.webhookSecret
+     config.anthropicApiKey         -> secrets.anthropicApiKey
+     config.claudeCodeOauthToken    -> secrets.claudeCodeOauthToken
+     config.awsAccessKeyId          -> secrets.awsAccessKeyId
+     config.awsSecretAccessKey      -> secrets.awsSecretAccessKey
+     config.awsSessionToken         -> secrets.awsSessionToken
+     config.awsBearerTokenBedrock   -> secrets.awsBearerTokenBedrock
+     config.context7ApiKey          -> secrets.context7ApiKey
+     config.internalRunnerToken     -> secrets.internalRunnerToken
+     config.sharedRunnerToken       -> secrets.sharedRunnerToken
+     config.daemonAuthToken         -> secrets.daemonAuthToken
+     config.databaseUrl             -> secrets.databaseUrl
+     config.valkeyUrl               -> secrets.valkeyUrl
+   Everything else stays under `config:`. Upgrading without renaming will
+   produce a Deployment that mounts no credentials and crashes at startup.
+
+   Recommended workflow: put non-sensitive overrides in a gitted values.yaml
+   and credentials in a gitignored secrets.yaml, then:
+     helm upgrade <release> <chart> --values values.yaml --values secrets.yaml
+   Or skip secrets.yaml entirely and set `secrets.existingSecret` to a Secret
+   managed by Sealed Secrets / External Secrets / SOPS / Vault.
+
 UPGRADING from chart 0.1.x:
    Chart 0.2.0 restructured values.yaml. The old `app:` and `secrets:` top-level
-   blocks are gone; every application knob now lives under `config:` (a flat 1:1
-   mirror of the app image's src/config.ts Zod schema). Renames you must apply
-   to your override values before `helm upgrade`:
+   blocks were replaced by a single `config:` block (a flat 1:1 mirror of the
+   app image's src/config.ts Zod schema). Chart 0.3.0 then re-split the secret
+   subset back out into `secrets:` — see the 0.2.x -> 0.3.0 section above for
+   the final paths. Going from 0.1.x directly to 0.3.0, apply these renames:
      app.port                 -> config.port
      app.cloneBaseDir         -> config.cloneBaseDir
      app.triggerPhrase        -> config.triggerPhrase
-     secrets.existingSecret   -> config.existingSecret
-     secrets.appId            -> config.appId
-     secrets.privateKey       -> config.privateKey
-     secrets.webhookSecret    -> config.webhookSecret
-     secrets.anthropicApiKey  -> config.anthropicApiKey
-     secrets.context7ApiKey   -> config.context7ApiKey
+     secrets.existingSecret   -> secrets.existingSecret (unchanged in 0.3.0)
+     secrets.appId            -> secrets.appId (unchanged in 0.3.0)
+     secrets.privateKey       -> secrets.privateKey (unchanged in 0.3.0)
+     secrets.webhookSecret    -> secrets.webhookSecret (unchanged in 0.3.0)
+     secrets.anthropicApiKey  -> secrets.anthropicApiKey (unchanged in 0.3.0)
+     secrets.context7ApiKey   -> secrets.context7ApiKey (unchanged in 0.3.0)
    Upgrading without renaming will produce a Deployment that mounts no
    credentials and crashes at startup.
