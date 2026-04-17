@@ -1,0 +1,19 @@
+{{- if .Values.sharedRunner.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "github-app-playground.fullname" . }}-shared-runner
+  labels:
+    {{- include "github-app-playground.labels" . | nindent 4 }}
+    app.kubernetes.io/component: shared-runner
+spec:
+  type: {{ .Values.sharedRunner.service.type }}
+  ports:
+    - port: {{ .Values.sharedRunner.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "github-app-playground.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: shared-runner
+{{- end }}

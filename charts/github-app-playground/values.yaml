@@ -1,41 +1,36 @@
 # Default values for github-app-playground.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# This is a YAML-formatted file. Declare variables to be passed into your templates.
+#
+# Commenting rule: every non-obvious parameter has one short line that names the
+# trigger condition (when to set, when to leave default). No narrative.
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# ─────────────────────────── INFRASTRUCTURE ───────────────────────────
+
 replicaCount: 1
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: chrisleekr/github-app-playground
-  # This sets the pull policy for images.
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: ""                                       # Leave empty to use .Chart.AppVersion.
 
-# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
-# This is to override the chart name.
 nameOverride: ""
 fullnameOverride: ""
 
-# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # The app does not require Kubernetes RBAC access, so API credentials should not be auto-mounted
-  automount: false
-  # Annotations to add to the service account (e.g. for IRSA on EKS)
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  # Auto-mount the SA token so src/k8s/job-spawner.ts can call the Kubernetes API
+  # when config.agentJobMode is isolated-job or auto. Safe to leave true when RBAC
+  # is disabled: the token still grants nothing without a Role binding.
+  automount: true
+  annotations: {}                               # Add IRSA / cloud IAM bindings here.
+  name: ""                                      # Leave empty to use the fullname template.
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+# Role + RoleBinding for in-cluster Job spawning (isolated-job mode).
+rbac:
+  create: false                                 # Set true when config.agentJobMode is isolated-job or auto.
+
 podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
 podSecurityContext:
@@ -47,20 +42,15 @@ securityContext:
   capabilities:
     drop:
       - ALL
-  # Must be false: the Node.js runtime writes to paths outside the workspace volume
-  # (e.g. npm cache, OS temp files). CLONE_BASE_DIR itself is on the mounted PVC.
+  # Must be false: the Node.js runtime writes outside the workspace PVC (npm cache, OS tmp).
   readOnlyRootFilesystem: false
   runAsNonRoot: true
   runAsUser: 1000
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
-  # External service port
   port: 80
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
   className: ""
@@ -68,18 +58,16 @@ ingress:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: github-app.local
+    - host: chart-example.local                 # Replace with your real host in the consumer values file.
       paths:
         - path: /
           pathType: Prefix
   tls: []
-  #  - secretName: github-app-tls
+  #  - secretName: chart-example-tls
   #    hosts:
-  #      - github-app.local
+  #      - chart-example.local
 
-# Resource recommendations are based on MAX_CONCURRENT_REQUESTS (default 3) * ~512Mi per request.
-# Adjust limits based on your actual concurrency setting.
-# For more information checkout: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+# Resource recommendations scale with config.maxConcurrentRequests (~512Mi per session).
 resources:
   limits:
     cpu: 2000m
@@ -88,11 +76,9 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
     path: /healthz
-    # Named port reference keeps probes in sync with app.port automatically
     port: http
   initialDelaySeconds: 15
   periodSeconds: 10
@@ -103,7 +89,6 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /readyz
-    # Named port reference keeps probes in sync with app.port automatically
     port: http
   initialDelaySeconds: 5
   periodSeconds: 10
@@ -111,9 +96,8 @@ readinessProbe:
   failureThreshold: 3
   successThreshold: 1
 
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-# Note: autoscaling is disabled by default because the bot handles stateful repo clone workspaces
-# that are bound to a specific pod. Enable only if using a shared PVC (ReadWriteMany).
+# Autoscaling is unsafe when workspaces are bound to a single pod (default). Enable
+# only with a ReadWriteMany workspace PVC.
 autoscaling:
   enabled: false
   minReplicas: 1
@@ -121,118 +105,254 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
-# Pod Disruption Budget for more information checkout: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
   # maxUnavailable: 1
 
-# Graceful shutdown period. The app waits up to 290s for in-flight requests before exiting.
-# Must be >= app shutdown timeout (290s). See: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination
+# Must be >= app shutdown timeout (290s).
 terminationGracePeriodSeconds: 300
 
-# Workspace persistence for cloned repositories.
-# The app clones GitHub repos to CLONE_BASE_DIR for each bot request and cleans them up after.
-# A persistent volume is recommended over emptyDir to survive pod restarts mid-request.
+# Workspace PVC for transient repo clones (CLONE_BASE_DIR).
 workspace:
   persistence:
-    enabled: true
-    storageClass: ""
+    enabled: true                               # Set false for ephemeral (tests only).
+    storageClass: ""                            # Leave empty for cluster default StorageClass.
+    # storageClass: "-"                         # Set to "-" to disable dynamic provisioning.
     accessModes:
       - ReadWriteOnce
     size: 10Gi
-    # Set to use a pre-existing PVC instead of creating one
-    existingClaim: ""
+    existingClaim: ""                           # Set to reuse a pre-existing PVC.
 
-# Additional volumes on the output Deployment definition.
 volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
 volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
 
-# Extra environment variables injected directly into the container.
-# Use for values that don't fit the typed app/secrets sections (e.g. AWS_PROFILE for local SSO,
-# HTTP_PROXY, or any other ad-hoc env var).
-# See: https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/
+# Extra env vars appended to the webhook container. Use for ad-hoc cases that don't fit `config:`.
 extraEnv: []
-# - name: AWS_PROFILE
-#   value: my-sso-profile
 # - name: HTTP_PROXY
 #   value: http://proxy.example.com:3128
 
-# Application configuration (non-sensitive values — placed in a ConfigMap)
-# All values correspond to environment variables validated by src/config.ts
-app:
-  # HTTP server port — must match the containerPort named 'http' in the Deployment
-  port: 3000
-  # Node.js environment
-  nodeEnv: production
-  # Logging level: fatal | error | warn | info | debug | trace
-  logLevel: info
-  # Phrase that triggers the bot when mentioned in PR/issue comments
-  triggerPhrase: "@chrisleekr-bot"
-  # Maximum number of simultaneous Claude agent sessions
-  # Memory usage scales with this value (~512Mi per session)
-  maxConcurrentRequests: 3
-  # Timeout for each Claude agent run in milliseconds (default 10 minutes)
-  agentTimeoutMs: 600000
-  # Number of git commits to fetch when cloning a repo (shallow clone depth)
-  cloneDepth: 50
-  # Base directory for temporary repo clones (must match workspace.persistence mount)
-  cloneBaseDir: /tmp/bot-workspaces
+# ─── In-chart stateful deps (each supports in-cluster or external) ───
 
-  # AI provider: "anthropic" (direct API) or "bedrock" (AWS Bedrock)
-  claudeProvider: anthropic
+postgres:
+  enabled: false                                # Set true to provision Postgres in-cluster.
+  # Use an existing Postgres instead of provisioning one. Do not combine with postgres.enabled.
+  external:
+    enabled: false
+    host: ""                                    # Required when external.enabled is true.
+    port: 5432
+    username: ""                                # Required when external.enabled is true.
+    database: ""                                # Required when external.enabled is true.
+    sslmode: disable                            # disable | require | verify-full.
+    existingSecret: ""                          # Preferred over external.password. Secret in release namespace.
+    existingSecretPasswordKey: POSTGRES_PASSWORD
+    password: ""                                # Use only if existingSecret is empty. Avoid checking in.
+  image:
+    repository: pgvector/pgvector
+    tag: pg17                                   # Pin only when changing Postgres major.
+    pullPolicy: IfNotPresent
+  auth:
+    existingSecret: ""                          # Set to skip chart-managed password Secret. Must contain POSTGRES_PASSWORD.
+    username: github_app
+    database: github_app
+  service:
+    type: ClusterIP
+    port: 5432
+  persistence:
+    enabled: true                               # Set false only for ephemeral tests.
+    existingClaim: ""                           # Set to reuse a pre-existing PVC.
+    accessModes: [ReadWriteOnce]
+    size: 5Gi
+    storageClass: ""                            # Leave empty for cluster default.
+    # storageClass: "-"                         # Set to "-" to disable dynamic provisioning.
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  podSecurityContext:
+    fsGroup: 999
+    runAsUser: 999
+    runAsNonRoot: true
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
-  # Override only when using a custom image where claude-code is not at the default path.
-  # Leave empty to inherit the path baked into the Docker image via ENV.
-  # Default in official image: /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js
-  claudeCodePath: ""
+valkey:
+  enabled: false                                # Set true to provision Valkey in-cluster.
+  external:
+    enabled: false                              # Set true to use an existing Valkey. Do not combine with valkey.enabled.
+    host: ""                                    # Required when external.enabled is true.
+    port: 6379
+    database: 0
+    auth:
+      enabled: true                             # Set false only when the external Valkey has no auth.
+      existingSecret: ""                        # Preferred over external.auth.password.
+      existingSecretPasswordKey: VALKEY_PASSWORD
+      password: ""                              # Use only if existingSecret is empty. Avoid checking in.
+  # Must stay at 1 while persistence.enabled is true. Every replica would mount
+  # the same RWO PVC, which either fails scheduling (2nd pod Pending on the
+  # volume lock) or corrupts data. Switch to StatefulSet + volumeClaimTemplates
+  # if you need multi-replica Valkey.
+  replicaCount: 1
+  image:
+    repository: valkey/valkey
+    tag: "8-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    enabled: true                               # Set false only for local/no-auth tests.
+    password: ""                                # Leave empty to auto-generate and persist.
+    existingSecret: ""                          # Set to skip chart-managed password Secret.
+  service:
+    type: ClusterIP
+    port: 6379
+  persistence:
+    enabled: true
+    storageClass: ""                            # Leave empty for cluster default.
+    # storageClass: "-"                         # Set to "-" to disable dynamic provisioning.
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  podSecurityContext:
+    fsGroup: 999
+    runAsUser: 999
+    runAsNonRoot: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    # Valkey writes RDB/AOF snapshots under /data; cannot be read-only.
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
-  # AWS Bedrock provider settings (only required when claudeProvider=bedrock)
-  awsRegion: ""
-  # Claude model ID (e.g. us.anthropic.claude-opus-4-5-v1:0)
-  claudeModel: ""
-  # Optional custom Bedrock endpoint URL
-  anthropicBedrockBaseUrl: ""
+# Optional extra Deployment running the same image as the webhook, in
+# "shared runner" mode. Keep disabled until the app registers POST /internal/run.
+sharedRunner:
+  enabled: false
+  replicaCount: 1
+  image: {}                                     # Leave empty to inherit .Values.image.
+  service:
+    type: ClusterIP
+    port: 7081
+  resources: {}                                 # Set per environment; no default.
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
-# Sensitive credentials (placed in a Kubernetes Secret)
-# Set existingSecret to use a pre-existing secret instead of creating one.
-# When using existingSecret, ensure it contains all the keys listed below.
-secrets:
-  # Name of an existing Secret. If set, the chart will NOT create a new Secret.
-  existingSecret: ""
+# ─────────────────────────── APPLICATION CONFIG ───────────────────────
+# `config:` is a flat 1:1 mirror of the Zod schema in the app image's
+# `src/config.ts`. Field names and group order match the numbered
+# sections of that schema. The chart routes each key to ConfigMap or
+# Secret based on a hardcoded sensitivity list in the templates.
+config:
+  existingSecret: ""                            # Chart-level escape hatch. When set, chart-managed Secret is not rendered.
 
-  # GitHub App credentials (required)
-  # Create a GitHub App at https://github.com/settings/apps
-  githubAppId: ""
-  # Multi-line PEM private key — newlines must be preserved
-  githubAppPrivateKey: ""
-  githubWebhookSecret: ""
+  # --- 1. GitHub App credentials (server mode) ---
+  appId: ""                                     # Required in server mode (orchestratorUrl unset).
+  privateKey: ""                                # PEM contents, not a file path.
+  webhookSecret: ""
 
-  # Anthropic API key (required when app.claudeProvider=anthropic)
-  anthropicApiKey: ""
+  # --- 2. AI provider selection ---
+  provider: anthropic                           # anthropic | bedrock.
+  model: ""                                     # Required when provider=bedrock.
 
-  # AWS credentials for Bedrock (required when app.claudeProvider=bedrock)
-  # Prefer IAM roles (IRSA/EC2 instance profile) over static keys in production
-  awsAccessKeyId: ""
+  # --- 3. Anthropic direct-API credentials ---
+  anthropicApiKey: ""                           # Required when provider=anthropic and claudeCodeOauthToken is empty.
+  claudeCodeOauthToken: ""                      # Alternative to anthropicApiKey. Requires allowedOwners.
+
+  # --- 4. AWS Bedrock credentials ---
+  awsRegion: ""                                 # Required when provider=bedrock.
+  awsProfile: ""                                # Set only for local SSO (e.g. le aws login).
+  awsAccessKeyId: ""                            # Set for static AWS creds; otherwise leave empty.
   awsSecretAccessKey: ""
-  awsSessionToken: ""
-  # AWS Bedrock bearer token (alternative to access key auth)
-  awsBearerTokenBedrock: ""
+  awsSessionToken: ""                           # Set for temporary AWS STS creds.
+  awsBearerTokenBedrock: ""                     # Set to use Bedrock bearer-token auth (GitHub Actions OIDC).
+  anthropicBedrockBaseUrl: ""                   # Override only to front Bedrock with a VPC endpoint / proxy.
 
-  # Optional: Context7 API key for library documentation MCP server
-  context7ApiKey: ""
+  # --- 5. App runtime / behaviour ---
+  context7ApiKey: ""                            # Lifts the Context7 MCP rate limit. Unset works.
+  cloneBaseDir: /tmp/bot-workspaces             # Must match workspace.persistence mount path.
+  cloneDepth: 50                                # Git shallow-clone depth.
+  triggerPhrase: "@chrisleekr-bot"              # Must match the GitHub App's bot login exactly.
+  port: 3000                                    # Must match the container/service ports.
+  logLevel: info                                # fatal | error | warn | info | debug | trace.
+  nodeEnv: production
+  maxConcurrentRequests: 3
+  agentTimeoutMs: 600000
+  agentMaxTurns: ""                             # Leave empty to use defaultMaxTurns or triage-derived turns.
+  claudeCodePath: ""                            # Required only when claude-code is installed globally (e.g. Docker).
+  allowedOwners: ""                             # Comma-separated. Required when claudeCodeOauthToken is set.
+
+  # --- 6. Dispatch mode (Phase 2+ / Phase 3) ---
+  agentJobMode: inline                          # inline | daemon | shared-runner | isolated-job | auto.
+  defaultDispatchTarget: shared-runner          # Cannot be inline when agentJobMode=auto.
+
+  # --- 7. K8s Job spawner (isolated-job target) ---
+  jobNamespace: ""                              # Leave empty to use the release namespace.
+  jobImage: ""                                  # Leave empty to inherit .Values.image.
+  jobTtlSeconds: 300
+  jobActiveDeadlineSeconds: 1800                # Zod caps at 3500 (installation-token TTL margin).
+  jobWatchPollIntervalMs: 5000
+
+  # --- 8. Shared-runner HTTP target ---
+  internalRunnerUrl: ""                         # Required when agentJobMode is shared-runner or auto.
+  internalRunnerToken: ""                       # Leave empty to auto-generate and persist.
+  sharedRunnerToken: ""                         # ADR-011 reserved; leave empty to auto-generate.
+
+  # --- 9. Data layer (required when agentJobMode is not inline) ---
+  valkeyUrl: ""                                 # Leave empty to compose from valkey.* or valkey.external.*.
+  databaseUrl: ""                               # Leave empty to compose from postgres.* or postgres.external.*.
+
+  # --- 10. Orchestrator ---
+  wsPort: 3002                                  # Must differ from config.port.
+  jobMaxCostUsd: 80                             # Placeholder today (not enforced in code).
+
+  # --- 11. Daemon / Orchestrator WebSocket (Phase 2) ---
+  daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
+  orchestratorUrl: ""                           # Setting this flips the process to DAEMON mode (webhook HTTP not started).
+  heartbeatIntervalMs: 30000
+  heartbeatTimeoutMs: 90000                     # Keep >= 2 x heartbeatIntervalMs.
+  staleExecutionThresholdMs: 600000             # Must exceed agentTimeoutMs.
+  daemonDrainTimeoutMs: 300000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
+  jobMaxRetries: 3                              # Daemon-dispatch retry only. isolated-job ignores this (FR-021).
+  offerTimeoutMs: 5000
+  daemonUpdateStrategy: exit                    # exit | pull | notify.
+  daemonUpdateDelayMs: 0
+  daemonEphemeral: false                        # Placeholder today (not enforced in code).
+  daemonMemoryFloorMb: 512
+  daemonDiskFloorMb: 1024
+
+  # --- 12. Triage pre-classifier (auto mode) ---
+  triageEnabled: true                           # Kill-switch for the triage LLM call.
+  triageModel: haiku-3-5
+  triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise.
+  triageMaxTokens: 256
+  triageTimeoutMs: 5000
+
+  # --- 13. Complexity → maxTurns mapping (FR-008a) ---
+  triageMaxTurnsTrivial: 10
+  triageMaxTurnsModerate: 30
+  triageMaxTurnsComplex: 50
+  defaultMaxTurns: 30
+
+  # --- 14. Isolated-job capacity back-pressure (FR-018, US3) ---
+  maxConcurrentIsolatedJobs: 3
+  pendingIsolatedJobQueueMax: 20
