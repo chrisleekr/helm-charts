@@ -21,10 +21,35 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
+      - name: Verify chart versions are not already released
+        # Fail loudly if any chart's Chart.yaml version already has a matching
+        # <chart-name>-<version> git tag. chart-releaser's skip_existing would
+        # otherwise silently skip — which hides accidental no-op releases.
+        # Inputs are files + git tags only; no github.* context data is used.
+        run: |
+          set -euo pipefail
+          fail=0
+          for chart_dir in charts/*/; do
+            if [ ! -f "${chart_dir}Chart.yaml" ]; then
+              continue
+            fi
+            name=$(yq e '.name' "${chart_dir}Chart.yaml")
+            version=$(yq e '.version' "${chart_dir}Chart.yaml")
+            tag="${name}-${version}"
+            if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+              echo "::error file=${chart_dir}Chart.yaml::tag ${tag} already exists - bump version before merging"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
-          # Prevent pipeline failure when a release tag already exists
+          # Safety net: if a chart escapes the gate above, still don't fail the
+          # job - but the gate should have caught it first.
           skip_existing: true
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

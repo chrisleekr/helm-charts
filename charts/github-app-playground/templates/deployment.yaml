@@ -44,7 +44,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.app.port }}
+              containerPort: {{ .Values.config.port }}
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -58,7 +58,7 @@ spec:
           volumeMounts:
             {{- if .Values.workspace.persistence.enabled }}
             - name: workspace
-              mountPath: {{ .Values.app.cloneBaseDir | quote }}
+              mountPath: {{ .Values.config.cloneBaseDir | quote }}
             {{- end }}
             {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}

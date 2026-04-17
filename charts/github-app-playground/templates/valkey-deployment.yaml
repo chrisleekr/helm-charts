@@ -1,0 +1,94 @@
+{{- if .Values.valkey.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "github-app-playground.fullname" . }}-valkey
+  labels:
+    {{- include "github-app-playground.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  replicas: {{ .Values.valkey.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "github-app-playground.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: valkey
+  template:
+    metadata:
+      labels:
+        {{- include "github-app-playground.labels" . | nindent 8 }}
+        app.kubernetes.io/component: valkey
+    spec:
+      {{- with .Values.valkey.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: valkey
+          {{- with .Values.valkey.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
+          imagePullPolicy: {{ .Values.valkey.image.pullPolicy }}
+          ports:
+            - name: valkey
+              containerPort: 6379
+              protocol: TCP
+          {{- if .Values.valkey.auth.enabled }}
+          # Password is injected into the server CLI rather than read from env so Valkey
+          # actually enforces auth (the upstream image does not enable AUTH from env alone).
+          command:
+            - valkey-server
+            - --requirepass
+            - $(VALKEY_PASSWORD)
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "github-app-playground.valkeySecretName" . }}
+                  key: password
+          {{- end }}
+          {{- if .Values.valkey.persistence.enabled }}
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+          {{- end }}
+          {{- with .Values.valkey.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+      {{- if .Values.valkey.persistence.enabled }}
+      volumes:
+        - name: valkey-data
+          persistentVolumeClaim:
+            claimName: {{ include "github-app-playground.fullname" . }}-valkey-pvc
+      {{- end }}
+      {{- with .Values.valkey.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.valkey.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.valkey.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

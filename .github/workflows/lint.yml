@@ -23,3 +23,39 @@ jobs:
         # check-version-increment in ct.yaml enforces Chart.yaml version bump
         # for any chart whose files have changed since the target branch
         run: ct lint --config ct.yaml
+
+      - name: Render github-app-playground feature matrix
+        # Exercises every conditional branch in the chart so a template error
+        # in any mode surfaces on the PR, not after publish. Uses only static,
+        # literal --set flags — no untrusted input from github.* contexts.
+        run: |
+          chart=charts/github-app-playground
+          set -euo pipefail
+          # 1. Phase 1 (inline) — current production topology.
+          helm template "$chart" > /dev/null
+          # 2. Bedrock provider path.
+          helm template "$chart" \
+            --set config.provider=bedrock \
+            --set config.awsRegion=us-east-1 \
+            --set config.model=us.anthropic.claude-sonnet-4-5-v1:0 > /dev/null
+          # 3. Phase 4 with in-chart Postgres + Valkey + RBAC + shared runner stub.
+          helm template "$chart" \
+            --set postgres.enabled=true --set valkey.enabled=true \
+            --set rbac.create=true --set sharedRunner.enabled=true \
+            --set config.agentJobMode=auto > /dev/null
+          # 4. Phase 4 with external Postgres + Valkey (literal password path).
+          helm template "$chart" \
+            --set postgres.external.enabled=true \
+            --set postgres.external.host=pg \
+            --set postgres.external.username=u \
+            --set postgres.external.database=d \
+            --set postgres.external.password=p \
+            --set valkey.external.enabled=true \
+            --set valkey.external.host=r \
+            --set valkey.external.auth.password=p \
+            --set config.agentJobMode=auto > /dev/null
+          # 5. User-supplied URLs (neither in-chart nor external enabled).
+          helm template "$chart" \
+            --set config.databaseUrl=postgres://u:p@h/d \
+            --set config.valkeyUrl=redis://h:6379 \
+            --set config.agentJobMode=daemon > /dev/null

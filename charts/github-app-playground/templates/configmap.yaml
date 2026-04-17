@@ -5,42 +5,92 @@ metadata:
   labels:
     {{- include "github-app-playground.labels" . | nindent 4 }}
 data:
-  # HTTP server configuration
-  PORT: {{ .Values.app.port | quote }}
-  NODE_ENV: {{ .Values.app.nodeEnv | quote }}
-  LOG_LEVEL: {{ .Values.app.logLevel | quote }}
+  # Non-secret env vars. Each key is gated by `ne <val> ""` so empty values become
+  # "not set" at the pod level, letting src/config.ts Zod apply its own defaults or
+  # surface its own "required when X" errors rather than masking them with empty strings.
+  {{- $c := .Values.config }}
 
-  # Bot trigger configuration
-  TRIGGER_PHRASE: {{ .Values.app.triggerPhrase | quote }}
-
-  # Concurrency and timeout settings
-  MAX_CONCURRENT_REQUESTS: {{ .Values.app.maxConcurrentRequests | quote }}
-  AGENT_TIMEOUT_MS: {{ .Values.app.agentTimeoutMs | quote }}
-
-  # Git clone settings
-  CLONE_DEPTH: {{ .Values.app.cloneDepth | quote }}
-  # Must match the mountPath of the workspace volume
-  CLONE_BASE_DIR: {{ .Values.app.cloneBaseDir | quote }}
-
-  # AI provider: "anthropic" or "bedrock"
-  CLAUDE_PROVIDER: {{ .Values.app.claudeProvider | quote }}
-
-  # AWS Bedrock provider settings (only used when CLAUDE_PROVIDER=bedrock)
-  {{- if eq .Values.app.claudeProvider "bedrock" }}
-  AWS_REGION: {{ .Values.app.awsRegion | quote }}
-  # Only set when non-empty: process.env["CLAUDE_MODEL"]="" fails z.string().min(1) with a
-  # confusing error; leaving it unset lets superRefine emit the clear message instead.
-  {{- if .Values.app.claudeModel }}
-  CLAUDE_MODEL: {{ .Values.app.claudeModel | quote }}
+  # === Webhook server ===
+  PORT: {{ $c.port | quote }}
+  NODE_ENV: {{ $c.nodeEnv | quote }}
+  LOG_LEVEL: {{ $c.logLevel | quote }}
+  TRIGGER_PHRASE: {{ $c.triggerPhrase | quote }}
+  MAX_CONCURRENT_REQUESTS: {{ $c.maxConcurrentRequests | quote }}
+  AGENT_TIMEOUT_MS: {{ $c.agentTimeoutMs | quote }}
+  {{- if ne ($c.agentMaxTurns | toString) "" }}
+  AGENT_MAX_TURNS: {{ $c.agentMaxTurns | quote }}
   {{- end }}
-  # Only set when non-empty: an empty URL string may be misinterpreted by the Claude SDK
-  {{- if .Values.app.anthropicBedrockBaseUrl }}
-  ANTHROPIC_BEDROCK_BASE_URL: {{ .Values.app.anthropicBedrockBaseUrl | quote }}
+  CLONE_DEPTH: {{ $c.cloneDepth | quote }}
+  CLONE_BASE_DIR: {{ $c.cloneBaseDir | quote }}
+  {{- if $c.claudeCodePath }}
+  CLAUDE_CODE_PATH: {{ $c.claudeCodePath | quote }}
   {{- end }}
+  {{- if $c.allowedOwners }}
+  ALLOWED_OWNERS: {{ $c.allowedOwners | quote }}
   {{- end }}
 
-  # Override the Claude Code CLI path when using a custom image.
-  # Leave unset to rely on the CLAUDE_CODE_PATH baked into the Docker image ENV.
-  {{- if .Values.app.claudeCodePath }}
-  CLAUDE_CODE_PATH: {{ .Values.app.claudeCodePath | quote }}
+  # === AI provider ===
+  CLAUDE_PROVIDER: {{ $c.provider | quote }}
+  {{- if $c.model }}
+  CLAUDE_MODEL: {{ $c.model | quote }}
   {{- end }}
+  {{- if $c.awsRegion }}
+  AWS_REGION: {{ $c.awsRegion | quote }}
+  {{- end }}
+  {{- if $c.awsProfile }}
+  AWS_PROFILE: {{ $c.awsProfile | quote }}
+  {{- end }}
+  {{- if $c.anthropicBedrockBaseUrl }}
+  ANTHROPIC_BEDROCK_BASE_URL: {{ $c.anthropicBedrockBaseUrl | quote }}
+  {{- end }}
+
+  # === Dispatch cascade ===
+  AGENT_JOB_MODE: {{ $c.agentJobMode | quote }}
+  DEFAULT_DISPATCH_TARGET: {{ $c.defaultDispatchTarget | quote }}
+
+  # === isolated-job spawner (read when agentJobMode is isolated-job or auto) ===
+  {{- if $c.jobNamespace }}
+  JOB_NAMESPACE: {{ $c.jobNamespace | quote }}
+  {{- end }}
+  {{- if $c.jobImage }}
+  JOB_IMAGE: {{ $c.jobImage | quote }}
+  {{- end }}
+  JOB_TTL_SECONDS: {{ $c.jobTtlSeconds | quote }}
+  JOB_ACTIVE_DEADLINE_SECONDS: {{ $c.jobActiveDeadlineSeconds | quote }}
+  JOB_WATCH_POLL_INTERVAL_MS: {{ $c.jobWatchPollIntervalMs | quote }}
+  JOB_MAX_COST_USD: {{ $c.jobMaxCostUsd | quote }}
+  JOB_MAX_RETRIES: {{ $c.jobMaxRetries | quote }}
+  MAX_CONCURRENT_ISOLATED_JOBS: {{ $c.maxConcurrentIsolatedJobs | quote }}
+  PENDING_ISOLATED_JOB_QUEUE_MAX: {{ $c.pendingIsolatedJobQueueMax | quote }}
+
+  # === Shared runner client (read when agentJobMode is shared-runner or auto) ===
+  {{- if $c.internalRunnerUrl }}
+  INTERNAL_RUNNER_URL: {{ $c.internalRunnerUrl | quote }}
+  {{- end }}
+
+  # === Orchestrator / daemon ===
+  WS_PORT: {{ $c.wsPort | quote }}
+  {{- if $c.orchestratorUrl }}
+  ORCHESTRATOR_URL: {{ $c.orchestratorUrl | quote }}
+  {{- end }}
+  HEARTBEAT_INTERVAL_MS: {{ $c.heartbeatIntervalMs | quote }}
+  HEARTBEAT_TIMEOUT_MS: {{ $c.heartbeatTimeoutMs | quote }}
+  STALE_EXECUTION_THRESHOLD_MS: {{ $c.staleExecutionThresholdMs | quote }}
+  DAEMON_DRAIN_TIMEOUT_MS: {{ $c.daemonDrainTimeoutMs | quote }}
+  OFFER_TIMEOUT_MS: {{ $c.offerTimeoutMs | quote }}
+  DAEMON_UPDATE_STRATEGY: {{ $c.daemonUpdateStrategy | quote }}
+  DAEMON_UPDATE_DELAY_MS: {{ $c.daemonUpdateDelayMs | quote }}
+  DAEMON_EPHEMERAL: {{ $c.daemonEphemeral | quote }}
+  DAEMON_MEMORY_FLOOR_MB: {{ $c.daemonMemoryFloorMb | quote }}
+  DAEMON_DISK_FLOOR_MB: {{ $c.daemonDiskFloorMb | quote }}
+
+  # === Triage (read when agentJobMode=auto) ===
+  TRIAGE_ENABLED: {{ $c.triageEnabled | quote }}
+  TRIAGE_MODEL: {{ $c.triageModel | quote }}
+  TRIAGE_CONFIDENCE_THRESHOLD: {{ $c.triageConfidenceThreshold | quote }}
+  TRIAGE_MAX_TOKENS: {{ $c.triageMaxTokens | quote }}
+  TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
+  TRIAGE_MAXTURNS_TRIVIAL: {{ $c.triageMaxTurnsTrivial | quote }}
+  TRIAGE_MAXTURNS_MODERATE: {{ $c.triageMaxTurnsModerate | quote }}
+  TRIAGE_MAXTURNS_COMPLEX: {{ $c.triageMaxTurnsComplex | quote }}
+  DEFAULT_MAXTURNS: {{ $c.defaultMaxTurns | quote }}

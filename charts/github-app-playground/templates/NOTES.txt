@@ -11,18 +11,36 @@
   echo http://$NODE_IP:$NODE_PORT
 {{- else if contains "LoadBalancer" .Values.service.type }}
      NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch its status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "github-app-playground.fullname" . }}'
+           Watch with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "github-app-playground.fullname" . }}
   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "github-app-playground.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
   echo http://$SERVICE_IP:{{ .Values.service.port }}
 {{- else if contains "ClusterIP" .Values.service.type }}
   export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:{{ .Values.config.port }}
+  echo "Visit http://127.0.0.1:8080"
 {{- end }}
 
-2. Configure your GitHub App webhook to point to:
+2. Configure your GitHub App webhook to POST to:
    <your-ingress-host>/api/github/webhooks
 
-3. Verify the bot is healthy:
+3. Current dispatch mode: {{ .Values.config.agentJobMode }}
+{{- if eq .Values.config.agentJobMode "inline" }}
+   Runs agent in-process. No data-layer infra required.
+{{- else }}
+   Requires DATABASE_URL, VALKEY_URL, DAEMON_AUTH_TOKEN (auto-wired when
+   postgres.enabled / valkey.enabled, or auto-generated for the token).
+{{- if or (eq .Values.config.agentJobMode "isolated-job") (eq .Values.config.agentJobMode "auto") }}
+   isolated-job spawning also requires rbac.create=true.
+{{- end }}
+{{- if or (eq .Values.config.agentJobMode "shared-runner") (eq .Values.config.agentJobMode "auto") }}
+   shared-runner also requires config.internalRunnerUrl and the target
+   runner to expose POST /internal/run (NOTE: not yet shipped in the app image).
+{{- end }}
+{{- end }}
+
+4. Verify the bot is healthy:
    kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }}"
+
+5. Tail dispatch / triage decisions:
+   kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
+     | jq 'select(.msg | test("dispatch decision|triage"))'
