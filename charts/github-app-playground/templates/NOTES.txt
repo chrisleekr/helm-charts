@@ -44,3 +44,20 @@
 5. Tail dispatch / triage decisions:
    kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
      | jq 'select(.msg | test("dispatch decision|triage"))'
+
+UPGRADING from chart 0.1.x:
+   Chart 0.2.0 restructured values.yaml. The old `app:` and `secrets:` top-level
+   blocks are gone; every application knob now lives under `config:` (a flat 1:1
+   mirror of the app image's src/config.ts Zod schema). Renames you must apply
+   to your override values before `helm upgrade`:
+     app.port                 -> config.port
+     app.cloneBaseDir         -> config.cloneBaseDir
+     app.triggerPhrase        -> config.triggerPhrase
+     secrets.existingSecret   -> config.existingSecret
+     secrets.appId            -> config.appId
+     secrets.privateKey       -> config.privateKey
+     secrets.webhookSecret    -> config.webhookSecret
+     secrets.anthropicApiKey  -> config.anthropicApiKey
+     secrets.context7ApiKey   -> config.context7ApiKey
+   Upgrading without renaming will produce a Deployment that mounts no
+   credentials and crashes at startup.

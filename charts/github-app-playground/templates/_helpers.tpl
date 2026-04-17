@@ -127,23 +127,41 @@ Falls back to `randAlphaNum 64` when no existing Secret holds the key.
 
 {{/*
 Resolved Postgres password (in-chart Postgres).
-Preference: .Values.postgres.auth.existingSecret → stable token generated value.
-When postgres.auth.existingSecret is set, this helper is not consulted.
+Reads from whichever Secret the StatefulSet mounts:
+  - postgres.auth.existingSecret  → that Secret's POSTGRES_PASSWORD key.
+  - otherwise                     → chart-managed Secret, stable across upgrades.
+This keeps DATABASE_URL in sync with the password the Postgres pod actually uses.
 */}}
 {{- define "github-app-playground.postgresPassword" -}}
+{{- if .Values.postgres.auth.existingSecret -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace .Values.postgres.auth.existingSecret -}}
+{{- if and $existing (index $existing.data "POSTGRES_PASSWORD") -}}
+{{- index $existing.data "POSTGRES_PASSWORD" | b64dec -}}
+{{- end -}}
+{{- else -}}
 {{- include "github-app-playground.stableToken" (dict
     "key" "POSTGRES_PASSWORD"
     "secretName" (printf "%s-postgres-secret" (include "github-app-playground.fullname" .))
     "override" ""
     "root" .) -}}
+{{- end -}}
 {{- end }}
 
 {{/*
 Resolved Valkey password (in-chart Valkey). Matches mcp-server-boilerplate shape
 where the Secret key is lowercase `password`.
+Reads from whichever Secret the Deployment mounts:
+  - valkey.auth.existingSecret    → that Secret's `password` key.
+  - valkey.auth.password literal  → use verbatim.
+  - otherwise                     → chart-managed Secret, stable across upgrades.
 */}}
 {{- define "github-app-playground.valkeyPassword" -}}
-{{- if .Values.valkey.auth.password -}}
+{{- if .Values.valkey.auth.existingSecret -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace .Values.valkey.auth.existingSecret -}}
+{{- if and $existing (index $existing.data "password") -}}
+{{- index $existing.data "password" | b64dec -}}
+{{- end -}}
+{{- else if .Values.valkey.auth.password -}}
 {{- .Values.valkey.auth.password -}}
 {{- else -}}
 {{- include "github-app-playground.stableToken" (dict

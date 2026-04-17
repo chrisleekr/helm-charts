@@ -196,6 +196,10 @@ valkey:
       existingSecret: ""                        # Preferred over external.auth.password.
       existingSecretPasswordKey: VALKEY_PASSWORD
       password: ""                              # Use only if existingSecret is empty. Avoid checking in.
+  # Must stay at 1 while persistence.enabled is true. Every replica would mount
+  # the same RWO PVC, which either fails scheduling (2nd pod Pending on the
+  # volume lock) or corrupts data. Switch to StatefulSet + volumeClaimTemplates
+  # if you need multi-replica Valkey.
   replicaCount: 1
   image:
     repository: valkey/valkey
@@ -254,11 +258,10 @@ sharedRunner:
   affinity: {}
 
 # ─────────────────────────── APPLICATION CONFIG ───────────────────────
-# `config:` is a flat 1:1 mirror of the Zod schema in
-# /Users/chrislee/srv/github/github-app-playground/src/config.ts.
-# Field names and group order match the numbered sections of that file.
-# The chart routes each key to ConfigMap or Secret based on a hardcoded
-# sensitivity list in the templates.
+# `config:` is a flat 1:1 mirror of the Zod schema in the app image's
+# `src/config.ts`. Field names and group order match the numbered
+# sections of that schema. The chart routes each key to ConfigMap or
+# Secret based on a hardcoded sensitivity list in the templates.
 config:
   existingSecret: ""                            # Chart-level escape hatch. When set, chart-managed Secret is not rendered.
 
