@@ -4,3 +4,7 @@ chart-dirs:
   - charts
 # Fail if a changed chart's version has not been incremented
 check-version-increment: true
+# Skip maintainer validation. ct hits https://api.github.com/users/<name> per
+# maintainer; every chart here uses display name "Chris Lee" which 404s. The
+# GitHub profile is already recorded via maintainers[].url.
+validate-maintainers: false
