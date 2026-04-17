@@ -62,12 +62,12 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Name of the Secret holding app credentials. Uses config.existingSecret when set,
+Name of the Secret holding app credentials. Uses secrets.existingSecret when set,
 otherwise the chart-managed name <fullname>-secret.
 */}}
 {{- define "github-app-playground.secretName" -}}
-{{- if .Values.config.existingSecret }}
-{{- .Values.config.existingSecret }}
+{{- if .Values.secrets.existingSecret }}
+{{- .Values.secrets.existingSecret }}
 {{- else }}
 {{- printf "%s-secret" (include "github-app-playground.fullname" .) }}
 {{- end }}
@@ -205,15 +205,15 @@ Resolved external-Valkey password. Mirrors externalPostgresPassword.
 
 {{/*
 Composed DATABASE_URL. Resolution order (stops at first match):
-  1. config.databaseUrl (literal) → use verbatim.
+  1. secrets.databaseUrl (literal) → use verbatim.
   2. postgres.enabled=true        → postgresql://u:p@<fullname>-postgres:port/db?sslmode=disable
   3. postgres.external.enabled=true → postgresql://u:p@host:port/db?sslmode=<sslmode>
   4. nothing                      → empty string.
 Consumers: template that emits it skips writing the key when empty.
 */}}
 {{- define "github-app-playground.databaseUrl" -}}
-{{- if .Values.config.databaseUrl -}}
-{{- .Values.config.databaseUrl -}}
+{{- if .Values.secrets.databaseUrl -}}
+{{- .Values.secrets.databaseUrl -}}
 {{- else if .Values.postgres.enabled -}}
 {{- $pw := include "github-app-playground.postgresPassword" . -}}
 {{- printf "postgresql://%s:%s@%s-postgres:%d/%s?sslmode=disable" .Values.postgres.auth.username $pw (include "github-app-playground.fullname" .) (int .Values.postgres.service.port) .Values.postgres.auth.database -}}
@@ -227,8 +227,8 @@ Consumers: template that emits it skips writing the key when empty.
 Composed VALKEY_URL. Same resolution order as databaseUrl.
 */}}
 {{- define "github-app-playground.valkeyUrl" -}}
-{{- if .Values.config.valkeyUrl -}}
-{{- .Values.config.valkeyUrl -}}
+{{- if .Values.secrets.valkeyUrl -}}
+{{- .Values.secrets.valkeyUrl -}}
 {{- else if .Values.valkey.enabled -}}
 {{- $host := printf "%s-valkey" (include "github-app-playground.fullname" .) -}}
 {{- if .Values.valkey.auth.enabled -}}

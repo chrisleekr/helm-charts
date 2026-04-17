@@ -257,38 +257,68 @@ sharedRunner:
   tolerations: []
   affinity: {}
 
-# ─────────────────────────── APPLICATION CONFIG ───────────────────────
-# `config:` is a flat 1:1 mirror of the Zod schema in the app image's
-# `src/config.ts`. Field names and group order match the numbered
-# sections of that schema. The chart routes each key to ConfigMap or
-# Secret based on a hardcoded sensitivity list in the templates.
-config:
-  existingSecret: ""                            # Chart-level escape hatch. When set, chart-managed Secret is not rendered.
+# ─────────────────────────── APPLICATION SECRETS ──────────────────────
+# `secrets:` holds every credential / token that is sensitive. These fields
+# are rendered into the chart-managed Kubernetes Secret and injected via
+# `envFrom: secretRef`. Section numbers mirror the groups in the app's
+# `src/config.ts` Zod schema (same ordering as `config:` below).
+#
+# NEVER commit real values here. Either:
+#   1) supply them via an out-of-repo, gitignored values file
+#      (`helm install ... --values secrets.yaml`), OR
+#   2) set `secrets.existingSecret` to the name of a pre-existing Secret
+#      managed by Sealed Secrets / External Secrets / SOPS / Vault.
+secrets:
+  # Chart escape hatch. When set, the chart-managed Secret is NOT rendered
+  # and the Deployment consumes the named Secret directly. All-or-nothing:
+  # the named Secret must contain every key the app expects (see secret.yaml).
+  existingSecret: ""
 
   # --- 1. GitHub App credentials (server mode) ---
   appId: ""                                     # Required in server mode (orchestratorUrl unset).
   privateKey: ""                                # PEM contents, not a file path.
   webhookSecret: ""
 
-  # --- 2. AI provider selection ---
-  provider: anthropic                           # anthropic | bedrock.
-  model: ""                                     # Required when provider=bedrock.
-
   # --- 3. Anthropic direct-API credentials ---
-  anthropicApiKey: ""                           # Required when provider=anthropic and claudeCodeOauthToken is empty.
-  claudeCodeOauthToken: ""                      # Alternative to anthropicApiKey. Requires allowedOwners.
+  anthropicApiKey: ""                           # Required when config.provider=anthropic and claudeCodeOauthToken is empty.
+  claudeCodeOauthToken: ""                      # Alternative to anthropicApiKey. Requires config.allowedOwners.
 
-  # --- 4. AWS Bedrock credentials ---
-  awsRegion: ""                                 # Required when provider=bedrock.
-  awsProfile: ""                                # Set only for local SSO (e.g. le aws login).
+  # --- 4. AWS Bedrock credentials (secret subset) ---
   awsAccessKeyId: ""                            # Set for static AWS creds; otherwise leave empty.
   awsSecretAccessKey: ""
   awsSessionToken: ""                           # Set for temporary AWS STS creds.
   awsBearerTokenBedrock: ""                     # Set to use Bedrock bearer-token auth (GitHub Actions OIDC).
+
+  # --- 5. App runtime / behaviour (secret subset) ---
+  context7ApiKey: ""                            # Lifts the Context7 MCP rate limit. Unset works.
+
+  # --- 8. Shared-runner HTTP target (auto-generated, persisted across upgrades) ---
+  internalRunnerToken: ""                       # Leave empty to auto-generate and persist.
+  sharedRunnerToken: ""                         # ADR-011 reserved; leave empty to auto-generate.
+
+  # --- 9. Data layer (connection strings embed passwords → secret, not config) ---
+  databaseUrl: ""                               # Leave empty to compose from postgres.* or postgres.external.*.
+  valkeyUrl: ""                                 # Leave empty to compose from valkey.* or valkey.external.*.
+
+  # --- 11. Daemon / Orchestrator WebSocket (auto-generated, persisted across upgrades) ---
+  daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
+
+# ─────────────────────────── APPLICATION CONFIG ───────────────────────
+# `config:` is a 1:1 mirror of the non-secret fields of the Zod schema in
+# the app image's `src/config.ts`. Field names and group order match the
+# numbered sections of that schema. Every key here is rendered into the
+# chart-managed ConfigMap. Credentials live in `secrets:` above.
+config:
+  # --- 2. AI provider selection ---
+  provider: anthropic                           # anthropic | bedrock.
+  model: ""                                     # Required when provider=bedrock.
+
+  # --- 4. AWS Bedrock credentials (non-secret subset) ---
+  awsRegion: ""                                 # Required when provider=bedrock.
+  awsProfile: ""                                # Set only for local SSO (e.g. after `aws sso login`).
   anthropicBedrockBaseUrl: ""                   # Override only to front Bedrock with a VPC endpoint / proxy.
 
   # --- 5. App runtime / behaviour ---
-  context7ApiKey: ""                            # Lifts the Context7 MCP rate limit. Unset works.
   cloneBaseDir: /tmp/bot-workspaces             # Must match workspace.persistence mount path.
   cloneDepth: 50                                # Git shallow-clone depth.
   triggerPhrase: "@chrisleekr-bot"              # Must match the GitHub App's bot login exactly.
@@ -299,7 +329,7 @@ config:
   agentTimeoutMs: 600000
   agentMaxTurns: ""                             # Leave empty to use defaultMaxTurns or triage-derived turns.
   claudeCodePath: ""                            # Required only when claude-code is installed globally (e.g. Docker).
-  allowedOwners: ""                             # Comma-separated. Required when claudeCodeOauthToken is set.
+  allowedOwners: ""                             # Comma-separated. Required when secrets.claudeCodeOauthToken is set.
 
   # --- 6. Dispatch mode (Phase 2+ / Phase 3) ---
   agentJobMode: inline                          # inline | daemon | shared-runner | isolated-job | auto.
@@ -312,21 +342,14 @@ config:
   jobActiveDeadlineSeconds: 1800                # Zod caps at 3500 (installation-token TTL margin).
   jobWatchPollIntervalMs: 5000
 
-  # --- 8. Shared-runner HTTP target ---
+  # --- 8. Shared-runner HTTP target (non-secret subset) ---
   internalRunnerUrl: ""                         # Required when agentJobMode is shared-runner or auto.
-  internalRunnerToken: ""                       # Leave empty to auto-generate and persist.
-  sharedRunnerToken: ""                         # ADR-011 reserved; leave empty to auto-generate.
-
-  # --- 9. Data layer (required when agentJobMode is not inline) ---
-  valkeyUrl: ""                                 # Leave empty to compose from valkey.* or valkey.external.*.
-  databaseUrl: ""                               # Leave empty to compose from postgres.* or postgres.external.*.
 
   # --- 10. Orchestrator ---
   wsPort: 3002                                  # Must differ from config.port.
   jobMaxCostUsd: 80                             # Placeholder today (not enforced in code).
 
-  # --- 11. Daemon / Orchestrator WebSocket (Phase 2) ---
-  daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
+  # --- 11. Daemon / Orchestrator WebSocket (non-secret subset) ---
   orchestratorUrl: ""                           # Setting this flips the process to DAEMON mode (webhook HTTP not started).
   heartbeatIntervalMs: 30000
   heartbeatTimeoutMs: 90000                     # Keep >= 2 x heartbeatIntervalMs.
