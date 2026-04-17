@@ -315,7 +315,7 @@ config:
 
   # --- 4. AWS Bedrock credentials (non-secret subset) ---
   awsRegion: ""                                 # Required when provider=bedrock.
-  awsProfile: ""                                # Set only for local SSO (e.g. le aws login).
+  awsProfile: ""                                # Set only for local SSO (e.g. after `aws sso login`).
   anthropicBedrockBaseUrl: ""                   # Override only to front Bedrock with a VPC endpoint / proxy.
 
   # --- 5. App runtime / behaviour ---
