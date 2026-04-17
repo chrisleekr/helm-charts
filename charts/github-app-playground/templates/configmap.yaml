@@ -5,35 +5,19 @@ metadata:
   labels:
     {{- include "github-app-playground.labels" . | nindent 4 }}
 data:
-  # Non-secret env vars. Each key is gated by `ne <val> ""` so empty values become
-  # "not set" at the pod level, letting src/config.ts Zod apply its own defaults or
-  # surface its own "required when X" errors rather than masking them with empty strings.
+  # Non-secret env vars. Each optional key is gated by `ne <val> ""` so empty
+  # values become "not set" at the pod level and src/config.ts Zod applies
+  # its own defaults or surfaces its own "required when X" errors.
+  # Field order mirrors the numbered groups in src/config.ts.
   {{- $c := .Values.config }}
 
-  # === Webhook server ===
-  PORT: {{ $c.port | quote }}
-  NODE_ENV: {{ $c.nodeEnv | quote }}
-  LOG_LEVEL: {{ $c.logLevel | quote }}
-  TRIGGER_PHRASE: {{ $c.triggerPhrase | quote }}
-  MAX_CONCURRENT_REQUESTS: {{ $c.maxConcurrentRequests | quote }}
-  AGENT_TIMEOUT_MS: {{ $c.agentTimeoutMs | quote }}
-  {{- if ne ($c.agentMaxTurns | toString) "" }}
-  AGENT_MAX_TURNS: {{ $c.agentMaxTurns | quote }}
-  {{- end }}
-  CLONE_DEPTH: {{ $c.cloneDepth | quote }}
-  CLONE_BASE_DIR: {{ $c.cloneBaseDir | quote }}
-  {{- if $c.claudeCodePath }}
-  CLAUDE_CODE_PATH: {{ $c.claudeCodePath | quote }}
-  {{- end }}
-  {{- if $c.allowedOwners }}
-  ALLOWED_OWNERS: {{ $c.allowedOwners | quote }}
-  {{- end }}
-
-  # === AI provider ===
+  # --- 2. AI provider selection ---
   CLAUDE_PROVIDER: {{ $c.provider | quote }}
   {{- if $c.model }}
   CLAUDE_MODEL: {{ $c.model | quote }}
   {{- end }}
+
+  # --- 4. AWS Bedrock credentials (non-secret subset) ---
   {{- if $c.awsRegion }}
   AWS_REGION: {{ $c.awsRegion | quote }}
   {{- end }}
@@ -44,32 +28,49 @@ data:
   ANTHROPIC_BEDROCK_BASE_URL: {{ $c.anthropicBedrockBaseUrl | quote }}
   {{- end }}
 
-  # === Dispatch cascade ===
+  # --- 5. App runtime / behaviour ---
+  CLONE_BASE_DIR: {{ $c.cloneBaseDir | quote }}
+  CLONE_DEPTH: {{ $c.cloneDepth | quote }}
+  TRIGGER_PHRASE: {{ $c.triggerPhrase | quote }}
+  PORT: {{ $c.port | quote }}
+  LOG_LEVEL: {{ $c.logLevel | quote }}
+  NODE_ENV: {{ $c.nodeEnv | quote }}
+  MAX_CONCURRENT_REQUESTS: {{ $c.maxConcurrentRequests | quote }}
+  AGENT_TIMEOUT_MS: {{ $c.agentTimeoutMs | quote }}
+  {{- if ne ($c.agentMaxTurns | toString) "" }}
+  AGENT_MAX_TURNS: {{ $c.agentMaxTurns | quote }}
+  {{- end }}
+  {{- if $c.claudeCodePath }}
+  CLAUDE_CODE_PATH: {{ $c.claudeCodePath | quote }}
+  {{- end }}
+  {{- if $c.allowedOwners }}
+  ALLOWED_OWNERS: {{ $c.allowedOwners | quote }}
+  {{- end }}
+
+  # --- 6. Dispatch mode ---
   AGENT_JOB_MODE: {{ $c.agentJobMode | quote }}
   DEFAULT_DISPATCH_TARGET: {{ $c.defaultDispatchTarget | quote }}
 
-  # === isolated-job spawner (read when agentJobMode is isolated-job or auto) ===
-  {{- if $c.jobNamespace }}
-  JOB_NAMESPACE: {{ $c.jobNamespace | quote }}
-  {{- end }}
-  {{- if $c.jobImage }}
-  JOB_IMAGE: {{ $c.jobImage | quote }}
-  {{- end }}
+  # --- 7. K8s Job spawner (isolated-job target) ---
+  # JOB_NAMESPACE falls back to the release namespace when the user leaves it empty,
+  # so isolated-job pods land next to the release by default.
+  JOB_NAMESPACE: {{ default .Release.Namespace $c.jobNamespace | quote }}
+  # JOB_IMAGE falls back to the webhook image so the spawned Pod runs the same build.
+  JOB_IMAGE: {{ default (printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion)) $c.jobImage | quote }}
   JOB_TTL_SECONDS: {{ $c.jobTtlSeconds | quote }}
   JOB_ACTIVE_DEADLINE_SECONDS: {{ $c.jobActiveDeadlineSeconds | quote }}
   JOB_WATCH_POLL_INTERVAL_MS: {{ $c.jobWatchPollIntervalMs | quote }}
-  JOB_MAX_COST_USD: {{ $c.jobMaxCostUsd | quote }}
-  JOB_MAX_RETRIES: {{ $c.jobMaxRetries | quote }}
-  MAX_CONCURRENT_ISOLATED_JOBS: {{ $c.maxConcurrentIsolatedJobs | quote }}
-  PENDING_ISOLATED_JOB_QUEUE_MAX: {{ $c.pendingIsolatedJobQueueMax | quote }}
 
-  # === Shared runner client (read when agentJobMode is shared-runner or auto) ===
+  # --- 8. Shared-runner HTTP target ---
   {{- if $c.internalRunnerUrl }}
   INTERNAL_RUNNER_URL: {{ $c.internalRunnerUrl | quote }}
   {{- end }}
 
-  # === Orchestrator / daemon ===
+  # --- 10. Orchestrator ---
   WS_PORT: {{ $c.wsPort | quote }}
+  JOB_MAX_COST_USD: {{ $c.jobMaxCostUsd | quote }}
+
+  # --- 11. Daemon / Orchestrator WebSocket ---
   {{- if $c.orchestratorUrl }}
   ORCHESTRATOR_URL: {{ $c.orchestratorUrl | quote }}
   {{- end }}
@@ -77,6 +78,7 @@ data:
   HEARTBEAT_TIMEOUT_MS: {{ $c.heartbeatTimeoutMs | quote }}
   STALE_EXECUTION_THRESHOLD_MS: {{ $c.staleExecutionThresholdMs | quote }}
   DAEMON_DRAIN_TIMEOUT_MS: {{ $c.daemonDrainTimeoutMs | quote }}
+  JOB_MAX_RETRIES: {{ $c.jobMaxRetries | quote }}
   OFFER_TIMEOUT_MS: {{ $c.offerTimeoutMs | quote }}
   DAEMON_UPDATE_STRATEGY: {{ $c.daemonUpdateStrategy | quote }}
   DAEMON_UPDATE_DELAY_MS: {{ $c.daemonUpdateDelayMs | quote }}
@@ -84,13 +86,19 @@ data:
   DAEMON_MEMORY_FLOOR_MB: {{ $c.daemonMemoryFloorMb | quote }}
   DAEMON_DISK_FLOOR_MB: {{ $c.daemonDiskFloorMb | quote }}
 
-  # === Triage (read when agentJobMode=auto) ===
+  # --- 12. Triage pre-classifier ---
   TRIAGE_ENABLED: {{ $c.triageEnabled | quote }}
   TRIAGE_MODEL: {{ $c.triageModel | quote }}
   TRIAGE_CONFIDENCE_THRESHOLD: {{ $c.triageConfidenceThreshold | quote }}
   TRIAGE_MAX_TOKENS: {{ $c.triageMaxTokens | quote }}
   TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
+
+  # --- 13. Complexity → maxTurns mapping ---
   TRIAGE_MAXTURNS_TRIVIAL: {{ $c.triageMaxTurnsTrivial | quote }}
   TRIAGE_MAXTURNS_MODERATE: {{ $c.triageMaxTurnsModerate | quote }}
   TRIAGE_MAXTURNS_COMPLEX: {{ $c.triageMaxTurnsComplex | quote }}
   DEFAULT_MAXTURNS: {{ $c.defaultMaxTurns | quote }}
+
+  # --- 14. Isolated-job capacity back-pressure ---
+  MAX_CONCURRENT_ISOLATED_JOBS: {{ $c.maxConcurrentIsolatedJobs | quote }}
+  PENDING_ISOLATED_JOB_QUEUE_MAX: {{ $c.pendingIsolatedJobQueueMax | quote }}

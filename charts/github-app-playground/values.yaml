@@ -256,89 +256,100 @@ sharedRunner:
 # ─────────────────────────── APPLICATION CONFIG ───────────────────────
 # `config:` is a flat 1:1 mirror of the Zod schema in
 # /Users/chrislee/srv/github/github-app-playground/src/config.ts.
-# Field names match Zod keys. The chart routes each key to ConfigMap or Secret
-# based on a hard-coded sensitivity list in the templates.
+# Field names and group order match the numbered sections of that file.
+# The chart routes each key to ConfigMap or Secret based on a hardcoded
+# sensitivity list in the templates.
 config:
   existingSecret: ""                            # Chart-level escape hatch. When set, chart-managed Secret is not rendered.
 
-  # GitHub App — required when running as the webhook server (ORCHESTRATOR_URL unset).
-  appId: ""
+  # --- 1. GitHub App credentials (server mode) ---
+  appId: ""                                     # Required in server mode (orchestratorUrl unset).
   privateKey: ""                                # PEM contents, not a file path.
   webhookSecret: ""
 
-  # AI provider
+  # --- 2. AI provider selection ---
   provider: anthropic                           # anthropic | bedrock.
+  model: ""                                     # Required when provider=bedrock.
+
+  # --- 3. Anthropic direct-API credentials ---
   anthropicApiKey: ""                           # Required when provider=anthropic and claudeCodeOauthToken is empty.
   claudeCodeOauthToken: ""                      # Alternative to anthropicApiKey. Requires allowedOwners.
-  model: ""                                     # Required when provider=bedrock.
+
+  # --- 4. AWS Bedrock credentials ---
   awsRegion: ""                                 # Required when provider=bedrock.
-  awsProfile: ""                                # Set only when using a shared AWS credentials file.
+  awsProfile: ""                                # Set only for local SSO (e.g. le aws login).
   awsAccessKeyId: ""                            # Set for static AWS creds; otherwise leave empty.
   awsSecretAccessKey: ""
   awsSessionToken: ""                           # Set for temporary AWS STS creds.
-  awsBearerTokenBedrock: ""                     # Set to use Bedrock bearer-token auth instead of sigv4.
-  anthropicBedrockBaseUrl: ""                   # Override only to use a Bedrock-compatible proxy.
+  awsBearerTokenBedrock: ""                     # Set to use Bedrock bearer-token auth (GitHub Actions OIDC).
+  anthropicBedrockBaseUrl: ""                   # Override only to front Bedrock with a VPC endpoint / proxy.
 
-  context7ApiKey: ""                            # Enables the Context7 MCP server. Leave empty to disable.
-
+  # --- 5. App runtime / behaviour ---
+  context7ApiKey: ""                            # Lifts the Context7 MCP rate limit. Unset works.
   cloneBaseDir: /tmp/bot-workspaces             # Must match workspace.persistence mount path.
   cloneDepth: 50                                # Git shallow-clone depth.
-  claudeCodePath: ""                            # Override only to pin a specific claude CLI binary path.
-
-  triggerPhrase: "@chrisleekr-bot"              # Change when using a different GitHub App bot handle.
+  triggerPhrase: "@chrisleekr-bot"              # Must match the GitHub App's bot login exactly.
   port: 3000                                    # Must match the container/service ports.
   logLevel: info                                # fatal | error | warn | info | debug | trace.
   nodeEnv: production
   maxConcurrentRequests: 3
   agentTimeoutMs: 600000
-  agentMaxTurns: ""                             # Leave empty to use defaultMaxTurns.
+  agentMaxTurns: ""                             # Leave empty to use defaultMaxTurns or triage-derived turns.
+  claudeCodePath: ""                            # Required only when claude-code is installed globally (e.g. Docker).
   allowedOwners: ""                             # Comma-separated. Required when claudeCodeOauthToken is set.
 
+  # --- 6. Dispatch mode (Phase 2+ / Phase 3) ---
   agentJobMode: inline                          # inline | daemon | shared-runner | isolated-job | auto.
   defaultDispatchTarget: shared-runner          # Cannot be inline when agentJobMode=auto.
 
-  # isolated-job spawner — only consulted when agentJobMode is isolated-job or auto.
+  # --- 7. K8s Job spawner (isolated-job target) ---
   jobNamespace: ""                              # Leave empty to use the release namespace.
   jobImage: ""                                  # Leave empty to inherit .Values.image.
   jobTtlSeconds: 300
-  jobActiveDeadlineSeconds: 1800                # Zod caps at 3500.
+  jobActiveDeadlineSeconds: 1800                # Zod caps at 3500 (installation-token TTL margin).
   jobWatchPollIntervalMs: 5000
-  jobMaxCostUsd: 80
-  jobMaxRetries: 3                              # App-level retry. K8s backoffLimit is hardcoded to 0 in the spawner.
-  maxConcurrentIsolatedJobs: 3
-  pendingIsolatedJobQueueMax: 20
 
-  # Shared runner client — only consulted when agentJobMode is shared-runner or auto.
-  internalRunnerUrl: ""                         # Required. e.g. http://<release>-shared-runner:7081.
+  # --- 8. Shared-runner HTTP target ---
+  internalRunnerUrl: ""                         # Required when agentJobMode is shared-runner or auto.
   internalRunnerToken: ""                       # Leave empty to auto-generate and persist.
-  sharedRunnerToken: ""                         # Leave empty to auto-generate and persist.
+  sharedRunnerToken: ""                         # ADR-011 reserved; leave empty to auto-generate.
 
-  # Data layer — required when agentJobMode is not inline.
-  databaseUrl: ""                               # Leave empty to compose from postgres.* or postgres.external.*.
+  # --- 9. Data layer (required when agentJobMode is not inline) ---
   valkeyUrl: ""                                 # Leave empty to compose from valkey.* or valkey.external.*.
+  databaseUrl: ""                               # Leave empty to compose from postgres.* or postgres.external.*.
 
-  # Orchestrator / daemon — required when agentJobMode is not inline.
-  wsPort: 3002
-  orchestratorUrl: ""                           # Set only when running the daemon worker binary, not the webhook.
+  # --- 10. Orchestrator ---
+  wsPort: 3002                                  # Must differ from config.port.
+  jobMaxCostUsd: 80                             # Placeholder today (not enforced in code).
+
+  # --- 11. Daemon / Orchestrator WebSocket (Phase 2) ---
   daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
+  orchestratorUrl: ""                           # Setting this flips the process to DAEMON mode (webhook HTTP not started).
   heartbeatIntervalMs: 30000
-  heartbeatTimeoutMs: 90000
-  staleExecutionThresholdMs: 600000
-  daemonDrainTimeoutMs: 300000
+  heartbeatTimeoutMs: 90000                     # Keep >= 2 x heartbeatIntervalMs.
+  staleExecutionThresholdMs: 600000             # Must exceed agentTimeoutMs.
+  daemonDrainTimeoutMs: 300000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
+  jobMaxRetries: 3                              # Daemon-dispatch retry only. isolated-job ignores this (FR-021).
   offerTimeoutMs: 5000
   daemonUpdateStrategy: exit                    # exit | pull | notify.
   daemonUpdateDelayMs: 0
-  daemonEphemeral: false
+  daemonEphemeral: false                        # Placeholder today (not enforced in code).
   daemonMemoryFloorMb: 512
   daemonDiskFloorMb: 1024
 
-  # Triage — only consulted when agentJobMode=auto.
-  triageEnabled: true
+  # --- 12. Triage pre-classifier (auto mode) ---
+  triageEnabled: true                           # Kill-switch for the triage LLM call.
   triageModel: haiku-3-5
-  triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise in production.
+  triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise.
   triageMaxTokens: 256
   triageTimeoutMs: 5000
+
+  # --- 13. Complexity → maxTurns mapping (FR-008a) ---
   triageMaxTurnsTrivial: 10
   triageMaxTurnsModerate: 30
   triageMaxTurnsComplex: 50
   defaultMaxTurns: 30
+
+  # --- 14. Isolated-job capacity back-pressure (FR-018, US3) ---
+  maxConcurrentIsolatedJobs: 3
+  pendingIsolatedJobQueueMax: 20
