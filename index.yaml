@@ -85,6 +85,32 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-0.1.0/binance-trading-bot-0.1.0.tgz
     version: 0.1.0
+  github-app-playground:
+  - apiVersion: v2
+    appVersion: 1.1.0
+    created: "2026-04-17T13:04:39.006455595Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 38eed570ae47e0bbc868f22cfa561af1b1509424e33891ede8c2f80806fbf0fb
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.2.0/github-app-playground-0.2.0.tgz
+    version: 0.2.0
   ip-lookup:
   - apiVersion: v2
     appVersion: 1.0.0
@@ -317,4 +343,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-02-19T10:15:52.118635442Z"
+generated: "2026-04-17T13:04:39.006483547Z"
