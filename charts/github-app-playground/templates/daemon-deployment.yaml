@@ -130,6 +130,16 @@ spec:
                   name: {{ include "github-app-playground.fullname" $ }}-config
                   key: AGENT_TIMEOUT_MS
                   optional: true
+            # Required by the daemon's config validator when CLAUDE_CODE_OAUTH_TOKEN
+            # is set; startup fails with "ALLOWED_OWNERS must contain exactly one
+            # owner..." if unset. Optional here because anthropic-API-key and
+            # bedrock deployments don't need it.
+            - name: ALLOWED_OWNERS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: ALLOWED_OWNERS
+                  optional: true
             # Daemon-only knobs: pool override → cross-pool daemon.config default
             - name: HEARTBEAT_INTERVAL_MS
               value: {{ ternary $poolCfg.heartbeatIntervalMs $daemonCfg.heartbeatIntervalMs (hasKey $poolCfg "heartbeatIntervalMs") | quote }}
