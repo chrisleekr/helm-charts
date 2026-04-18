@@ -60,6 +60,7 @@ DAEMON POOLS (config.agentJobMode must be daemon, shared-runner, or auto):
    Each pool renders a separate Deployment named <fullname>-daemon-<pool>.
    Verify daemons registered:
      kubectl --namespace {{ .Release.Namespace }} logs \
+       -c daemon \
        -l "app.kubernetes.io/component=daemon" \
        | grep 'daemon:registered'
 

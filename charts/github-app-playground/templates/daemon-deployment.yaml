@@ -1,5 +1,9 @@
+{{- $daemonPoolModes := list "daemon" "shared-runner" "auto" }}
 {{- range $poolName, $pool := $.Values.daemon.pools }}
 {{- if ne ($pool.enabled | toString) "false" }}
+{{- if not (has $.Values.config.agentJobMode $daemonPoolModes) }}
+{{- fail (printf "daemon.pools.%s requires config.agentJobMode to be daemon, shared-runner, or auto (got: %s)" $poolName $.Values.config.agentJobMode) }}
+{{- end }}
 {{- $poolCfg := $pool.config | default dict }}
 {{- $daemonCfg := $.Values.daemon.config }}
 {{- $drainMs := int (ternary $poolCfg.daemonDrainTimeoutMs $daemonCfg.daemonDrainTimeoutMs (hasKey $poolCfg "daemonDrainTimeoutMs")) }}
@@ -37,7 +41,7 @@ metadata:
 spec:
   {{- $autoscaling := $pool.autoscaling | default dict }}
   {{- if not $autoscaling.enabled }}
-  replicas: {{ $pool.replicaCount | default 1 }}
+  replicas: {{ ternary $pool.replicaCount 1 (hasKey $pool "replicaCount") }}
   {{- end }}
   selector:
     matchLabels:
@@ -198,10 +202,8 @@ spec:
           {{- $dindPullPolicy := $dindImgPool.pullPolicy | default $dindImgDefaults.pullPolicy | default "IfNotPresent" }}
           image: "{{ $dindRepo }}:{{ $dindTag }}"
           imagePullPolicy: {{ $dindPullPolicy }}
-          {{- if not $rootless }}
           securityContext:
             privileged: true
-          {{- end }}
           {{- $dindResDefaults := $dindDefaults.resources | default dict }}
           {{- $dindResPool := $poolDind.resources | default dict }}
           {{- $dindRes := mergeOverwrite (deepCopy $dindResDefaults) $dindResPool }}

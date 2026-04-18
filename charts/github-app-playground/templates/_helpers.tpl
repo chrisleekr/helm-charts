@@ -228,11 +228,15 @@ Consumers: template that emits it skips writing the key when empty.
 */}}
 
 {{/*
-Daemon pool fully-qualified name: <fullname>-daemon-<poolName>, truncated to 63 chars.
+Daemon pool fully-qualified name: <fullname>-daemon-<poolName>, max 63 chars.
+The pool suffix is preserved by truncating the base to fit, preventing collisions
+when a long release name would push two different pool names to the same string.
 Args (dict): root (.), poolName (string).
 */}}
 {{- define "github-app-playground.daemon.fullname" -}}
-{{- printf "%s-daemon-%s" (include "github-app-playground.fullname" .root) .poolName | trunc 63 | trimSuffix "-" }}
+{{- $suffix := printf "-daemon-%s" .poolName -}}
+{{- $base := include "github-app-playground.fullname" .root | trunc (int (sub 63 (len $suffix))) | trimSuffix "-" -}}
+{{- printf "%s%s" $base $suffix | trimSuffix "-" -}}
 {{- end }}
 
 {{/*

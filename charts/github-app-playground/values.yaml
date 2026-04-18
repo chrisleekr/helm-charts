@@ -353,8 +353,8 @@ config:
   orchestratorUrl: ""                           # Setting this flips the process to DAEMON mode (webhook HTTP not started).
   heartbeatIntervalMs: 30000
   heartbeatTimeoutMs: 90000                     # Keep >= 2 x heartbeatIntervalMs.
-  staleExecutionThresholdMs: 600000             # Must exceed agentTimeoutMs.
-  daemonDrainTimeoutMs: 300000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
+  staleExecutionThresholdMs: 660000             # Must exceed agentTimeoutMs (600000).
+  daemonDrainTimeoutMs: 600000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
   jobMaxRetries: 3                              # Daemon-dispatch retry only. isolated-job ignores this (FR-021).
   offerTimeoutMs: 5000
   daemonUpdateStrategy: exit                    # exit | pull | notify.
@@ -404,8 +404,8 @@ daemon:
   config:
     heartbeatIntervalMs: 30000         # HEARTBEAT_INTERVAL_MS
     heartbeatTimeoutMs: 90000          # HEARTBEAT_TIMEOUT_MS (keep >= 2× interval)
-    staleExecutionThresholdMs: 600000  # STALE_EXECUTION_THRESHOLD_MS
-    daemonDrainTimeoutMs: 300000       # DAEMON_DRAIN_TIMEOUT_MS
+    staleExecutionThresholdMs: 660000  # STALE_EXECUTION_THRESHOLD_MS; must exceed agentTimeoutMs (600000)
+    daemonDrainTimeoutMs: 600000       # DAEMON_DRAIN_TIMEOUT_MS; must be >= agentTimeoutMs to avoid mid-run kills
     jobMaxRetries: 3                   # JOB_MAX_RETRIES
     offerTimeoutMs: 5000               # OFFER_TIMEOUT_MS
     daemonUpdateStrategy: exit         # exit | pull | notify

@@ -12,10 +12,12 @@ metadata:
     app.kubernetes.io/component: daemon
     app.kubernetes.io/pool: {{ $poolName }}
 spec:
-  {{- if $pdb.maxUnavailable }}
+  {{- if hasKey $pdb "maxUnavailable" }}
   maxUnavailable: {{ $pdb.maxUnavailable }}
+  {{- else if hasKey $pdb "minAvailable" }}
+  minAvailable: {{ $pdb.minAvailable }}
   {{- else }}
-  minAvailable: {{ $pdb.minAvailable | default 1 }}
+  minAvailable: 1
   {{- end }}
   selector:
     matchLabels:
