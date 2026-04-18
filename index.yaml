@@ -88,6 +88,31 @@ entries:
   github-app-playground:
   - apiVersion: v2
     appVersion: 1.1.1
+    created: "2026-04-18T09:11:10.817372162Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: b475e042ce7e6c8ae0cd4e1f6b20a54219d672a211d06482e1286a91517e402a
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.4.3/github-app-playground-0.4.3.tgz
+    version: 0.4.3
+  - apiVersion: v2
+    appVersion: 1.1.1
     created: "2026-04-18T03:39:27.755697335Z"
     description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
       on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
@@ -418,4 +443,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-18T03:39:27.755736732Z"
+generated: "2026-04-18T09:11:10.817416104Z"
