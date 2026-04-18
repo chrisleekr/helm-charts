@@ -19,6 +19,7 @@ spec:
       {{- end }}
       labels:
         {{- include "github-app-playground.labels" . | nindent 8 }}
+        app.kubernetes.io/component: orchestrator
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

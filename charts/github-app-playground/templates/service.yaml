@@ -20,3 +20,4 @@ spec:
     {{- end }}
   selector:
     {{- include "github-app-playground.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator

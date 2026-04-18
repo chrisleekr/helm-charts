@@ -72,7 +72,7 @@ data:
 
   # --- 11. Daemon / Orchestrator WebSocket ---
   {{- if $c.orchestratorUrl }}
-  ORCHESTRATOR_URL: {{ $c.orchestratorUrl | quote }}
+  {{- fail "config.orchestratorUrl must not be set on the orchestrator — presence of ORCHESTRATOR_URL flips it into daemon mode. Use daemon.orchestratorUrl or per-pool pools.<name>.orchestratorUrl instead." }}
   {{- end }}
   HEARTBEAT_INTERVAL_MS: {{ $c.heartbeatIntervalMs | quote }}
   HEARTBEAT_TIMEOUT_MS: {{ $c.heartbeatTimeoutMs | quote }}

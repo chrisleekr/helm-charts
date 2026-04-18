@@ -2,19 +2,25 @@
 {{- if ne ($pool.enabled | toString) "false" }}
 {{- $poolCfg := $pool.config | default dict }}
 {{- $daemonCfg := $.Values.daemon.config }}
-{{- $drainMs := int ($poolCfg.daemonDrainTimeoutMs | default $daemonCfg.daemonDrainTimeoutMs) }}
+{{- $drainMs := int (ternary $poolCfg.daemonDrainTimeoutMs $daemonCfg.daemonDrainTimeoutMs (hasKey $poolCfg "daemonDrainTimeoutMs")) }}
 {{- $gracePeriod := "" }}
-{{- if $pool.terminationGracePeriodSeconds }}
+{{- if ne ($pool.terminationGracePeriodSeconds | toString) "" }}
 {{- $gracePeriod = $pool.terminationGracePeriodSeconds }}
-{{- else if $.Values.daemon.terminationGracePeriodSeconds }}
+{{- else if ne ($.Values.daemon.terminationGracePeriodSeconds | toString) "" }}
 {{- $gracePeriod = $.Values.daemon.terminationGracePeriodSeconds }}
 {{- else }}
 {{- $gracePeriod = add (div $drainMs 1000) 30 }}
 {{- end }}
 {{- $dindDefaults := $.Values.daemon.dind | default dict }}
 {{- $poolDind := $pool.dind | default dict }}
-{{- $dindEnabled := $poolDind.enabled | default $dindDefaults.enabled | default false }}
-{{- $rootless := $poolDind.rootless | default $dindDefaults.rootless | default true }}
+{{- $dindEnabled := false }}
+{{- if hasKey $poolDind "enabled" }}{{- $dindEnabled = $poolDind.enabled }}
+{{- else if hasKey $dindDefaults "enabled" }}{{- $dindEnabled = $dindDefaults.enabled }}
+{{- end }}
+{{- $rootless := true }}
+{{- if hasKey $poolDind "rootless" }}{{- $rootless = $poolDind.rootless }}
+{{- else if hasKey $dindDefaults "rootless" }}{{- $rootless = $dindDefaults.rootless }}
+{{- end }}
 {{- $dindStorageDefaults := $dindDefaults.storage | default dict }}
 {{- $dindStoragePool := $poolDind.storage | default dict }}
 {{- $dindStorageType := $dindStoragePool.type | default $dindStorageDefaults.type | default "emptyDir" }}
@@ -64,7 +70,11 @@ spec:
       terminationGracePeriodSeconds: {{ $gracePeriod }}
       containers:
         - name: daemon
-          {{- with ($pool.securityContext | default dict) }}
+          {{- $secCtx := $pool.securityContext | default dict }}
+          {{- if and $dindEnabled $rootless }}
+          {{-   $secCtx = mergeOverwrite (dict "runAsUser" 1000 "runAsGroup" 1000) $secCtx }}
+          {{- end }}
+          {{- with $secCtx }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -85,6 +95,7 @@ spec:
                 configMapKeyRef:
                   name: {{ include "github-app-playground.fullname" $ }}-config
                   key: CLAUDE_PROVIDER
+                  optional: true
             - name: CLAUDE_MODEL
               valueFrom:
                 configMapKeyRef:
@@ -96,44 +107,48 @@ spec:
                 configMapKeyRef:
                   name: {{ include "github-app-playground.fullname" $ }}-config
                   key: LOG_LEVEL
+                  optional: true
             - name: NODE_ENV
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "github-app-playground.fullname" $ }}-config
                   key: NODE_ENV
+                  optional: true
             - name: CLONE_BASE_DIR
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "github-app-playground.fullname" $ }}-config
                   key: CLONE_BASE_DIR
+                  optional: true
             - name: AGENT_TIMEOUT_MS
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "github-app-playground.fullname" $ }}-config
                   key: AGENT_TIMEOUT_MS
+                  optional: true
             # Daemon-only knobs: pool override → cross-pool daemon.config default
             - name: HEARTBEAT_INTERVAL_MS
-              value: {{ $poolCfg.heartbeatIntervalMs | default $daemonCfg.heartbeatIntervalMs | quote }}
+              value: {{ ternary $poolCfg.heartbeatIntervalMs $daemonCfg.heartbeatIntervalMs (hasKey $poolCfg "heartbeatIntervalMs") | quote }}
             - name: HEARTBEAT_TIMEOUT_MS
-              value: {{ $poolCfg.heartbeatTimeoutMs | default $daemonCfg.heartbeatTimeoutMs | quote }}
+              value: {{ ternary $poolCfg.heartbeatTimeoutMs $daemonCfg.heartbeatTimeoutMs (hasKey $poolCfg "heartbeatTimeoutMs") | quote }}
             - name: STALE_EXECUTION_THRESHOLD_MS
-              value: {{ $poolCfg.staleExecutionThresholdMs | default $daemonCfg.staleExecutionThresholdMs | quote }}
+              value: {{ ternary $poolCfg.staleExecutionThresholdMs $daemonCfg.staleExecutionThresholdMs (hasKey $poolCfg "staleExecutionThresholdMs") | quote }}
             - name: DAEMON_DRAIN_TIMEOUT_MS
               value: {{ $drainMs | quote }}
             - name: JOB_MAX_RETRIES
-              value: {{ $poolCfg.jobMaxRetries | default $daemonCfg.jobMaxRetries | quote }}
+              value: {{ ternary $poolCfg.jobMaxRetries $daemonCfg.jobMaxRetries (hasKey $poolCfg "jobMaxRetries") | quote }}
             - name: OFFER_TIMEOUT_MS
-              value: {{ $poolCfg.offerTimeoutMs | default $daemonCfg.offerTimeoutMs | quote }}
+              value: {{ ternary $poolCfg.offerTimeoutMs $daemonCfg.offerTimeoutMs (hasKey $poolCfg "offerTimeoutMs") | quote }}
             - name: DAEMON_UPDATE_STRATEGY
-              value: {{ $poolCfg.daemonUpdateStrategy | default $daemonCfg.daemonUpdateStrategy | quote }}
+              value: {{ ternary $poolCfg.daemonUpdateStrategy $daemonCfg.daemonUpdateStrategy (hasKey $poolCfg "daemonUpdateStrategy") | quote }}
             - name: DAEMON_UPDATE_DELAY_MS
-              value: {{ $poolCfg.daemonUpdateDelayMs | default $daemonCfg.daemonUpdateDelayMs | quote }}
+              value: {{ ternary $poolCfg.daemonUpdateDelayMs $daemonCfg.daemonUpdateDelayMs (hasKey $poolCfg "daemonUpdateDelayMs") | quote }}
             - name: DAEMON_EPHEMERAL
-              value: {{ $poolCfg.daemonEphemeral | default $daemonCfg.daemonEphemeral | quote }}
+              value: {{ ternary $poolCfg.daemonEphemeral $daemonCfg.daemonEphemeral (hasKey $poolCfg "daemonEphemeral") | quote }}
             - name: DAEMON_MEMORY_FLOOR_MB
-              value: {{ $poolCfg.daemonMemoryFloorMb | default $daemonCfg.daemonMemoryFloorMb | quote }}
+              value: {{ ternary $poolCfg.daemonMemoryFloorMb $daemonCfg.daemonMemoryFloorMb (hasKey $poolCfg "daemonMemoryFloorMb") | quote }}
             - name: DAEMON_DISK_FLOOR_MB
-              value: {{ $poolCfg.daemonDiskFloorMb | default $daemonCfg.daemonDiskFloorMb | quote }}
+              value: {{ ternary $poolCfg.daemonDiskFloorMb $daemonCfg.daemonDiskFloorMb (hasKey $poolCfg "daemonDiskFloorMb") | quote }}
             {{- if $dindEnabled }}
             - name: DOCKER_HOST
               {{- if $rootless }}

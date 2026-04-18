@@ -422,9 +422,9 @@ daemon:
     enabled: false
     image:
       repository: docker
-      tag: "29-dind-rootless"          # switch to "29-dind" for classic
+      tag: ""                          # empty → auto-selected: 29-dind-rootless (rootless=true) or 29-dind (rootless=false)
       pullPolicy: IfNotPresent
-    rootless: true                     # false → privileged sidecar
+    rootless: true                     # false → privileged sidecar; auto-selects docker:29-dind image
     resources:
       requests:
         cpu: 250m
