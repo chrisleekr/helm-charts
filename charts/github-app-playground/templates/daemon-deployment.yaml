@@ -25,6 +25,13 @@
 {{- if hasKey $poolDind "rootless" }}{{- $rootless = $poolDind.rootless }}
 {{- else if hasKey $dindDefaults "rootless" }}{{- $rootless = $dindDefaults.rootless }}
 {{- end }}
+{{- /* When rootless=false, dockerd runs as root and creates /var/run/docker.sock
+       as root:docker(gid=2375). The daemon (uid 1000) must be a member of that
+       group to open the socket. socketGid is only consulted in that path. */}}
+{{- $socketGid := 2375 }}
+{{- if hasKey $poolDind "socketGid" }}{{- $socketGid = $poolDind.socketGid }}
+{{- else if hasKey $dindDefaults "socketGid" }}{{- $socketGid = $dindDefaults.socketGid }}
+{{- end }}
 {{- $dindStorageDefaults := $dindDefaults.storage | default dict }}
 {{- $dindStoragePool := $poolDind.storage | default dict }}
 {{- $dindStorageType := $dindStoragePool.type | default $dindStorageDefaults.type | default "emptyDir" }}
@@ -65,7 +72,18 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "github-app-playground.daemon.serviceAccountName" (dict "root" $ "pool" $pool) }}
-      {{- with ($pool.podSecurityContext | default dict) }}
+      {{- /* Coerce every supplementalGroup entry to int so mixed string/int
+             operator input does not defeat uniq and still renders as a
+             homogeneous int64 list the Kubernetes API accepts. */}}
+      {{- $podSecCtx := deepCopy ($pool.podSecurityContext | default dict) }}
+      {{- if and $dindEnabled (not $rootless) }}
+      {{-   $existingGroups := list }}
+      {{-   range ($podSecCtx.supplementalGroups | default list) }}
+      {{-     $existingGroups = append $existingGroups (int .) }}
+      {{-   end }}
+      {{-   $_ := set $podSecCtx "supplementalGroups" (append $existingGroups (int $socketGid) | uniq) }}
+      {{- end }}
+      {{- with $podSecCtx }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
