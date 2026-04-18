@@ -425,6 +425,12 @@ daemon:
       tag: ""                          # empty → auto-selected: 29-dind-rootless (rootless=true) or 29-dind (rootless=false)
       pullPolicy: IfNotPresent
     rootless: true                     # false → privileged sidecar; auto-selects docker:29-dind image
+    # Only consulted when rootless=false. The dockerd process runs as root and
+    # creates /var/run/docker.sock owned by root:docker. socketGid must match the
+    # "docker" group gid inside the DinD image (2375 in docker:29-dind). When set,
+    # the chart adds it to pod supplementalGroups so the daemon container (uid
+    # 1000) can open the socket without running as root.
+    socketGid: 2375
     resources:
       requests:
         cpu: 250m
