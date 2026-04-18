@@ -1,0 +1,266 @@
+{{- range $poolName, $pool := $.Values.daemon.pools }}
+{{- if ne ($pool.enabled | toString) "false" }}
+{{- $poolCfg := $pool.config | default dict }}
+{{- $daemonCfg := $.Values.daemon.config }}
+{{- $drainMs := int ($poolCfg.daemonDrainTimeoutMs | default $daemonCfg.daemonDrainTimeoutMs) }}
+{{- $gracePeriod := "" }}
+{{- if $pool.terminationGracePeriodSeconds }}
+{{- $gracePeriod = $pool.terminationGracePeriodSeconds }}
+{{- else if $.Values.daemon.terminationGracePeriodSeconds }}
+{{- $gracePeriod = $.Values.daemon.terminationGracePeriodSeconds }}
+{{- else }}
+{{- $gracePeriod = add (div $drainMs 1000) 30 }}
+{{- end }}
+{{- $dindDefaults := $.Values.daemon.dind | default dict }}
+{{- $poolDind := $pool.dind | default dict }}
+{{- $dindEnabled := $poolDind.enabled | default $dindDefaults.enabled | default false }}
+{{- $rootless := $poolDind.rootless | default $dindDefaults.rootless | default true }}
+{{- $dindStorageDefaults := $dindDefaults.storage | default dict }}
+{{- $dindStoragePool := $poolDind.storage | default dict }}
+{{- $dindStorageType := $dindStoragePool.type | default $dindStorageDefaults.type | default "emptyDir" }}
+{{- $dindSizeLimit := $dindStoragePool.sizeLimit | default $dindStorageDefaults.sizeLimit | default "10Gi" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  labels:
+    {{- include "github-app-playground.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: daemon
+    app.kubernetes.io/pool: {{ $poolName }}
+spec:
+  {{- $autoscaling := $pool.autoscaling | default dict }}
+  {{- if not $autoscaling.enabled }}
+  replicas: {{ $pool.replicaCount | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "github-app-playground.daemon.selectorLabels" (dict "root" $ "poolName" $poolName) | nindent 6 }}
+  template:
+    metadata:
+      {{- with $pool.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "github-app-playground.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: daemon
+        app.kubernetes.io/pool: {{ $poolName }}
+        {{- with $pool.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "github-app-playground.daemon.serviceAccountName" (dict "root" $ "pool" $pool) }}
+      {{- with ($pool.podSecurityContext | default dict) }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # terminationGracePeriodSeconds must be >= daemonDrainTimeoutMs/1000 to allow
+      # in-flight jobs to complete before the pod is killed.
+      terminationGracePeriodSeconds: {{ $gracePeriod }}
+      containers:
+        - name: daemon
+          {{- with ($pool.securityContext | default dict) }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- $poolImg := $pool.image | default dict }}
+          {{- $rootImg := $.Values.image }}
+          image: "{{ $poolImg.repository | default $rootImg.repository }}:{{ $poolImg.tag | default $rootImg.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $poolImg.pullPolicy | default $rootImg.pullPolicy }}
+          command: ["bun", "run", "dist/daemon/main.js"]
+          envFrom:
+            - secretRef:
+                name: {{ include "github-app-playground.secretName" $ }}
+          env:
+            - name: ORCHESTRATOR_URL
+              value: {{ include "github-app-playground.daemon.orchestratorUrl" (dict "root" $ "pool" $pool) | quote }}
+            # Shared config keys sourced from the orchestrator ConfigMap
+            - name: CLAUDE_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: CLAUDE_PROVIDER
+            - name: CLAUDE_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: CLAUDE_MODEL
+                  optional: true
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: LOG_LEVEL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: NODE_ENV
+            - name: CLONE_BASE_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: CLONE_BASE_DIR
+            - name: AGENT_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  key: AGENT_TIMEOUT_MS
+            # Daemon-only knobs: pool override → cross-pool daemon.config default
+            - name: HEARTBEAT_INTERVAL_MS
+              value: {{ $poolCfg.heartbeatIntervalMs | default $daemonCfg.heartbeatIntervalMs | quote }}
+            - name: HEARTBEAT_TIMEOUT_MS
+              value: {{ $poolCfg.heartbeatTimeoutMs | default $daemonCfg.heartbeatTimeoutMs | quote }}
+            - name: STALE_EXECUTION_THRESHOLD_MS
+              value: {{ $poolCfg.staleExecutionThresholdMs | default $daemonCfg.staleExecutionThresholdMs | quote }}
+            - name: DAEMON_DRAIN_TIMEOUT_MS
+              value: {{ $drainMs | quote }}
+            - name: JOB_MAX_RETRIES
+              value: {{ $poolCfg.jobMaxRetries | default $daemonCfg.jobMaxRetries | quote }}
+            - name: OFFER_TIMEOUT_MS
+              value: {{ $poolCfg.offerTimeoutMs | default $daemonCfg.offerTimeoutMs | quote }}
+            - name: DAEMON_UPDATE_STRATEGY
+              value: {{ $poolCfg.daemonUpdateStrategy | default $daemonCfg.daemonUpdateStrategy | quote }}
+            - name: DAEMON_UPDATE_DELAY_MS
+              value: {{ $poolCfg.daemonUpdateDelayMs | default $daemonCfg.daemonUpdateDelayMs | quote }}
+            - name: DAEMON_EPHEMERAL
+              value: {{ $poolCfg.daemonEphemeral | default $daemonCfg.daemonEphemeral | quote }}
+            - name: DAEMON_MEMORY_FLOOR_MB
+              value: {{ $poolCfg.daemonMemoryFloorMb | default $daemonCfg.daemonMemoryFloorMb | quote }}
+            - name: DAEMON_DISK_FLOOR_MB
+              value: {{ $poolCfg.daemonDiskFloorMb | default $daemonCfg.daemonDiskFloorMb | quote }}
+            {{- if $dindEnabled }}
+            - name: DOCKER_HOST
+              {{- if $rootless }}
+              value: "unix:///run/user/1000/docker.sock"
+              {{- else }}
+              value: "unix:///var/run/docker.sock"
+              {{- end }}
+            {{- end }}
+            {{- with $pool.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ $.Values.config.cloneBaseDir | quote }}
+            {{- if $dindEnabled }}
+            - name: dind-socket
+              {{- if $rootless }}
+              mountPath: /run/user/1000
+              {{- else }}
+              mountPath: /var/run
+              {{- end }}
+            {{- end }}
+            {{- with $pool.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- $poolLiveness := $pool.livenessProbe | default dict }}
+          {{- if $poolLiveness.enabled }}
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-f", "dist/daemon/main.js"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- end }}
+          {{- with ($pool.resources | default dict) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if $dindEnabled }}
+        - name: dind
+          {{- $dindImgDefaults := $dindDefaults.image | default dict }}
+          {{- $dindImgPool := $poolDind.image | default dict }}
+          {{- $dindRepo := $dindImgPool.repository | default $dindImgDefaults.repository | default "docker" }}
+          {{- $dindTagDefault := ternary "29-dind-rootless" "29-dind" $rootless }}
+          {{- $dindTag := $dindImgPool.tag | default $dindImgDefaults.tag | default $dindTagDefault }}
+          {{- $dindPullPolicy := $dindImgPool.pullPolicy | default $dindImgDefaults.pullPolicy | default "IfNotPresent" }}
+          image: "{{ $dindRepo }}:{{ $dindTag }}"
+          imagePullPolicy: {{ $dindPullPolicy }}
+          {{- if not $rootless }}
+          securityContext:
+            privileged: true
+          {{- end }}
+          {{- $dindResDefaults := $dindDefaults.resources | default dict }}
+          {{- $dindResPool := $poolDind.resources | default dict }}
+          {{- $dindRes := mergeOverwrite (deepCopy $dindResDefaults) $dindResPool }}
+          {{- with $dindRes }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: dind-socket
+              {{- if $rootless }}
+              mountPath: /run/user/1000
+            - name: dind-graph
+              mountPath: /home/rootless/.local/share/docker
+              {{- else }}
+              mountPath: /var/run
+            - name: dind-graph
+              mountPath: /var/lib/docker
+              {{- end }}
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                {{- if $rootless }}
+                - "test -S /run/user/1000/docker.sock"
+                {{- else }}
+                - "test -S /var/run/docker.sock"
+                {{- end }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          {{- $dindExtraEnv := concat ($dindDefaults.extraEnv | default list) ($poolDind.extraEnv | default list) }}
+          {{- with $dindExtraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- $dindExtraArgs := concat ($dindDefaults.extraArgs | default list) ($poolDind.extraArgs | default list) }}
+          {{- with $dindExtraArgs }}
+          args:
+            {{- range . }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      volumes:
+        - name: workspace
+          emptyDir: {}
+        {{- if $dindEnabled }}
+        - name: dind-socket
+          emptyDir: {}
+        - name: dind-graph
+          {{- if eq $dindStorageType "pvc" }}
+          persistentVolumeClaim:
+            claimName: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}-dind
+          {{- else }}
+          emptyDir:
+            sizeLimit: {{ $dindSizeLimit }}
+          {{- end }}
+        {{- end }}
+        {{- with $pool.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $pool.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $pool.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $pool.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

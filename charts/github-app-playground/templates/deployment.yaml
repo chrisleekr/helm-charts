@@ -46,6 +46,9 @@ spec:
             - name: http
               containerPort: {{ .Values.config.port }}
               protocol: TCP
+            - name: ws
+              containerPort: {{ .Values.config.wsPort }}
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "github-app-playground.fullname" . }}-config

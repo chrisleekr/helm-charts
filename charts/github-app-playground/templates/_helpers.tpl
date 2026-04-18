@@ -224,6 +224,59 @@ Consumers: template that emits it skips writing the key when empty.
 {{- end }}
 
 {{/*
+─────────────────────────── DAEMON POOL HELPERS ───────────────────────────
+*/}}
+
+{{/*
+Daemon pool fully-qualified name: <fullname>-daemon-<poolName>, truncated to 63 chars.
+Args (dict): root (.), poolName (string).
+*/}}
+{{- define "github-app-playground.daemon.fullname" -}}
+{{- printf "%s-daemon-%s" (include "github-app-playground.fullname" .root) .poolName | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Daemon pool selector labels. Extends base selectorLabels with component + pool.
+Args (dict): root (.), poolName (string).
+*/}}
+{{- define "github-app-playground.daemon.selectorLabels" -}}
+{{- include "github-app-playground.selectorLabels" .root }}
+app.kubernetes.io/component: daemon
+app.kubernetes.io/pool: {{ .poolName }}
+{{- end }}
+
+{{/*
+Daemon pool service account name.
+Resolution: pool.serviceAccount.name → daemon.serviceAccount.name → orchestrator SA name.
+Args (dict): root (.), pool (pool spec).
+*/}}
+{{- define "github-app-playground.daemon.serviceAccountName" -}}
+{{- $poolSA := .pool.serviceAccount | default dict }}
+{{- if $poolSA.name }}
+{{- $poolSA.name }}
+{{- else if .root.Values.daemon.serviceAccount.name }}
+{{- .root.Values.daemon.serviceAccount.name }}
+{{- else }}
+{{- include "github-app-playground.serviceAccountName" .root }}
+{{- end }}
+{{- end }}
+
+{{/*
+ORCHESTRATOR_URL for a daemon pool.
+Resolution: pool.orchestratorUrl → daemon.orchestratorUrl → ws://<fullname>:<wsPort>/ws.
+Args (dict): root (.), pool (pool spec).
+*/}}
+{{- define "github-app-playground.daemon.orchestratorUrl" -}}
+{{- if .pool.orchestratorUrl }}
+{{- .pool.orchestratorUrl }}
+{{- else if .root.Values.daemon.orchestratorUrl }}
+{{- .root.Values.daemon.orchestratorUrl }}
+{{- else }}
+{{- printf "ws://%s:%v/ws" (include "github-app-playground.fullname" .root) .root.Values.config.wsPort }}
+{{- end }}
+{{- end }}
+
+{{/*
 Composed VALKEY_URL. Same resolution order as databaseUrl.
 */}}
 {{- define "github-app-playground.valkeyUrl" -}}

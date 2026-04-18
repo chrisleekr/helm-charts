@@ -1,0 +1,40 @@
+{{- range $poolName, $pool := $.Values.daemon.pools }}
+{{- if ne ($pool.enabled | toString) "false" }}
+{{- $autoscaling := $pool.autoscaling | default dict }}
+{{- if $autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  labels:
+    {{- include "github-app-playground.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: daemon
+    app.kubernetes.io/pool: {{ $poolName }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  minReplicas: {{ $autoscaling.minReplicas | default 1 }}
+  maxReplicas: {{ $autoscaling.maxReplicas | default 5 }}
+  metrics:
+    {{- if $autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
