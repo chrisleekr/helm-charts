@@ -422,6 +422,10 @@ daemon:
     enabled: false
     image:
       repository: docker
+      # The DinD image determines the "docker" group gid baked into the image
+      # (2375 in docker:29-dind). If you bump this tag to a future major, verify
+      # that daemon.dind.socketGid below still matches or the non-rootless
+      # daemon will regress to "permission denied" on /var/run/docker.sock.
       tag: ""                          # empty → auto-selected: 29-dind-rootless (rootless=true) or 29-dind (rootless=false)
       pullPolicy: IfNotPresent
     rootless: true                     # false → privileged sidecar; auto-selects docker:29-dind image

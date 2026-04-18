@@ -72,10 +72,16 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "github-app-playground.daemon.serviceAccountName" (dict "root" $ "pool" $pool) }}
+      {{- /* Coerce every supplementalGroup entry to int so mixed string/int
+             operator input does not defeat uniq and still renders as a
+             homogeneous int64 list the Kubernetes API accepts. */}}
       {{- $podSecCtx := deepCopy ($pool.podSecurityContext | default dict) }}
       {{- if and $dindEnabled (not $rootless) }}
-      {{-   $existingGroups := $podSecCtx.supplementalGroups | default list }}
-      {{-   $_ := set $podSecCtx "supplementalGroups" (append $existingGroups $socketGid | uniq) }}
+      {{-   $existingGroups := list }}
+      {{-   range ($podSecCtx.supplementalGroups | default list) }}
+      {{-     $existingGroups = append $existingGroups (int .) }}
+      {{-   end }}
+      {{-   $_ := set $podSecCtx "supplementalGroups" (append $existingGroups (int $socketGid) | uniq) }}
       {{- end }}
       {{- with $podSecCtx }}
       securityContext:
