@@ -45,6 +45,38 @@
    kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
      | jq 'select(.msg | test("dispatch decision|triage"))'
 
+DAEMON POOLS (config.agentJobMode must be daemon, shared-runner, or auto):
+   Deploy one or more stateless daemon pools alongside the orchestrator:
+
+     daemon:
+       pools:
+         default:
+           replicaCount: 2
+         docker-heavy:          # pool with Docker-in-Docker sidecar
+           replicaCount: 1
+           dind:
+             enabled: true
+
+   Each pool renders a separate Deployment named <fullname>-daemon-<pool>.
+   Verify daemons registered:
+     kubectl --namespace {{ .Release.Namespace }} logs \
+       -c daemon \
+       -l "app.kubernetes.io/component=daemon" \
+       | grep 'daemon:registered'
+
+   Required: Postgres + Valkey must be reachable (postgres.enabled / valkey.enabled
+   or external) when agentJobMode is non-inline.
+
+UPGRADING from chart 0.3.x to 0.4.0:
+   Non-breaking: daemon.pools defaults to {} (no daemon Deployments).
+   The orchestrator Service gains a `ws` port (config.wsPort, default 3002)
+   only when config.agentJobMode is non-inline or daemon.pools is non-empty.
+   The Service selector now includes app.kubernetes.io/component: orchestrator;
+   helm upgrade restarts orchestrator pods with the new label automatically.
+   If you restrict pod ingress via NetworkPolicy, add a rule permitting traffic
+   on the ws port (config.wsPort, default 3002) when using non-inline mode.
+   No existing values need to change.
+
 UPGRADING from chart 0.2.x to 0.3.0 (breaking):
    Chart 0.3.0 splits `config:` into two top-level blocks. Every sensitive
    credential / token moved back out of `config:` into a dedicated `secrets:`

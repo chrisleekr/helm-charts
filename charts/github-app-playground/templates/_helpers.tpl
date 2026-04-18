@@ -224,6 +224,63 @@ Consumers: template that emits it skips writing the key when empty.
 {{- end }}
 
 {{/*
+─────────────────────────── DAEMON POOL HELPERS ───────────────────────────
+*/}}
+
+{{/*
+Daemon pool fully-qualified name: <fullname>-daemon-<poolName>, max 63 chars.
+The pool suffix is preserved by truncating the base to fit, preventing collisions
+when a long release name would push two different pool names to the same string.
+Args (dict): root (.), poolName (string).
+*/}}
+{{- define "github-app-playground.daemon.fullname" -}}
+{{- $suffix := printf "-daemon-%s" .poolName -}}
+{{- $base := include "github-app-playground.fullname" .root | trunc (int (sub 63 (len $suffix))) | trimSuffix "-" -}}
+{{- printf "%s%s" $base $suffix | trimSuffix "-" -}}
+{{- end }}
+
+{{/*
+Daemon pool selector labels. Extends base selectorLabels with component + pool.
+Args (dict): root (.), poolName (string).
+*/}}
+{{- define "github-app-playground.daemon.selectorLabels" -}}
+{{- include "github-app-playground.selectorLabels" .root }}
+app.kubernetes.io/component: daemon
+app.kubernetes.io/pool: {{ .poolName }}
+{{- end }}
+
+{{/*
+Daemon pool service account name.
+Resolution: pool.serviceAccount.name → daemon.serviceAccount.name → orchestrator SA name.
+Args (dict): root (.), pool (pool spec).
+*/}}
+{{- define "github-app-playground.daemon.serviceAccountName" -}}
+{{- $poolSA := .pool.serviceAccount | default dict }}
+{{- if $poolSA.name }}
+{{- $poolSA.name }}
+{{- else if .root.Values.daemon.serviceAccount.name }}
+{{- .root.Values.daemon.serviceAccount.name }}
+{{- else }}
+{{- include "github-app-playground.serviceAccountName" .root }}
+{{- end }}
+{{- end }}
+
+{{/*
+ORCHESTRATOR_URL for a daemon pool.
+Resolution: pool.orchestratorUrl → daemon.orchestratorUrl → ws://<fullname>:<wsPort>/ws.
+Args (dict): root (.), pool (pool spec).
+*/}}
+{{- define "github-app-playground.daemon.orchestratorUrl" -}}
+{{- if .pool.orchestratorUrl }}
+{{- .pool.orchestratorUrl }}
+{{- else if .root.Values.daemon.orchestratorUrl }}
+{{- .root.Values.daemon.orchestratorUrl }}
+{{- else }}
+{{- printf "ws://%s:%v/ws" (include "github-app-playground.fullname" .root) .root.Values.config.wsPort }}
+{{- end }}
+{{- end }}
+
+{{/*
 Composed VALKEY_URL. Same resolution order as databaseUrl.
 */}}
 {{- define "github-app-playground.valkeyUrl" -}}

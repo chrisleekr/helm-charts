@@ -1,0 +1,27 @@
+{{- range $poolName, $pool := $.Values.daemon.pools }}
+{{- if ne ($pool.enabled | toString) "false" }}
+{{- $pdb := $pool.podDisruptionBudget | default dict }}
+{{- if $pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  labels:
+    {{- include "github-app-playground.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: daemon
+    app.kubernetes.io/pool: {{ $poolName }}
+spec:
+  {{- if hasKey $pdb "maxUnavailable" }}
+  maxUnavailable: {{ $pdb.maxUnavailable }}
+  {{- else if hasKey $pdb "minAvailable" }}
+  minAvailable: {{ $pdb.minAvailable }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "github-app-playground.daemon.selectorLabels" (dict "root" $ "poolName" $poolName) | nindent 6 }}
+{{- end }}
+{{- end }}
+{{- end }}

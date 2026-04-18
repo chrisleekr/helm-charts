@@ -353,8 +353,8 @@ config:
   orchestratorUrl: ""                           # Setting this flips the process to DAEMON mode (webhook HTTP not started).
   heartbeatIntervalMs: 30000
   heartbeatTimeoutMs: 90000                     # Keep >= 2 x heartbeatIntervalMs.
-  staleExecutionThresholdMs: 600000             # Must exceed agentTimeoutMs.
-  daemonDrainTimeoutMs: 300000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
+  staleExecutionThresholdMs: 660000             # Must exceed agentTimeoutMs (600000).
+  daemonDrainTimeoutMs: 600000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
   jobMaxRetries: 3                              # Daemon-dispatch retry only. isolated-job ignores this (FR-021).
   offerTimeoutMs: 5000
   daemonUpdateStrategy: exit                    # exit | pull | notify.
@@ -379,3 +379,106 @@ config:
   # --- 14. Isolated-job capacity back-pressure (FR-018, US3) ---
   maxConcurrentIsolatedJobs: 3
   pendingIsolatedJobQueueMax: 20
+
+# ─────────────────────────── DAEMON POOLS ─────────────────────────────
+# `daemon:` configures 0..N stateless daemon worker pools. Each pool
+# renders its own Deployment. Daemons connect outbound to the orchestrator
+# WebSocket on :config.wsPort and register via a shared DAEMON_AUTH_TOKEN.
+#
+# The orchestrator's Service gains a `ws` port when any pool is defined
+# (or when config.agentJobMode is non-inline), so daemons can reach it at
+# ws://<fullname>:<config.wsPort>/ws.
+#
+# All pools share the same Docker image (default CMD overridden to daemon
+# entry point) and the same app Secret (for DAEMON_AUTH_TOKEN and AI keys).
+# Pool-level config keys override cross-pool `daemon.config` defaults.
+daemon:
+  orchestratorUrl: ""                  # empty → auto-computed ws://<fullname>:<wsPort>/ws
+  terminationGracePeriodSeconds: ""    # empty → daemonDrainTimeoutMs/1000 + 30
+
+  serviceAccount:
+    name: ""                           # empty → inherits orchestrator SA
+
+  # Daemon-runtime defaults sourced from github-app-playground/.env.example.
+  # Each pool can override any key under its own `config:` block.
+  config:
+    heartbeatIntervalMs: 30000         # HEARTBEAT_INTERVAL_MS
+    heartbeatTimeoutMs: 90000          # HEARTBEAT_TIMEOUT_MS (keep >= 2× interval)
+    staleExecutionThresholdMs: 660000  # STALE_EXECUTION_THRESHOLD_MS; must exceed agentTimeoutMs (600000)
+    daemonDrainTimeoutMs: 600000       # DAEMON_DRAIN_TIMEOUT_MS; must be >= agentTimeoutMs to avoid mid-run kills
+    jobMaxRetries: 3                   # JOB_MAX_RETRIES
+    offerTimeoutMs: 5000               # OFFER_TIMEOUT_MS
+    daemonUpdateStrategy: exit         # exit | pull | notify
+    daemonUpdateDelayMs: 0             # DAEMON_UPDATE_DELAY_MS
+    daemonEphemeral: false             # DAEMON_EPHEMERAL
+    daemonMemoryFloorMb: 512           # DAEMON_MEMORY_FLOOR_MB
+    daemonDiskFloorMb: 1024            # DAEMON_DISK_FLOOR_MB
+
+  # DinD sidecar defaults. Pools that set dind.enabled=true inherit any
+  # omitted field from here. Rootless DinD is default and works under PSS
+  # baseline. Classic DinD (rootless: false) requires privileged: true
+  # and a permissive namespace PSA label.
+  dind:
+    enabled: false
+    image:
+      repository: docker
+      tag: ""                          # empty → auto-selected: 29-dind-rootless (rootless=true) or 29-dind (rootless=false)
+      pullPolicy: IfNotPresent
+    rootless: true                     # false → privileged sidecar; auto-selects docker:29-dind image
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+    storage:
+      type: emptyDir                   # emptyDir | pvc
+      sizeLimit: 10Gi                  # emptyDir sizeLimit only
+      size: ""                         # pvc size (only when type: pvc)
+      storageClass: ""
+    extraEnv: []
+    extraArgs: []                      # extra dockerd flags
+
+  # Named pools. Each entry renders one Deployment.
+  # Set enabled: false on a pool to stage it without rolling out.
+  #
+  # pools:
+  #   default:
+  #     replicaCount: 2
+  #     resources:
+  #       requests: { cpu: 250m, memory: 256Mi }
+  #       limits:   { cpu: 1000m, memory: 1Gi }
+  #     nodeSelector: {}
+  #     tolerations: []
+  #     affinity: {}
+  #     podSecurityContext: {}
+  #     securityContext: {}
+  #     podAnnotations: {}
+  #     podLabels: {}
+  #     extraEnv: []
+  #     volumes: []
+  #     volumeMounts: []
+  #     livenessProbe:
+  #       enabled: false               # opt-in pgrep-based exec probe
+  #     autoscaling:
+  #       enabled: false
+  #       minReplicas: 1
+  #       maxReplicas: 5
+  #       targetCPUUtilizationPercentage: 80
+  #     podDisruptionBudget:
+  #       enabled: false
+  #       minAvailable: 1
+  #     config: {}                     # overrides any key from daemon.config above
+  #     dind:
+  #       enabled: false               # set true to add a DinD sidecar
+  #   docker-heavy:
+  #     replicaCount: 1
+  #     resources:
+  #       requests: { cpu: 1000m, memory: 2Gi }
+  #       limits:   { cpu: 4000m, memory: 8Gi }
+  #     dind:
+  #       enabled: true
+  #       rootless: false              # privileged; requires permissive PSA namespace label
+  #       storage: { type: pvc, size: 50Gi }
+  pools: {}
