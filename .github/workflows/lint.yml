@@ -57,6 +57,7 @@ jobs:
             --set valkey.external.enabled=true \
             --set valkey.external.host=r \
             --set valkey.external.auth.password=p \
+            --set config.internalRunnerUrl=http://runner.example.svc:7081 \
             --set config.agentJobMode=auto > /dev/null
           # 5. User-supplied URLs (neither in-chart nor external enabled).
           helm template "$chart" \

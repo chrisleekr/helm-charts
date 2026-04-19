@@ -1,5 +1,8 @@
 Upgrading from chart 0.4.x?
-  - Replace image.tag with image.orchestrator.tag and image.daemon.tag.
+  - Remove image.tag. Leave image.orchestrator.tag / image.daemon.tag empty
+    to default to <appVersion>-orchestrator / <appVersion>-daemon, or set
+    complete role tags — the chart does NOT append -orchestrator/-daemon to
+    user-supplied overrides.
   - The chart no longer ships sharedRunner Deployment/Service. If you use
     agentJobMode=shared-runner, host the runner yourself and point
     config.internalRunnerUrl at it (SHARED_RUNNER_TOKEN is still rendered
