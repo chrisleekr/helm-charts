@@ -303,3 +303,28 @@ Composed VALKEY_URL. Same resolution order as databaseUrl.
 {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Orchestrator-variant image (repository:tag). Used by the webhook Deployment.
+Tag precedence: tagOverride arg → .Values.image.orchestrator.tag → "{{ .Chart.AppVersion }}-orchestrator".
+Repository precedence: repoOverride arg → .Values.image.repository.
+Args (dict): root (.), repoOverride (string, optional), tagOverride (string, optional).
+*/}}
+{{- define "github-app-playground.image.orchestrator" -}}
+{{- $args := . -}}
+{{- $repo := $args.repoOverride | default $args.root.Values.image.repository -}}
+{{- $tag := $args.tagOverride | default $args.root.Values.image.orchestrator.tag | default (printf "%s-orchestrator" $args.root.Chart.AppVersion) -}}
+{{- printf "%s:%s" $repo $tag -}}
+{{- end }}
+
+{{/*
+Daemon-variant image (repository:tag). Used by daemon pool Deployments and
+the isolated-job JOB_IMAGE fallback. Precedence mirrors .image.orchestrator.
+Args (dict): root (.), repoOverride (string, optional), tagOverride (string, optional).
+*/}}
+{{- define "github-app-playground.image.daemon" -}}
+{{- $args := . -}}
+{{- $repo := $args.repoOverride | default $args.root.Values.image.repository -}}
+{{- $tag := $args.tagOverride | default $args.root.Values.image.daemon.tag | default (printf "%s-daemon" $args.root.Chart.AppVersion) -}}
+{{- printf "%s:%s" $repo $tag -}}
+{{- end }}

@@ -101,9 +101,8 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- $poolImg := $pool.image | default dict }}
-          {{- $rootImg := $.Values.image }}
-          image: "{{ $poolImg.repository | default $rootImg.repository }}:{{ $poolImg.tag | default $rootImg.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: {{ $poolImg.pullPolicy | default $rootImg.pullPolicy }}
+          image: {{ include "github-app-playground.image.daemon" (dict "root" $ "repoOverride" $poolImg.repository "tagOverride" $poolImg.tag) | quote }}
+          imagePullPolicy: {{ $poolImg.pullPolicy | default $.Values.image.pullPolicy }}
           command: ["bun", "run", "dist/daemon/main.js"]
           envFrom:
             - secretRef:
