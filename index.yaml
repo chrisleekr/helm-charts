@@ -86,6 +86,43 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-0.1.0/binance-trading-bot-0.1.0.tgz
     version: 0.1.0
   github-app-playground:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
+          description: "BREAKING: bump appVersion to 1.2.0 (upstream split orchestrator/daemon images)"
+        - kind: changed
+          description: "BREAKING: image.tag is removed; use image.orchestrator.tag and image.daemon.tag"
+        - kind: removed
+          description: "BREAKING: sharedRunner Deployment/Service removed (dormant feature, superseded by daemon pools). Use an external runner with config.internalRunnerUrl for agentJobMode=shared-runner."
+        - kind: added
+          description: "Helpers github-app-playground.image.orchestrator / .daemon resolve per-role image strings"
+        - kind: changed
+          description: "JOB_IMAGE (agentJobMode=isolated-job) now defaults to the daemon variant"
+    apiVersion: v2
+    appVersion: 1.2.0
+    created: "2026-04-19T04:08:28.81400993Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 48b388dab98fd78bbc6599b5f153df87e98d1db11378f8ce7d12b7dd6b4b4b5a
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.5.0/github-app-playground-0.5.0.tgz
+    version: 0.5.0
   - apiVersion: v2
     appVersion: 1.1.1
     created: "2026-04-18T09:11:10.817372162Z"
@@ -443,4 +480,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-18T09:11:10.817416104Z"
+generated: "2026-04-19T04:08:28.814062609Z"
