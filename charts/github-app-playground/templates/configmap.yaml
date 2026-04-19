@@ -55,8 +55,8 @@ data:
   # JOB_NAMESPACE falls back to the release namespace when the user leaves it empty,
   # so isolated-job pods land next to the release by default.
   JOB_NAMESPACE: {{ default .Release.Namespace $c.jobNamespace | quote }}
-  # JOB_IMAGE falls back to the webhook image so the spawned Pod runs the same build.
-  JOB_IMAGE: {{ default (printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion)) $c.jobImage | quote }}
+  # JOB_IMAGE falls back to the daemon variant (isolated-job Pods run the agent workload and need the CLI toolchain).
+  JOB_IMAGE: {{ default (include "github-app-playground.image.daemon" (dict "root" .)) $c.jobImage | quote }}
   JOB_TTL_SECONDS: {{ $c.jobTtlSeconds | quote }}
   JOB_ACTIVE_DEADLINE_SECONDS: {{ $c.jobActiveDeadlineSeconds | quote }}
   JOB_WATCH_POLL_INTERVAL_MS: {{ $c.jobWatchPollIntervalMs | quote }}

@@ -38,11 +38,15 @@ jobs:
             --set config.provider=bedrock \
             --set config.awsRegion=us-east-1 \
             --set config.model=us.anthropic.claude-sonnet-4-5-v1:0 > /dev/null
-          # 3. Phase 4 with in-chart Postgres + Valkey + RBAC + shared runner stub.
+          # 3. In-chart Postgres + Valkey + RBAC + external shared-runner URL
+          #    (sharedRunner Deployment was removed in chart 0.5.0; the
+          #    agentJobMode=shared-runner path now requires an operator-hosted
+          #    runner at config.internalRunnerUrl).
           helm template "$chart" \
             --set postgres.enabled=true --set valkey.enabled=true \
-            --set rbac.create=true --set sharedRunner.enabled=true \
-            --set config.agentJobMode=auto > /dev/null
+            --set rbac.create=true \
+            --set config.agentJobMode=shared-runner \
+            --set config.internalRunnerUrl=http://runner.example.svc:7081 > /dev/null
           # 4. Phase 4 with external Postgres + Valkey (literal password path).
           helm template "$chart" \
             --set postgres.external.enabled=true \
@@ -53,6 +57,7 @@ jobs:
             --set valkey.external.enabled=true \
             --set valkey.external.host=r \
             --set valkey.external.auth.password=p \
+            --set config.internalRunnerUrl=http://runner.example.svc:7081 \
             --set config.agentJobMode=auto > /dev/null
           # 5. User-supplied URLs (neither in-chart nor external enabled).
           helm template "$chart" \

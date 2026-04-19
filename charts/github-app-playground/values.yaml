@@ -8,10 +8,18 @@
 
 replicaCount: 1
 
+# Upstream v1.2.0 ships two variant images. Per-role tags allow independent
+# pins (e.g. per-image digest), independent rollouts, and correct role→image
+# mapping without relying on the upstream <tag>=orchestrator compat alias.
+#   <repo>:<tag>-orchestrator  webhook Deployment
+#   <repo>:<tag>-daemon        daemon pool Deployments + isolated-job Pods
 image:
   repository: chrisleekr/github-app-playground
   pullPolicy: IfNotPresent
-  tag: ""                                       # Leave empty to use .Chart.AppVersion.
+  orchestrator:
+    tag: ""                                     # Leave empty to use "{{ .Chart.AppVersion }}-orchestrator".
+  daemon:
+    tag: ""                                     # Leave empty to use "{{ .Chart.AppVersion }}-daemon".
 
 imagePullSecrets: []
 nameOverride: ""
@@ -240,22 +248,6 @@ valkey:
     capabilities:
       drop:
         - ALL
-
-# Optional extra Deployment running the same image as the webhook, in
-# "shared runner" mode. Keep disabled until the app registers POST /internal/run.
-sharedRunner:
-  enabled: false
-  replicaCount: 1
-  image: {}                                     # Leave empty to inherit .Values.image.
-  service:
-    type: ClusterIP
-    port: 7081
-  resources: {}                                 # Set per environment; no default.
-  podSecurityContext: {}
-  securityContext: {}
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
 
 # ─────────────────────────── APPLICATION SECRETS ──────────────────────
 # `secrets:` holds every credential / token that is sensitive. These fields

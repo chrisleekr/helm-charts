@@ -15,13 +15,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.4.3
+version: 0.5.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.1.1"
+appVersion: "1.2.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -40,3 +40,17 @@ keywords:
 home: https://github.com/chrisleekr/github-app-playground
 sources:
   - https://github.com/chrisleekr/github-app-playground
+
+annotations:
+  # https://artifacthub.io/docs/topics/annotations/helm/
+  artifacthub.io/changes: |
+    - kind: changed
+      description: "BREAKING: bump appVersion to 1.2.0 (upstream split orchestrator/daemon images)"
+    - kind: changed
+      description: "BREAKING: image.tag is removed; use image.orchestrator.tag and image.daemon.tag"
+    - kind: removed
+      description: "BREAKING: sharedRunner Deployment/Service removed (dormant feature, superseded by daemon pools). Use an external runner with config.internalRunnerUrl for agentJobMode=shared-runner."
+    - kind: added
+      description: "Helpers github-app-playground.image.orchestrator / .daemon resolve per-role image strings"
+    - kind: changed
+      description: "JOB_IMAGE (agentJobMode=isolated-job) now defaults to the daemon variant"
