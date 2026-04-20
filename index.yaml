@@ -89,6 +89,47 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: "BREAKING: bump appVersion to 1.2.1 (upstream PR #35 collapses dispatch surface to daemon-only)"
+        - kind: removed
+          description: "BREAKING: config.agentJobMode and config.defaultDispatchTarget removed — dispatch is daemon-only"
+        - kind: removed
+          description: "BREAKING: config.internalRunnerUrl and secrets.internalRunnerToken/sharedRunnerToken removed (shared-runner target gone)"
+        - kind: removed
+          description: "BREAKING: config.jobNamespace/jobImage/jobTtlSeconds/jobActiveDeadlineSeconds/jobWatchPollIntervalMs/jobMaxCostUsd/maxConcurrentIsolatedJobs/pendingIsolatedJobQueueMax removed (isolated-job target gone)"
+        - kind: removed
+          description: "BREAKING: config.triageMaxTurnsTrivial/Moderate/Complex removed — maxTurns always sourced from config.defaultMaxTurns"
+        - kind: added
+          description: "config.ephemeralDaemon block: idleTimeoutMs, spawnCooldownMs, spawnQueueThreshold, namespace, image, orchestratorPublicUrl — configures orchestrator-spawned ephemeral daemon Pods"
+        - kind: changed
+          description: "BREAKING: rbac.create now provisions a Role for spawning Pods (ephemeral daemons) instead of Jobs. Same flag, new verbs scope."
+    apiVersion: v2
+    appVersion: 1.2.1
+    created: "2026-04-20T11:29:19.724247364Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 1a4800f5b56fa7167727c2a176b12efd9471f02dc3fe7517fd8ff469b5b8695e
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.6.0/github-app-playground-0.6.0.tgz
+    version: 0.6.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: "BREAKING: bump appVersion to 1.2.0 (upstream split orchestrator/daemon images)"
         - kind: changed
           description: "BREAKING: image.tag is removed; use image.orchestrator.tag and image.daemon.tag"
@@ -480,4 +521,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-19T04:08:28.814062609Z"
+generated: "2026-04-20T11:29:19.724315482Z"
