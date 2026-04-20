@@ -15,13 +15,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.5.0
+version: 0.6.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.2.0"
+appVersion: "1.3.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -45,12 +45,16 @@ annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
     - kind: changed
-      description: "BREAKING: bump appVersion to 1.2.0 (upstream split orchestrator/daemon images)"
-    - kind: changed
-      description: "BREAKING: image.tag is removed; use image.orchestrator.tag and image.daemon.tag"
+      description: "BREAKING: bump appVersion to 1.3.0 (upstream PR #35 collapses dispatch surface to daemon-only)"
     - kind: removed
-      description: "BREAKING: sharedRunner Deployment/Service removed (dormant feature, superseded by daemon pools). Use an external runner with config.internalRunnerUrl for agentJobMode=shared-runner."
+      description: "BREAKING: config.agentJobMode and config.defaultDispatchTarget removed — dispatch is daemon-only"
+    - kind: removed
+      description: "BREAKING: config.internalRunnerUrl and secrets.internalRunnerToken/sharedRunnerToken removed (shared-runner target gone)"
+    - kind: removed
+      description: "BREAKING: config.jobNamespace/jobImage/jobTtlSeconds/jobActiveDeadlineSeconds/jobWatchPollIntervalMs/jobMaxCostUsd/maxConcurrentIsolatedJobs/pendingIsolatedJobQueueMax removed (isolated-job target gone)"
+    - kind: removed
+      description: "BREAKING: config.triageMaxTurnsTrivial/Moderate/Complex removed — maxTurns always sourced from config.defaultMaxTurns"
     - kind: added
-      description: "Helpers github-app-playground.image.orchestrator / .daemon resolve per-role image strings"
+      description: "config.ephemeralDaemon block: idleTimeoutMs, spawnCooldownMs, spawnQueueThreshold, namespace, image, orchestratorPublicUrl — configures orchestrator-spawned ephemeral daemon Pods"
     - kind: changed
-      description: "JOB_IMAGE (agentJobMode=isolated-job) now defaults to the daemon variant"
+      description: "BREAKING: rbac.create now provisions a Role for spawning Pods (ephemeral daemons) instead of Jobs. Same flag, new verbs scope."

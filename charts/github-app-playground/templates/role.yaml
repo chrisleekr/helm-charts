@@ -6,12 +6,9 @@ metadata:
   labels:
     {{- include "github-app-playground.labels" . | nindent 4 }}
 rules:
-  # src/k8s/job-spawner.ts createNamespacedJob / readNamespacedJobStatus / deleteNamespacedJob
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["create", "get", "list", "watch", "delete"]
-  # Spawner inspects pod status + optionally tails logs of the isolated-job pod
+  # src/k8s/ephemeral-daemon-spawner.ts creates bare Pods (restartPolicy: Never)
+  # as scale-up daemons, then polls their status until completion/reclaim.
   - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch"]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
 {{- end }}
