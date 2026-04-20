@@ -88,6 +88,35 @@ entries:
   github-app-playground:
   - annotations:
       artifacthub.io/changes: |
+        - kind: fixed
+          description: "bump appVersion to 1.2.2 (upstream PR #37 awaits Valkey connect before flipping /readyz, eliminating startup probe 503 race)"
+    apiVersion: v2
+    appVersion: 1.2.2
+    created: "2026-04-20T14:26:59.313872021Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: ad249e6b52af8645b553e5e8d8702bccd151d740c54ddeeb65f3e24115188a33
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.6.1/github-app-playground-0.6.1.tgz
+    version: 0.6.1
+  - annotations:
+      artifacthub.io/changes: |
         - kind: changed
           description: "BREAKING: bump appVersion to 1.2.1 (upstream PR #35 collapses dispatch surface to daemon-only)"
         - kind: removed
@@ -521,4 +550,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-20T11:29:19.724315482Z"
+generated: "2026-04-20T14:26:59.313920173Z"
