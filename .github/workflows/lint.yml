@@ -60,9 +60,14 @@ jobs:
           # 6. Daemon pools: default (no DinD) + docker-heavy (rootless DinD).
           helm template "$chart" \
             --values "$chart/ci/daemon-pools-values.yaml" > /dev/null
-          # 7. Ephemeral daemon scale-up: RBAC + public orchestrator URL + overrides.
+          # 7. Ephemeral daemon scale-up (chart-managed RBAC): namespace stays at
+          #    the release namespace so role.yaml's cross-namespace guard is happy.
           helm template "$chart" \
             --set rbac.create=true \
             --set config.ephemeralDaemon.orchestratorPublicUrl=ws://orchestrator.example:3002/ws \
-            --set config.ephemeralDaemon.namespace=agents \
             --set config.ephemeralDaemon.spawnQueueThreshold=5 > /dev/null
+          # 8. Ephemeral daemon scale-up (operator-managed RBAC): rbac.create=false
+          #    releases the namespace lock, so cross-namespace spawn is allowed.
+          helm template "$chart" \
+            --set rbac.create=false \
+            --set config.ephemeralDaemon.namespace=agents > /dev/null

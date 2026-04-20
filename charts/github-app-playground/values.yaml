@@ -12,7 +12,7 @@ replicaCount: 1
 # pins (e.g. per-image digest), independent rollouts, and correct role→image
 # mapping without relying on the upstream <tag>=orchestrator compat alias.
 #   <repo>:<tag>-orchestrator  webhook Deployment
-#   <repo>:<tag>-daemon        daemon pool Deployments + isolated-job Pods
+#   <repo>:<tag>-daemon        daemon pool Deployments + ephemeral daemon Pods
 image:
   repository: chrisleekr/github-app-playground
   pullPolicy: IfNotPresent
