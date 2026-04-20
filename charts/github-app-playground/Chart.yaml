@@ -1,6 +1,8 @@
 apiVersion: v2
 name: github-app-playground
-description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+description: A Helm chart for GitHub App that responds to @chrisleekr-bot
+  mentions on PRs and issues, using Claude Agent SDK with MCP servers for GitHub
+  interactions.
 
 # A chart can be either an 'application' or a 'library' chart.
 #
@@ -15,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.6.0
+version: 0.6.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.2.1"
+appVersion: "1.2.2"
 
 kubeVersion: ">= 1.31.0"
 
@@ -44,17 +46,5 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
-    - kind: changed
-      description: "BREAKING: bump appVersion to 1.2.1 (upstream PR #35 collapses dispatch surface to daemon-only)"
-    - kind: removed
-      description: "BREAKING: config.agentJobMode and config.defaultDispatchTarget removed — dispatch is daemon-only"
-    - kind: removed
-      description: "BREAKING: config.internalRunnerUrl and secrets.internalRunnerToken/sharedRunnerToken removed (shared-runner target gone)"
-    - kind: removed
-      description: "BREAKING: config.jobNamespace/jobImage/jobTtlSeconds/jobActiveDeadlineSeconds/jobWatchPollIntervalMs/jobMaxCostUsd/maxConcurrentIsolatedJobs/pendingIsolatedJobQueueMax removed (isolated-job target gone)"
-    - kind: removed
-      description: "BREAKING: config.triageMaxTurnsTrivial/Moderate/Complex removed — maxTurns always sourced from config.defaultMaxTurns"
-    - kind: added
-      description: "config.ephemeralDaemon block: idleTimeoutMs, spawnCooldownMs, spawnQueueThreshold, namespace, image, orchestratorPublicUrl — configures orchestrator-spawned ephemeral daemon Pods"
-    - kind: changed
-      description: "BREAKING: rbac.create now provisions a Role for spawning Pods (ephemeral daemons) instead of Jobs. Same flag, new verbs scope."
+    - kind: fixed
+      description: "bump appVersion to 1.2.2 (upstream PR #37 awaits Valkey connect before flipping /readyz, eliminating startup probe 503 race)"
