@@ -47,30 +47,10 @@ data:
   ALLOWED_OWNERS: {{ $c.allowedOwners | quote }}
   {{- end }}
 
-  # --- 6. Dispatch mode ---
-  AGENT_JOB_MODE: {{ $c.agentJobMode | quote }}
-  DEFAULT_DISPATCH_TARGET: {{ $c.defaultDispatchTarget | quote }}
-
-  # --- 7. K8s Job spawner (isolated-job target) ---
-  # JOB_NAMESPACE falls back to the release namespace when the user leaves it empty,
-  # so isolated-job pods land next to the release by default.
-  JOB_NAMESPACE: {{ default .Release.Namespace $c.jobNamespace | quote }}
-  # JOB_IMAGE falls back to the daemon variant (isolated-job Pods run the agent workload and need the CLI toolchain).
-  JOB_IMAGE: {{ default (include "github-app-playground.image.daemon" (dict "root" .)) $c.jobImage | quote }}
-  JOB_TTL_SECONDS: {{ $c.jobTtlSeconds | quote }}
-  JOB_ACTIVE_DEADLINE_SECONDS: {{ $c.jobActiveDeadlineSeconds | quote }}
-  JOB_WATCH_POLL_INTERVAL_MS: {{ $c.jobWatchPollIntervalMs | quote }}
-
-  # --- 8. Shared-runner HTTP target ---
-  {{- if $c.internalRunnerUrl }}
-  INTERNAL_RUNNER_URL: {{ $c.internalRunnerUrl | quote }}
-  {{- end }}
-
-  # --- 10. Orchestrator ---
+  # --- 6. Orchestrator ---
   WS_PORT: {{ $c.wsPort | quote }}
-  JOB_MAX_COST_USD: {{ $c.jobMaxCostUsd | quote }}
 
-  # --- 11. Daemon / Orchestrator WebSocket ---
+  # --- 7. Daemon / Orchestrator WebSocket ---
   {{- if $c.orchestratorUrl }}
   {{- fail "config.orchestratorUrl must not be set on the orchestrator — presence of ORCHESTRATOR_URL flips it into daemon mode. Use daemon.orchestratorUrl or per-pool daemon.pools.<name>.orchestratorUrl instead." }}
   {{- end }}
@@ -82,23 +62,28 @@ data:
   OFFER_TIMEOUT_MS: {{ $c.offerTimeoutMs | quote }}
   DAEMON_UPDATE_STRATEGY: {{ $c.daemonUpdateStrategy | quote }}
   DAEMON_UPDATE_DELAY_MS: {{ $c.daemonUpdateDelayMs | quote }}
-  DAEMON_EPHEMERAL: {{ $c.daemonEphemeral | quote }}
   DAEMON_MEMORY_FLOOR_MB: {{ $c.daemonMemoryFloorMb | quote }}
   DAEMON_DISK_FLOOR_MB: {{ $c.daemonDiskFloorMb | quote }}
 
-  # --- 12. Triage pre-classifier ---
+  # --- 8. Ephemeral daemon (K8s-spawned scale-up) ---
+  # The orchestrator itself is never ephemeral; only orchestrator-spawned Pods
+  # set DAEMON_EPHEMERAL=true on their own container spec.
+  DAEMON_EPHEMERAL: "false"
+  EPHEMERAL_DAEMON_IDLE_TIMEOUT_MS: {{ $c.ephemeralDaemon.idleTimeoutMs | quote }}
+  EPHEMERAL_DAEMON_SPAWN_COOLDOWN_MS: {{ $c.ephemeralDaemon.spawnCooldownMs | quote }}
+  EPHEMERAL_DAEMON_SPAWN_QUEUE_THRESHOLD: {{ $c.ephemeralDaemon.spawnQueueThreshold | quote }}
+  EPHEMERAL_DAEMON_NAMESPACE: {{ default .Release.Namespace $c.ephemeralDaemon.namespace | quote }}
+  DAEMON_IMAGE: {{ default (include "github-app-playground.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image | quote }}
+  {{- if $c.ephemeralDaemon.orchestratorPublicUrl }}
+  ORCHESTRATOR_PUBLIC_URL: {{ $c.ephemeralDaemon.orchestratorPublicUrl | quote }}
+  {{- end }}
+
+  # --- 9. Triage (binary heavy classifier) ---
   TRIAGE_ENABLED: {{ $c.triageEnabled | quote }}
   TRIAGE_MODEL: {{ $c.triageModel | quote }}
   TRIAGE_CONFIDENCE_THRESHOLD: {{ $c.triageConfidenceThreshold | quote }}
   TRIAGE_MAX_TOKENS: {{ $c.triageMaxTokens | quote }}
   TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
 
-  # --- 13. Complexity → maxTurns mapping ---
-  TRIAGE_MAXTURNS_TRIVIAL: {{ $c.triageMaxTurnsTrivial | quote }}
-  TRIAGE_MAXTURNS_MODERATE: {{ $c.triageMaxTurnsModerate | quote }}
-  TRIAGE_MAXTURNS_COMPLEX: {{ $c.triageMaxTurnsComplex | quote }}
+  # --- 10. Agent max turns ---
   DEFAULT_MAXTURNS: {{ $c.defaultMaxTurns | quote }}
-
-  # --- 14. Isolated-job capacity back-pressure ---
-  MAX_CONCURRENT_ISOLATED_JOBS: {{ $c.maxConcurrentIsolatedJobs | quote }}
-  PENDING_ISOLATED_JOB_QUEUE_MAX: {{ $c.pendingIsolatedJobQueueMax | quote }}

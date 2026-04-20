@@ -1,4 +1,8 @@
 {{- if .Values.rbac.create }}
+{{- $targetNs := .Values.config.ephemeralDaemon.namespace | default .Release.Namespace }}
+{{- if ne $targetNs .Release.Namespace }}
+{{- fail (printf "config.ephemeralDaemon.namespace=%q differs from the release namespace %q. The chart-managed Role grants Pod-spawn verbs only within the release namespace, so the orchestrator ServiceAccount will receive 403 when creating Pods in %q at runtime. Either leave config.ephemeralDaemon.namespace empty (defaults to the release namespace), or set rbac.create=false and provision a Role+RoleBinding in %q yourself." $targetNs .Release.Namespace $targetNs $targetNs) }}
+{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -6,12 +10,9 @@ metadata:
   labels:
     {{- include "github-app-playground.labels" . | nindent 4 }}
 rules:
-  # src/k8s/job-spawner.ts createNamespacedJob / readNamespacedJobStatus / deleteNamespacedJob
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["create", "get", "list", "watch", "delete"]
-  # Spawner inspects pod status + optionally tails logs of the isolated-job pod
+  # src/k8s/ephemeral-daemon-spawner.ts creates bare Pods (restartPolicy: Never)
+  # as scale-up daemons, then polls their status until completion/reclaim.
   - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch"]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
 {{- end }}

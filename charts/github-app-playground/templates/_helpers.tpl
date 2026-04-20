@@ -319,7 +319,7 @@ Args (dict): root (.), repoOverride (string, optional), tagOverride (string, opt
 
 {{/*
 Daemon-variant image (repository:tag). Used by daemon pool Deployments and
-the isolated-job JOB_IMAGE fallback. Precedence mirrors .image.orchestrator.
+the ephemeral-daemon DAEMON_IMAGE fallback. Precedence mirrors .image.orchestrator.
 Args (dict): root (.), repoOverride (string, optional), tagOverride (string, optional).
 */}}
 {{- define "github-app-playground.image.daemon" -}}

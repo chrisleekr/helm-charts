@@ -1,12 +1,24 @@
-Upgrading from chart 0.4.x?
-  - Remove image.tag. Leave image.orchestrator.tag / image.daemon.tag empty
-    to default to <appVersion>-orchestrator / <appVersion>-daemon, or set
-    complete role tags — the chart does NOT append -orchestrator/-daemon to
-    user-supplied overrides.
-  - The chart no longer ships sharedRunner Deployment/Service. If you use
-    agentJobMode=shared-runner, host the runner yourself and point
-    config.internalRunnerUrl at it (SHARED_RUNNER_TOKEN is still rendered
-    in the app Secret for wire-protocol auth).
+Upgrading from chart 0.5.x? (BREAKING — chart 0.6.0 / appVersion 1.2.1)
+  Upstream PR #35 collapses the dispatch surface to daemon-only. Remove
+  these keys from your override values before `helm upgrade`:
+    config.agentJobMode                config.triageMaxTurnsTrivial
+    config.defaultDispatchTarget       config.triageMaxTurnsModerate
+    config.internalRunnerUrl           config.triageMaxTurnsComplex
+    config.jobNamespace                config.maxConcurrentIsolatedJobs
+    config.jobImage                    config.pendingIsolatedJobQueueMax
+    config.jobTtlSeconds               config.jobMaxCostUsd
+    config.jobActiveDeadlineSeconds    secrets.internalRunnerToken
+    config.jobWatchPollIntervalMs      secrets.sharedRunnerToken
+  New block (optional; sensible defaults):
+    config.ephemeralDaemon:
+      idleTimeoutMs, spawnCooldownMs, spawnQueueThreshold,
+      namespace (defaults to release namespace),
+      image (defaults to the daemon image),
+      orchestratorPublicUrl (ws:// or wss://)
+  rbac.create now provisions a Role for Pod spawning (was Jobs). Same flag,
+  new verbs scope — `helm upgrade` applies the swap automatically.
+  NOTE: requires chrisleekr/github-app-playground:1.2.1-{orchestrator,daemon}
+  images upstream (published).
   See Chart.yaml artifacthub.io/changes annotation for the full list.
 
 1. Get the application URL by running these commands:
@@ -34,20 +46,14 @@ Upgrading from chart 0.4.x?
 2. Configure your GitHub App webhook to POST to:
    <your-ingress-host>/api/github/webhooks
 
-3. Current dispatch mode: {{ .Values.config.agentJobMode }}
-{{- if eq .Values.config.agentJobMode "inline" }}
-   Runs agent in-process. No data-layer infra required.
-{{- else }}
+3. Dispatch: daemon-only. The orchestrator enqueues jobs and dispatches them
+   to the persistent daemon pool; on heavy/overflow signals it spawns
+   ephemeral daemon Pods directly (see config.ephemeralDaemon.*).
    Requires DATABASE_URL, VALKEY_URL, DAEMON_AUTH_TOKEN (auto-wired when
    postgres.enabled / valkey.enabled, or auto-generated for the token).
-{{- if or (eq .Values.config.agentJobMode "isolated-job") (eq .Values.config.agentJobMode "auto") }}
-   isolated-job spawning also requires rbac.create=true.
-{{- end }}
-{{- if or (eq .Values.config.agentJobMode "shared-runner") (eq .Values.config.agentJobMode "auto") }}
-   shared-runner also requires config.internalRunnerUrl and the target
-   runner to expose POST /internal/run (NOTE: not yet shipped in the app image).
-{{- end }}
-{{- end }}
+   Ephemeral spawning additionally requires rbac.create=true so the
+   orchestrator ServiceAccount can create/get/delete Pods in
+   config.ephemeralDaemon.namespace (defaults to the release namespace).
 
 4. Verify the bot is healthy:
    kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }}"
@@ -56,7 +62,7 @@ Upgrading from chart 0.4.x?
    kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
      | jq 'select(.msg | test("dispatch decision|triage"))'
 
-DAEMON POOLS (config.agentJobMode must be daemon, shared-runner, or auto):
+DAEMON POOLS:
    Deploy one or more stateless daemon pools alongside the orchestrator:
 
      daemon:
@@ -76,17 +82,7 @@ DAEMON POOLS (config.agentJobMode must be daemon, shared-runner, or auto):
        | grep 'daemon:registered'
 
    Required: Postgres + Valkey must be reachable (postgres.enabled / valkey.enabled
-   or external) when agentJobMode is non-inline.
-
-UPGRADING from chart 0.3.x to 0.4.0:
-   Non-breaking: daemon.pools defaults to {} (no daemon Deployments).
-   The orchestrator Service gains a `ws` port (config.wsPort, default 3002)
-   only when config.agentJobMode is non-inline or daemon.pools is non-empty.
-   The Service selector now includes app.kubernetes.io/component: orchestrator;
-   helm upgrade restarts orchestrator pods with the new label automatically.
-   If you restrict pod ingress via NetworkPolicy, add a rule permitting traffic
-   on the ws port (config.wsPort, default 3002) when using non-inline mode.
-   No existing values need to change.
+   or external).
 
 UPGRADING from chart 0.2.x to 0.3.0 (breaking):
    Chart 0.3.0 splits `config:` into two top-level blocks. Every sensitive
@@ -106,8 +102,6 @@ UPGRADING from chart 0.2.x to 0.3.0 (breaking):
      config.awsSessionToken         -> secrets.awsSessionToken
      config.awsBearerTokenBedrock   -> secrets.awsBearerTokenBedrock
      config.context7ApiKey          -> secrets.context7ApiKey
-     config.internalRunnerToken     -> secrets.internalRunnerToken
-     config.sharedRunnerToken       -> secrets.sharedRunnerToken
      config.daemonAuthToken         -> secrets.daemonAuthToken
      config.databaseUrl             -> secrets.databaseUrl
      config.valkeyUrl               -> secrets.valkeyUrl

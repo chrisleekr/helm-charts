@@ -12,11 +12,9 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
-    {{- if or (ne .Values.config.agentJobMode "inline") .Values.daemon.pools }}
     - port: {{ .Values.config.wsPort }}
       targetPort: ws
       protocol: TCP
       name: ws
-    {{- end }}
   selector:
     {{- include "github-app-playground.selectorLabels" . | nindent 4 }}

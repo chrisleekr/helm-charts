@@ -1,9 +1,5 @@
-{{- $daemonPoolModes := list "daemon" "shared-runner" "auto" }}
 {{- range $poolName, $pool := $.Values.daemon.pools }}
 {{- if ne ($pool.enabled | toString) "false" }}
-{{- if not (has $.Values.config.agentJobMode $daemonPoolModes) }}
-{{- fail (printf "daemon.pools.%s requires config.agentJobMode to be daemon, shared-runner, or auto (got: %s)" $poolName $.Values.config.agentJobMode) }}
-{{- end }}
 {{- $poolCfg := $pool.config | default dict }}
 {{- $daemonCfg := $.Values.daemon.config }}
 {{- $drainMs := int (ternary $poolCfg.daemonDrainTimeoutMs $daemonCfg.daemonDrainTimeoutMs (hasKey $poolCfg "daemonDrainTimeoutMs")) }}
@@ -174,8 +170,6 @@ spec:
               value: {{ ternary $poolCfg.daemonUpdateStrategy $daemonCfg.daemonUpdateStrategy (hasKey $poolCfg "daemonUpdateStrategy") | quote }}
             - name: DAEMON_UPDATE_DELAY_MS
               value: {{ ternary $poolCfg.daemonUpdateDelayMs $daemonCfg.daemonUpdateDelayMs (hasKey $poolCfg "daemonUpdateDelayMs") | quote }}
-            - name: DAEMON_EPHEMERAL
-              value: {{ ternary $poolCfg.daemonEphemeral $daemonCfg.daemonEphemeral (hasKey $poolCfg "daemonEphemeral") | quote }}
             - name: DAEMON_MEMORY_FLOOR_MB
               value: {{ ternary $poolCfg.daemonMemoryFloorMb $daemonCfg.daemonMemoryFloorMb (hasKey $poolCfg "daemonMemoryFloorMb") | quote }}
             - name: DAEMON_DISK_FLOOR_MB
