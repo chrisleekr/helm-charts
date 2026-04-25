@@ -384,7 +384,7 @@ daemon:
   config:
     heartbeatIntervalMs: 30000         # HEARTBEAT_INTERVAL_MS
     heartbeatTimeoutMs: 90000          # HEARTBEAT_TIMEOUT_MS (keep >= 2× interval)
-    staleExecutionThresholdMs: 3660000 # STALE_EXECUTION_THRESHOLD_MS; must exceed agentTimeoutMs (3600000)
+    staleExecutionThresholdMs: 3660000  # STALE_EXECUTION_THRESHOLD_MS; must exceed agentTimeoutMs (3600000)
     daemonDrainTimeoutMs: 3600000      # DAEMON_DRAIN_TIMEOUT_MS; must be >= agentTimeoutMs to avoid mid-run kills
     jobMaxRetries: 3                   # JOB_MAX_RETRIES
     offerTimeoutMs: 5000               # OFFER_TIMEOUT_MS
