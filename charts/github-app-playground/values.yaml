@@ -314,8 +314,8 @@ config:
   logLevel: info                                # fatal | error | warn | info | debug | trace.
   nodeEnv: production
   maxConcurrentRequests: 3
-  agentTimeoutMs: 600000
-  agentMaxTurns: ""                             # Leave empty to use defaultMaxTurns or triage-derived turns.
+  agentTimeoutMs: 3600000                       # 60min wall-clock cap per agent step. Lower only for testing/smaller-scope deployments; non-trivial implement/review steps routinely run 30-50min.
+  agentMaxTurns: ""                             # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; overrides defaultMaxTurns when both are set.
   claudeCodePath: ""                            # Required only when claude-code is installed globally (e.g. Docker).
   allowedOwners: ""                             # Comma-separated. Required when secrets.claudeCodeOauthToken is set.
 
@@ -326,10 +326,12 @@ config:
   orchestratorUrl: ""                           # Setting this flips the process to DAEMON mode (webhook HTTP not started).
   heartbeatIntervalMs: 30000
   heartbeatTimeoutMs: 90000                     # Keep >= 2 x heartbeatIntervalMs.
-  staleExecutionThresholdMs: 660000             # Must exceed agentTimeoutMs (600000).
-  daemonDrainTimeoutMs: 600000                  # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM.
+  staleExecutionThresholdMs: 3660000            # Must exceed agentTimeoutMs (3600000); 60s margin.
+  daemonDrainTimeoutMs: 3600000                 # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM. Inflates daemon Pod terminationGracePeriodSeconds (drain/1000 + 30s) — confirm cluster tolerates ~60min graceful shutdown.
   jobMaxRetries: 3
   offerTimeoutMs: 5000
+  queueWorkerBackoffMaxMs: 5000                 # Caps doubling backoff when a leased job has no locally-capable daemon and is re-pushed for another instance to claim.
+  livenessReaperIntervalMs: 30000               # Cadence of the heartbeat-based liveness reaper. Min 20000 (orchestrator heartbeat refresh interval) to avoid false reaps.
   daemonUpdateStrategy: exit                    # exit | pull | notify.
   daemonUpdateDelayMs: 0
   daemonMemoryFloorMb: 512
@@ -350,13 +352,14 @@ config:
 
   # --- 9. Triage (binary heavy classifier) ---
   triageEnabled: true                           # Kill-switch for the triage LLM call.
-  triageModel: haiku-3-5
+  triageModel: haiku-4-5
   triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise.
   triageMaxTokens: 256
   triageTimeoutMs: 5000
+  intentConfidenceThreshold: 0.75               # Below this, the dispatcher treats the comment as ambiguous and posts a clarification request (FR-009). Matches SC-005 target band.
 
   # --- 10. Agent max turns ---
-  defaultMaxTurns: 30                           # maxTurns is always sourced from this value (triage-derived turns removed).
+  defaultMaxTurns: ""                           # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; AGENT_MAX_TURNS overrides this when both are set.
 
 # ─────────────────────────── DAEMON POOLS ─────────────────────────────
 # `daemon:` configures 0..N stateless daemon worker pools. Each pool
@@ -381,8 +384,8 @@ daemon:
   config:
     heartbeatIntervalMs: 30000         # HEARTBEAT_INTERVAL_MS
     heartbeatTimeoutMs: 90000          # HEARTBEAT_TIMEOUT_MS (keep >= 2× interval)
-    staleExecutionThresholdMs: 660000  # STALE_EXECUTION_THRESHOLD_MS; must exceed agentTimeoutMs (600000)
-    daemonDrainTimeoutMs: 600000       # DAEMON_DRAIN_TIMEOUT_MS; must be >= agentTimeoutMs to avoid mid-run kills
+    staleExecutionThresholdMs: 3660000  # STALE_EXECUTION_THRESHOLD_MS; must exceed agentTimeoutMs (3600000)
+    daemonDrainTimeoutMs: 3600000      # DAEMON_DRAIN_TIMEOUT_MS; must be >= agentTimeoutMs to avoid mid-run kills
     jobMaxRetries: 3                   # JOB_MAX_RETRIES
     offerTimeoutMs: 5000               # OFFER_TIMEOUT_MS
     daemonUpdateStrategy: exit         # exit | pull | notify

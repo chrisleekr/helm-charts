@@ -36,7 +36,7 @@ data:
   LOG_LEVEL: {{ $c.logLevel | quote }}
   NODE_ENV: {{ $c.nodeEnv | quote }}
   MAX_CONCURRENT_REQUESTS: {{ $c.maxConcurrentRequests | quote }}
-  AGENT_TIMEOUT_MS: {{ $c.agentTimeoutMs | quote }}
+  AGENT_TIMEOUT_MS: {{ int $c.agentTimeoutMs | quote }}
   {{- if ne ($c.agentMaxTurns | toString) "" }}
   AGENT_MAX_TURNS: {{ $c.agentMaxTurns | quote }}
   {{- end }}
@@ -56,10 +56,12 @@ data:
   {{- end }}
   HEARTBEAT_INTERVAL_MS: {{ $c.heartbeatIntervalMs | quote }}
   HEARTBEAT_TIMEOUT_MS: {{ $c.heartbeatTimeoutMs | quote }}
-  STALE_EXECUTION_THRESHOLD_MS: {{ $c.staleExecutionThresholdMs | quote }}
-  DAEMON_DRAIN_TIMEOUT_MS: {{ $c.daemonDrainTimeoutMs | quote }}
+  STALE_EXECUTION_THRESHOLD_MS: {{ int $c.staleExecutionThresholdMs | quote }}
+  DAEMON_DRAIN_TIMEOUT_MS: {{ int $c.daemonDrainTimeoutMs | quote }}
   JOB_MAX_RETRIES: {{ $c.jobMaxRetries | quote }}
   OFFER_TIMEOUT_MS: {{ $c.offerTimeoutMs | quote }}
+  QUEUE_WORKER_BACKOFF_MAX_MS: {{ int $c.queueWorkerBackoffMaxMs | quote }}
+  LIVENESS_REAPER_INTERVAL_MS: {{ int $c.livenessReaperIntervalMs | quote }}
   DAEMON_UPDATE_STRATEGY: {{ $c.daemonUpdateStrategy | quote }}
   DAEMON_UPDATE_DELAY_MS: {{ $c.daemonUpdateDelayMs | quote }}
   DAEMON_MEMORY_FLOOR_MB: {{ $c.daemonMemoryFloorMb | quote }}
@@ -84,6 +86,9 @@ data:
   TRIAGE_CONFIDENCE_THRESHOLD: {{ $c.triageConfidenceThreshold | quote }}
   TRIAGE_MAX_TOKENS: {{ $c.triageMaxTokens | quote }}
   TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
+  INTENT_CONFIDENCE_THRESHOLD: {{ $c.intentConfidenceThreshold | quote }}
 
   # --- 10. Agent max turns ---
+  {{- if ne ($c.defaultMaxTurns | toString) "" }}
   DEFAULT_MAXTURNS: {{ $c.defaultMaxTurns | quote }}
+  {{- end }}

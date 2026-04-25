@@ -4,9 +4,9 @@
 {{- $daemonCfg := $.Values.daemon.config }}
 {{- $drainMs := int (ternary $poolCfg.daemonDrainTimeoutMs $daemonCfg.daemonDrainTimeoutMs (hasKey $poolCfg "daemonDrainTimeoutMs")) }}
 {{- $gracePeriod := "" }}
-{{- if ne ($pool.terminationGracePeriodSeconds | toString) "" }}
+{{- if not (empty $pool.terminationGracePeriodSeconds) }}
 {{- $gracePeriod = $pool.terminationGracePeriodSeconds }}
-{{- else if ne ($.Values.daemon.terminationGracePeriodSeconds | toString) "" }}
+{{- else if not (empty $.Values.daemon.terminationGracePeriodSeconds) }}
 {{- $gracePeriod = $.Values.daemon.terminationGracePeriodSeconds }}
 {{- else }}
 {{- $gracePeriod = add (div $drainMs 1000) 30 }}
@@ -159,7 +159,7 @@ spec:
             - name: HEARTBEAT_TIMEOUT_MS
               value: {{ ternary $poolCfg.heartbeatTimeoutMs $daemonCfg.heartbeatTimeoutMs (hasKey $poolCfg "heartbeatTimeoutMs") | quote }}
             - name: STALE_EXECUTION_THRESHOLD_MS
-              value: {{ ternary $poolCfg.staleExecutionThresholdMs $daemonCfg.staleExecutionThresholdMs (hasKey $poolCfg "staleExecutionThresholdMs") | quote }}
+              value: {{ int (ternary $poolCfg.staleExecutionThresholdMs $daemonCfg.staleExecutionThresholdMs (hasKey $poolCfg "staleExecutionThresholdMs")) | quote }}
             - name: DAEMON_DRAIN_TIMEOUT_MS
               value: {{ $drainMs | quote }}
             - name: JOB_MAX_RETRIES
