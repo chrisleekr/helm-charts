@@ -1,4 +1,34 @@
-Upgrading from chart 0.5.x? (BREAKING — chart 0.6.0+ / appVersion 1.2.2)
+Upgrading from chart 0.6.x? (chart 0.7.0 / appVersion 1.3.0)
+  Upstream v1.3.0 ships label-dispatched bot workflows, review-handler
+  progress streaming, and end-to-end runs that no longer lose progress to
+  mid-run turn caps. The chart bumps defaults to match upstream and exposes
+  three new tunables.
+
+  Default changes (rolling without overrides will adopt the new values):
+    config.agentTimeoutMs            600000  → 3600000   (10min → 60min)
+    config.staleExecutionThresholdMs 660000  → 3660000   (≥ agentTimeoutMs)
+    config.daemonDrainTimeoutMs      600000  → 3600000   (≥ agentTimeoutMs)
+    daemon.config.staleExecutionThresholdMs / daemonDrainTimeoutMs — same.
+    config.triageModel               haiku-3-5 → haiku-4-5
+    config.defaultMaxTurns           30 → ""             (unset; no cap)
+
+  Operational impact of the drain bump:
+    Daemon Pod terminationGracePeriodSeconds is computed as
+    daemonDrainTimeoutMs/1000 + 30 (now ~3630s ≈ 60.5min). Confirm your
+    cluster (and any node-drain / PDB / spot-termination tooling) tolerates
+    long graceful shutdowns before rolling. Set
+    daemon.terminationGracePeriodSeconds explicitly to clamp it.
+
+  New optional env vars (sensible defaults; override under `config:`):
+    queueWorkerBackoffMaxMs   (QUEUE_WORKER_BACKOFF_MAX_MS, default 5000)
+    livenessReaperIntervalMs  (LIVENESS_REAPER_INTERVAL_MS, default 30000,
+                               min 20000)
+    intentConfidenceThreshold (INTENT_CONFIDENCE_THRESHOLD, default 0.75)
+
+  No values.yaml renames required. `helm upgrade` applies the changes; pin
+  any of the above in your override values to keep prior behaviour.
+
+UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   Upstream PR #35 collapses the dispatch surface to daemon-only. Remove
   these keys from your override values before `helm upgrade`:
     config.agentJobMode                config.triageMaxTurnsTrivial
@@ -17,8 +47,6 @@ Upgrading from chart 0.5.x? (BREAKING — chart 0.6.0+ / appVersion 1.2.2)
       orchestratorPublicUrl (ws:// or wss://)
   rbac.create now provisions a Role for Pod spawning (was Jobs). Same flag,
   new verbs scope — `helm upgrade` applies the swap automatically.
-  NOTE: requires chrisleekr/github-app-playground:1.2.2-{orchestrator,daemon}
-  images upstream (published).
   See Chart.yaml artifacthub.io/changes annotation for the full list.
 
 1. Get the application URL by running these commands:
