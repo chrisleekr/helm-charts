@@ -60,8 +60,8 @@ data:
   DAEMON_DRAIN_TIMEOUT_MS: {{ int $c.daemonDrainTimeoutMs | quote }}
   JOB_MAX_RETRIES: {{ $c.jobMaxRetries | quote }}
   OFFER_TIMEOUT_MS: {{ $c.offerTimeoutMs | quote }}
-  QUEUE_WORKER_BACKOFF_MAX_MS: {{ $c.queueWorkerBackoffMaxMs | quote }}
-  LIVENESS_REAPER_INTERVAL_MS: {{ $c.livenessReaperIntervalMs | quote }}
+  QUEUE_WORKER_BACKOFF_MAX_MS: {{ int $c.queueWorkerBackoffMaxMs | quote }}
+  LIVENESS_REAPER_INTERVAL_MS: {{ int $c.livenessReaperIntervalMs | quote }}
   DAEMON_UPDATE_STRATEGY: {{ $c.daemonUpdateStrategy | quote }}
   DAEMON_UPDATE_DELAY_MS: {{ $c.daemonUpdateDelayMs | quote }}
   DAEMON_MEMORY_FLOOR_MB: {{ $c.daemonMemoryFloorMb | quote }}
