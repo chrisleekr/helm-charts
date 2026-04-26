@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.8.1
+version: 0.9.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.4.0"
+appVersion: "1.5.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -46,5 +46,7 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
-    - kind: fixed
-      description: "postgres StatefulSet volumeClaimTemplates labels now use the stable selectorLabels subset (name + instance) plus constant managed-by, instead of the full labels helper. The full helper injected helm.sh/chart and app.kubernetes.io/version, which change every chart bump. Because spec.volumeClaimTemplates is immutable in Kubernetes, those volatile labels created a permanent ArgoCD OutOfSync diff that could not be reconciled without orphan-deleting the PVC. NOTE: existing live StatefulSets still carry the stale labels — one orphan-delete + re-sync is needed after upgrading to clear the drift; subsequent chart bumps will be clean."
+    - kind: changed
+      description: "Bumped appVersion to 1.5.0. Upstream adds cascade PR retargeting in the ship pipeline (review/resolve now run against the PR opened by implement instead of the original issue) and a bounded review→resolve loop that stops cleanly when findings reach zero, with a manual-re-review hint if the cap is hit."
+    - kind: added
+      description: "New optional tunable config.reviewResolveMaxIterations (env REVIEW_RESOLVE_MAX_ITERATIONS, int 1–5, upstream default 2). Caps how many review→resolve passes the composite ship workflow runs before terminating. Empty string in values.yaml leaves the upstream default in effect."

@@ -92,3 +92,8 @@ data:
   {{- if ne ($c.defaultMaxTurns | toString) "" }}
   DEFAULT_MAXTURNS: {{ $c.defaultMaxTurns | quote }}
   {{- end }}
+
+  # --- 12. Composite ship review/resolve loop ---
+  {{- if ne ($c.reviewResolveMaxIterations | toString) "" }}
+  REVIEW_RESOLVE_MAX_ITERATIONS: {{ int $c.reviewResolveMaxIterations | quote }}
+  {{- end }}
