@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.7.1
+version: 0.7.2
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.3.1"
+appVersion: "1.3.2"
 
 kubeVersion: ">= 1.31.0"
 
@@ -47,4 +47,4 @@ annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
     - kind: fixed
-      description: "bump appVersion to 1.3.1 (upstream PR #59 prevents an empty ANTHROPIC_API_KEY env var from shadowing the real Claude Code OAuth token, restoring auth when secrets.claudeCodeOauthToken is set without secrets.anthropicApiKey)"
+      description: "bump appVersion to 1.3.2 (upstream PR #60 removes the 500-char cap on triage verdict summaries, so long classifier explanations are no longer truncated in PR comments / logs)"
