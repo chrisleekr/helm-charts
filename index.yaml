@@ -88,6 +88,37 @@ entries:
   github-app-playground:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: "Bumped appVersion to 1.5.0. Upstream adds cascade PR retargeting in the ship pipeline (review/resolve now run against the PR opened by implement instead of the original issue) and a bounded review→resolve loop that stops cleanly when findings reach zero, with a manual-re-review hint if the cap is hit."
+        - kind: added
+          description: "New optional tunable config.reviewResolveMaxIterations (env REVIEW_RESOLVE_MAX_ITERATIONS, int 1–5, upstream default 2). Caps how many review→resolve passes the composite ship workflow runs before terminating. Empty string in values.yaml leaves the upstream default in effect."
+    apiVersion: v2
+    appVersion: 1.5.0
+    created: "2026-04-26T12:00:25.570744452Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: ff1fdce97e71bc80a369d94622200164aee55e9569ee52773f9b1140e8ffb6a7
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.9.0/github-app-playground-0.9.0.tgz
+    version: 0.9.0
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: "postgres StatefulSet volumeClaimTemplates labels now use the stable selectorLabels subset (name + instance) plus constant managed-by, instead of the full labels helper. The full helper injected helm.sh/chart and app.kubernetes.io/version, which change every chart bump. Because spec.volumeClaimTemplates is immutable in Kubernetes, those volatile labels created a permanent ArgoCD OutOfSync diff that could not be reconciled without orphan-deleting the PVC. NOTE: existing live StatefulSets still carry the stale labels — one orphan-delete + re-sync is needed after upgrading to clear the drift; subsequent chart bumps will be clean."
     apiVersion: v2
@@ -717,4 +748,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-26T09:31:12.936811653Z"
+generated: "2026-04-26T12:00:25.570856969Z"
