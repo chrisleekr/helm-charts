@@ -361,6 +361,9 @@ config:
   # --- 10. Agent max turns ---
   defaultMaxTurns: ""                           # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; AGENT_MAX_TURNS overrides this when both are set.
 
+  # --- 12. Composite ship review/resolve loop ---
+  reviewResolveMaxIterations: ""                # Leave empty to use the upstream default (2). Range: 1–5. Caps how many review→resolve passes the ship pipeline runs before terminating with a manual-re-review hint when findings remain.
+
 # ─────────────────────────── DAEMON POOLS ─────────────────────────────
 # `daemon:` configures 0..N stateless daemon worker pools. Each pool
 # renders its own Deployment. Daemons connect outbound to the orchestrator
