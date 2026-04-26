@@ -108,8 +108,14 @@ spec:
     - metadata:
         name: data
         labels:
-          {{- include "github-app-playground.labels" . | nindent 10 }}
+          {{- /* StatefulSet volumeClaimTemplates is immutable per the Kubernetes API. The full
+                "labels" helper injects helm.sh/chart and app.kubernetes.io/version, both of which
+                change on every chart bump and would create a permanent ArgoCD OutOfSync diff that
+                cannot be reconciled without orphan-deleting the PVC. Pin to selectorLabels (stable
+                name + instance) plus constant extras only. */}}
+          {{- include "github-app-playground.selectorLabels" . | nindent 10 }}
           app.kubernetes.io/component: postgres
+          app.kubernetes.io/managed-by: {{ .Release.Service }}
       spec:
         accessModes:
           {{- range .Values.postgres.persistence.accessModes }}

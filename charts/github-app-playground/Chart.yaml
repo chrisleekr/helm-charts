@@ -17,7 +17,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.8.0
+version: 0.8.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
@@ -46,5 +46,5 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
-    - kind: added
-      description: "bump appVersion to 1.4.0 (upstream PR #61 adds up-front workflow tracking comments, 4-stage trigger reactions 👀/🚀/🎉/😕, parent composite cascade, and daemon-disconnect recovery comments — closes the silent multi-minute UX gap during triage/plan/implement and the OOM silent-failure window). Includes auto-applied DB migration 007_trigger_comment.sql adding nullable trigger_comment_id/trigger_event_type columns to workflow_runs and executions."
+    - kind: fixed
+      description: "postgres StatefulSet volumeClaimTemplates labels now use the stable selectorLabels subset (name + instance) plus constant managed-by, instead of the full labels helper. The full helper injected helm.sh/chart and app.kubernetes.io/version, which change every chart bump. Because spec.volumeClaimTemplates is immutable in Kubernetes, those volatile labels created a permanent ArgoCD OutOfSync diff that could not be reconciled without orphan-deleting the PVC. NOTE: existing live StatefulSets still carry the stale labels — one orphan-delete + re-sync is needed after upgrading to clear the drift; subsequent chart bumps will be clean."
