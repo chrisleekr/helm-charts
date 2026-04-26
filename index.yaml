@@ -87,6 +87,35 @@ entries:
     version: 0.1.0
   github-app-playground:
   - annotations:
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: "postgres StatefulSet volumeClaimTemplates labels now use the stable selectorLabels subset (name + instance) plus constant managed-by, instead of the full labels helper. The full helper injected helm.sh/chart and app.kubernetes.io/version, which change every chart bump. Because spec.volumeClaimTemplates is immutable in Kubernetes, those volatile labels created a permanent ArgoCD OutOfSync diff that could not be reconciled without orphan-deleting the PVC. NOTE: existing live StatefulSets still carry the stale labels — one orphan-delete + re-sync is needed after upgrading to clear the drift; subsequent chart bumps will be clean."
+    apiVersion: v2
+    appVersion: 1.4.0
+    created: "2026-04-26T09:31:12.936684837Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: e5c1c1e431c803e9493c24778b8abc6bb8753ba931135f97ed37482ca2b39486
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.8.1/github-app-playground-0.8.1.tgz
+    version: 0.8.1
+  - annotations:
       artifacthub.io/changes: "- kind: added\n  description: \"bump appVersion to
         1.4.0 (upstream PR #61 adds up-front workflow tracking comments, 4-stage trigger
         reactions \U0001F440/\U0001F680/\U0001F389/\U0001F615, parent composite cascade,
@@ -688,4 +717,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-26T07:21:59.030211069Z"
+generated: "2026-04-26T09:31:12.936811653Z"
