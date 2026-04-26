@@ -87,6 +87,39 @@ entries:
     version: 0.1.0
   github-app-playground:
   - annotations:
+      artifacthub.io/changes: "- kind: added\n  description: \"bump appVersion to
+        1.4.0 (upstream PR #61 adds up-front workflow tracking comments, 4-stage trigger
+        reactions \U0001F440/\U0001F680/\U0001F389/\U0001F615, parent composite cascade,
+        and daemon-disconnect recovery comments — closes the silent multi-minute UX
+        gap during triage/plan/implement and the OOM silent-failure window). Includes
+        auto-applied DB migration 007_trigger_comment.sql adding nullable trigger_comment_id/trigger_event_type
+        columns to workflow_runs and executions.\"\n"
+    apiVersion: v2
+    appVersion: 1.4.0
+    created: "2026-04-26T07:21:59.0301151Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: bd2351ea3600a7f3b685ea168723e729501350e2b056fb21b0f225494fd85655
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.8.0/github-app-playground-0.8.0.tgz
+    version: 0.8.0
+  - annotations:
       artifacthub.io/changes: |
         - kind: fixed
           description: "bump appVersion to 1.3.2 (upstream PR #60 removes the 500-char cap on triage verdict summaries, so long classifier explanations are no longer truncated in PR comments / logs)"
@@ -655,4 +688,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-26T04:22:35.871245104Z"
+generated: "2026-04-26T07:21:59.030211069Z"
