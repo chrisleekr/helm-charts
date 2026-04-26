@@ -89,6 +89,37 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: "Bumped appVersion to 1.6.0. Upstream tightens the triage agent's bug reproduction methodology prompt for more reliable repro steps."
+        - kind: fixed
+          description: "Upstream pipeline now aborts the in-flight Claude Agent SDK query when a job times out or the daemon cancels it, preventing orphaned queries from continuing after cancellation."
+    apiVersion: v2
+    appVersion: 1.6.0
+    created: "2026-04-26T21:20:06.162149601Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 0a314ee98205324bb3bcfa816b64c07821b408fb6b12e491da60c5df99be1762
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.10.0/github-app-playground-0.10.0.tgz
+    version: 0.10.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: "Bumped appVersion to 1.5.0. Upstream adds cascade PR retargeting in the ship pipeline (review/resolve now run against the PR opened by implement instead of the original issue) and a bounded review→resolve loop that stops cleanly when findings reach zero, with a manual-re-review hint if the cap is hit."
         - kind: added
           description: "New optional tunable config.reviewResolveMaxIterations (env REVIEW_RESOLVE_MAX_ITERATIONS, int 1–5, upstream default 2). Caps how many review→resolve passes the composite ship workflow runs before terminating. Empty string in values.yaml leaves the upstream default in effect."
@@ -748,4 +779,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-26T12:00:25.570856969Z"
+generated: "2026-04-26T21:20:06.162328635Z"
