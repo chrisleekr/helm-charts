@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.10.0
+version: 0.10.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.6.0"
+appVersion: "1.6.1"
 
 kubeVersion: ">= 1.31.0"
 
@@ -46,7 +46,5 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
-    - kind: changed
-      description: "Bumped appVersion to 1.6.0. Upstream tightens the triage agent's bug reproduction methodology prompt for more reliable repro steps."
     - kind: fixed
-      description: "Upstream pipeline now aborts the in-flight Claude Agent SDK query when a job times out or the daemon cancels it, preventing orphaned queries from continuing after cancellation."
+      description: "Bumped appVersion to 1.6.1. Upstream raises the triage verdict details cap to a 50k sanity bound, preventing premature truncation of detailed verdict output."
