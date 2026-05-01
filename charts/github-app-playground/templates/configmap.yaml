@@ -32,6 +32,7 @@ data:
   CLONE_BASE_DIR: {{ $c.cloneBaseDir | quote }}
   CLONE_DEPTH: {{ $c.cloneDepth | quote }}
   TRIGGER_PHRASE: {{ $c.triggerPhrase | quote }}
+  BOT_APP_LOGIN: {{ $c.botAppLogin | quote }}
   PORT: {{ $c.port | quote }}
   LOG_LEVEL: {{ $c.logLevel | quote }}
   NODE_ENV: {{ $c.nodeEnv | quote }}
@@ -96,4 +97,15 @@ data:
   # --- 12. Composite ship review/resolve loop ---
   {{- if ne ($c.reviewResolveMaxIterations | toString) "" }}
   REVIEW_RESOLVE_MAX_ITERATIONS: {{ $c.reviewResolveMaxIterations | quote }}
+  {{- end }}
+
+  # --- 13. Ship workflow (PR shepherding to merge-ready) ---
+  MAX_WALL_CLOCK_PER_SHIP_RUN: {{ $c.maxWallClockPerShipRun | quote }}
+  MAX_SHIP_ITERATIONS: {{ $c.maxShipIterations | quote }}
+  CRON_TICKLE_INTERVAL_MS: {{ $c.cronTickleIntervalMs | quote }}
+  MERGEABLE_NULL_BACKOFF_MS_LIST: {{ $c.mergeableNullBackoffMsList | quote }}
+  REVIEW_BARRIER_SAFETY_MARGIN_MS: {{ int $c.reviewBarrierSafetyMarginMs | quote }}
+  FIX_ATTEMPTS_PER_SIGNATURE_CAP: {{ $c.fixAttemptsPerSignatureCap | quote }}
+  {{- if $c.shipForbiddenTargetBranches }}
+  SHIP_FORBIDDEN_TARGET_BRANCHES: {{ $c.shipForbiddenTargetBranches | quote }}
   {{- end }}

@@ -310,6 +310,7 @@ config:
   cloneBaseDir: /tmp/bot-workspaces             # Must match workspace.persistence mount path.
   cloneDepth: 50                                # Git shallow-clone depth.
   triggerPhrase: "@chrisleekr-bot"              # Must match the GitHub App's bot login exactly.
+  botAppLogin: "chrisleekr-bot[bot]"            # GitHub App bot author login as it appears in commit/push payloads. Used by the ship workflow's foreign-push detection. Override per-environment (e.g. when running a forked App with a different login).
   port: 3000                                    # Must match the container/service ports.
   logLevel: info                                # fatal | error | warn | info | debug | trace.
   nodeEnv: production
@@ -363,6 +364,18 @@ config:
 
   # --- 12. Composite ship review/resolve loop ---
   reviewResolveMaxIterations: ""                # Leave empty to use the upstream default (2). Range: 1–5. Caps how many review→resolve passes the ship pipeline runs before terminating with a manual-re-review hint when findings remain.
+
+  # --- 13. Ship workflow (PR shepherding to merge-ready) ---
+  # Tunables for the upstream `bot:ship` workflow (added in app v1.7.0). All
+  # have sensible defaults — override only when the deployment needs a
+  # different ceiling. See upstream src/config.ts group 13 for full semantics.
+  maxWallClockPerShipRun: "4h"                  # Wall-clock ceiling for a single `bot:ship` session before transitioning to `deadline_exceeded`. Accepts plain ms ("14400000") or duration string ("4h", "30m", "1.5h", "90s"). Per-invocation `--deadline` is validated against this ceiling.
+  maxShipIterations: 50                         # Iteration-count cap (FR-012). Loop checks at the start of each iteration BEFORE the probe; on hit, intent transitions to `human_took_over` with `BlockerCategory='iteration-cap'`. Whichever fires first between this and maxWallClockPerShipRun wins.
+  cronTickleIntervalMs: 15000                   # Cron tickle cadence — how often the tickle scheduler scans Valkey `ship:tickle` for due continuations. Lower values reduce wake latency at the cost of background CPU.
+  mergeableNullBackoffMsList: "5000,10000,30000,60000,60000"  # FR-021. Bounded backoff schedule (comma-separated ms) for GitHub `mergeable=null` re-polls (~2m45s total). On exhaustion the verdict is `mergeable_pending` and the session yields per FR-020 — MUST NOT be empty.
+  reviewBarrierSafetyMarginMs: 1200000          # 20min. FR-023 single global safety margin for the reviewer-latency barrier. When no non-bot review is observed on the current head SHA, the barrier defers `ready` until at least this much time has elapsed since the most recent push. Single-knob design is intentional — no reviewer-login list is carried anywhere.
+  fixAttemptsPerSignatureCap: 3                 # FR-013. Per-(intent, signature) cap on resolve/review fix attempts. On reaching this count for a derived signature, the next attempt halts with `BlockerCategory='flake-cap'`. Backed by the `ship_fix_attempts` table.
+  shipForbiddenTargetBranches: ""               # FR-015 eligibility gate. Comma-separated list of branch names the bot must refuse to shepherd against (e.g. `main,master,release`). Empty (default) imposes no branch restriction beyond the standard owner/fork/state checks.
 
 # ─────────────────────────── DAEMON POOLS ─────────────────────────────
 # `daemon:` configures 0..N stateless daemon worker pools. Each pool
