@@ -88,6 +88,37 @@ entries:
   github-app-playground:
   - annotations:
       artifacthub.io/changes: |
+        - kind: added
+          description: "Bumped appVersion to 1.7.0. Adds the upstream PR-shepherding (`bot:ship`) workflow: scoped commands, iteration loop, tickle scheduler, and four scoped executors. Exposes 8 new optional config keys mirroring src/config.ts: `botAppLogin` (group 5) and group 13 ship-loop tunables (`maxWallClockPerShipRun`, `maxShipIterations`, `cronTickleIntervalMs`, `mergeableNullBackoffMsList`, `reviewBarrierSafetyMarginMs`, `fixAttemptsPerSignatureCap`, `shipForbiddenTargetBranches`)."
+        - kind: fixed
+          description: "Idempotency: durable check is now scoped with `since=triggerTimestamp` (upstream #69)."
+    apiVersion: v2
+    appVersion: 1.7.0
+    created: "2026-05-01T13:45:27.891031199Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 7a4f0e81e5918073065a1fe9adea1c2104157b6c3be3f70c2693bbbcc7db62ca
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.11.0/github-app-playground-0.11.0.tgz
+    version: 0.11.0
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: "Bumped appVersion to 1.6.1. Upstream raises the triage verdict details cap to a 50k sanity bound, preventing premature truncation of detailed verdict output."
     apiVersion: v2
@@ -808,4 +839,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-04-27T09:10:50.642049572Z"
+generated: "2026-05-01T13:45:27.891190917Z"
