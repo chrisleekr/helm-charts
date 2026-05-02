@@ -23,7 +23,7 @@ version: 0.11.0
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.7.0"
+appVersion: "1.8.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -47,6 +47,12 @@ annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
     - kind: added
-      description: "Bumped appVersion to 1.7.0. Adds the upstream PR-shepherding (`bot:ship`) workflow: scoped commands, iteration loop, tickle scheduler, and four scoped executors. Exposes 8 new optional config keys mirroring src/config.ts: `botAppLogin` (group 5) and group 13 ship-loop tunables (`maxWallClockPerShipRun`, `maxShipIterations`, `cronTickleIntervalMs`, `mergeableNullBackoffMsList`, `reviewBarrierSafetyMarginMs`, `fixAttemptsPerSignatureCap`, `shipForbiddenTargetBranches`)."
+      description: "Bumped appVersion to 1.8.0 (covers upstream v1.7.0 + v1.8.0). Adds the upstream PR-shepherding (`bot:ship`) workflow: scoped commands, iteration loop, tickle scheduler, and four scoped executors. Exposes 8 new optional config keys mirroring src/config.ts: `botAppLogin` (group 5) and group 13 ship-loop tunables (`maxWallClockPerShipRun`, `maxShipIterations`, `cronTickleIntervalMs`, `mergeableNullBackoffMsList`, `reviewBarrierSafetyMarginMs`, `fixAttemptsPerSignatureCap`, `shipForbiddenTargetBranches`)."
+    - kind: changed
+      description: "Bot reply format unified across workflows; research/resolve guards hardened (upstream #91)."
+    - kind: fixed
+      description: "Logger now redacts file paths and scrubs `err.*` before pino emits (upstream #89)."
+    - kind: fixed
+      description: "Raw error messages are redacted before being posted in public PR comments (upstream #90)."
     - kind: fixed
       description: "Idempotency: durable check is now scoped with `since=triggerTimestamp` (upstream #69)."
