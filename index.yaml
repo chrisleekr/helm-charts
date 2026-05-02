@@ -89,6 +89,43 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: "Bumped appVersion to 1.8.0 (covers upstream v1.7.0 + v1.8.0). Adds the upstream PR-shepherding (`bot:ship`) workflow: scoped commands, iteration loop, tickle scheduler, and four scoped executors. Exposes 8 new optional config keys mirroring src/config.ts: `botAppLogin` (group 5) and group 13 ship-loop tunables (`maxWallClockPerShipRun`, `maxShipIterations`, `cronTickleIntervalMs`, `mergeableNullBackoffMsList`, `reviewBarrierSafetyMarginMs`, `fixAttemptsPerSignatureCap`, `shipForbiddenTargetBranches`)."
+        - kind: changed
+          description: "Bot reply format unified across workflows; research/resolve guards hardened (upstream #91)."
+        - kind: fixed
+          description: "Logger now redacts file paths and scrubs `err.*` before pino emits (upstream #89)."
+        - kind: fixed
+          description: "Raw error messages are redacted before being posted in public PR comments (upstream #90)."
+        - kind: fixed
+          description: "Idempotency: durable check is now scoped with `since=triggerTimestamp` (upstream #69)."
+    apiVersion: v2
+    appVersion: 1.8.0
+    created: "2026-05-02T05:52:04.185352169Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: eede5313d288516b2ee68949a67626291148469187fd20e3d495beaa5521e1be
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.11.1/github-app-playground-0.11.1.tgz
+    version: 0.11.1
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: "Bumped appVersion to 1.7.0. Adds the upstream PR-shepherding (`bot:ship`) workflow: scoped commands, iteration loop, tickle scheduler, and four scoped executors. Exposes 8 new optional config keys mirroring src/config.ts: `botAppLogin` (group 5) and group 13 ship-loop tunables (`maxWallClockPerShipRun`, `maxShipIterations`, `cronTickleIntervalMs`, `mergeableNullBackoffMsList`, `reviewBarrierSafetyMarginMs`, `fixAttemptsPerSignatureCap`, `shipForbiddenTargetBranches`)."
         - kind: fixed
           description: "Idempotency: durable check is now scoped with `since=triggerTimestamp` (upstream #69)."
@@ -839,4 +876,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-05-01T13:45:27.891190917Z"
+generated: "2026-05-02T05:52:04.185512638Z"
