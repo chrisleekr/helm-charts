@@ -315,6 +315,10 @@ config:
   logLevel: info                                # fatal | error | warn | info | debug | trace.
   nodeEnv: production
   maxConcurrentRequests: 3
+  maxFetchedComments: 500
+  maxFetchedReviews: 500
+  maxFetchedReviewComments: 500
+  maxFetchedFiles: 500
   agentTimeoutMs: 3600000                       # 60min wall-clock cap per agent step. Lower only for testing/smaller-scope deployments; non-trivial implement/review steps routinely run 30-50min.
   agentMaxTurns: ""                             # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; overrides defaultMaxTurns when both are set.
   claudeCodePath: ""                            # Required only when claude-code is installed globally (e.g. Docker).
