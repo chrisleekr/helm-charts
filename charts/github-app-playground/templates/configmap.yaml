@@ -37,6 +37,10 @@ data:
   LOG_LEVEL: {{ $c.logLevel | quote }}
   NODE_ENV: {{ $c.nodeEnv | quote }}
   MAX_CONCURRENT_REQUESTS: {{ $c.maxConcurrentRequests | quote }}
+  MAX_FETCHED_COMMENTS: {{ $c.maxFetchedComments | quote }}
+  MAX_FETCHED_REVIEWS: {{ $c.maxFetchedReviews | quote }}
+  MAX_FETCHED_REVIEW_COMMENTS: {{ $c.maxFetchedReviewComments | quote }}
+  MAX_FETCHED_FILES: {{ $c.maxFetchedFiles | quote }}
   AGENT_TIMEOUT_MS: {{ int $c.agentTimeoutMs | quote }}
   {{- if ne ($c.agentMaxTurns | toString) "" }}
   AGENT_MAX_TURNS: {{ $c.agentMaxTurns | quote }}
