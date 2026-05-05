@@ -274,6 +274,7 @@ secrets:
   # --- 3. Anthropic direct-API credentials ---
   anthropicApiKey: ""                           # Required when config.provider=anthropic and claudeCodeOauthToken is empty.
   claudeCodeOauthToken: ""                      # Alternative to anthropicApiKey. Requires config.allowedOwners.
+  githubPersonalAccessToken: ""                 # Optional PAT override of the GitHub App installation token. When set, all GitHub API calls and `git push` run as the PAT owner. Single-tenant only — app hard-fails at startup unless `config.allowedOwners` contains exactly one owner. Commit author/committer metadata stays pinned to `chrisleekr-bot[bot]` regardless.
 
   # --- 4. AWS Bedrock credentials (secret subset) ---
   awsAccessKeyId: ""                            # Set for static AWS creds; otherwise leave empty.
@@ -290,6 +291,7 @@ secrets:
 
   # --- 8. Daemon / Orchestrator WebSocket (auto-generated, persisted across upgrades) ---
   daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
+  daemonAuthTokenPrevious: ""                   # Optional rotation-window predecessor of daemonAuthToken. When set, the orchestrator accepts daemons whose Bearer header matches EITHER the primary or this previous value (constant-time). Set to the old token during a rolling rotation, then unset once every daemon has restarted on the new primary. Daemon-side ignored — daemons always send the primary daemonAuthToken.
 
 # ─────────────────────────── APPLICATION CONFIG ───────────────────────
 # `config:` is a 1:1 mirror of the non-secret fields of the Zod schema in
@@ -357,11 +359,21 @@ config:
 
   # --- 9. Triage (binary heavy classifier) ---
   triageEnabled: true                           # Kill-switch for the triage LLM call.
-  triageModel: haiku-4-5
+  triageModel: sonnet-4-6
   triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise.
   triageMaxTokens: 256
   triageTimeoutMs: 5000
   intentConfidenceThreshold: 0.75               # Below this, the dispatcher treats the comment as ambiguous and posts a clarification request (FR-009). Matches SC-005 target band.
+
+  # --- 10b. LLM-based output scanner (defense layer 4) ---
+  # Second-pass LLM scan on every agent-generated body before it is posted to
+  # GitHub, catching encoded/obfuscated secrets that escape the deterministic
+  # regex pass in `src/utils/sanitize.ts`. Fail-open on outage (regex pass
+  # remains authoritative). Disable to remove the per-reply round-trip if
+  # latency budgets are tight.
+  llmOutputScannerEnabled: true                 # Kill-switch for the LLM scanner. Default ON.
+  llmOutputScannerModel: sonnet-4-6             # Model alias for the scanner call. Sonnet 4.6 default — higher reasoning materially reduces false-negatives on obfuscated/encoded secrets vs. Haiku, at the cost of per-call latency.
+  llmOutputScannerTimeoutMs: 3000               # Hard cap per scanner call. On exceed, fail-open (post regex-survived body, log warn).
 
   # --- 10. Agent max turns ---
   defaultMaxTurns: ""                           # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; AGENT_MAX_TURNS overrides this when both are set.

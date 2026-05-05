@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.12.0
+version: 0.13.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.9.1"
+appVersion: "1.10.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -47,12 +47,14 @@ annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
     - kind: added
-      description: "Bumped appVersion to 1.8.0 (covers upstream v1.7.0 + v1.8.0). Adds the upstream PR-shepherding (`bot:ship`) workflow: scoped commands, iteration loop, tickle scheduler, and four scoped executors. Exposes 8 new optional config keys mirroring src/config.ts: `botAppLogin` (group 5) and group 13 ship-loop tunables (`maxWallClockPerShipRun`, `maxShipIterations`, `cronTickleIntervalMs`, `mergeableNullBackoffMsList`, `reviewBarrierSafetyMarginMs`, `fixAttemptsPerSignatureCap`, `shipForbiddenTargetBranches`)."
+      description: "Bumped appVersion to 1.10.0. Exposes 5 new optional env vars mirroring src/config.ts: `secrets.githubPersonalAccessToken` (group 3, PAT override — single-tenant only, app hard-fails unless `config.allowedOwners` has exactly one owner), `secrets.daemonAuthTokenPrevious` (group 8, rotation-window predecessor for orchestrator-side daemon Bearer auth), and group 10b LLM output-scanner tunables (`config.llmOutputScannerEnabled`, `config.llmOutputScannerModel`, `config.llmOutputScannerTimeoutMs`)."
+    - kind: added
+      description: "Defense layer 4: optional second-pass LLM scan on every agent-generated body before posting to GitHub, catching encoded/obfuscated secrets the regex pass misses (upstream #104). Default ON, fail-open on outage."
+    - kind: added
+      description: "Optional `GITHUB_PERSONAL_ACCESS_TOKEN` override of GitHub App installation token; commit author/committer metadata still pinned to `chrisleekr-bot[bot]` (upstream #104)."
+    - kind: added
+      description: "Rolling-rotation support for `DAEMON_AUTH_TOKEN`: orchestrator accepts EITHER the primary or `DAEMON_AUTH_TOKEN_PREVIOUS` (constant-time) until the rotation window closes (upstream #103)."
     - kind: changed
-      description: "Bot reply format unified across workflows; research/resolve guards hardened (upstream #91)."
-    - kind: fixed
-      description: "Logger now redacts file paths and scrubs `err.*` before pino emits (upstream #89)."
-    - kind: fixed
-      description: "Raw error messages are redacted before being posted in public PR comments (upstream #90)."
-    - kind: fixed
-      description: "Idempotency: durable check is now scoped with `since=triggerTimestamp` (upstream #69)."
+      description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
+    - kind: changed
+      description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
