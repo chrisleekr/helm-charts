@@ -93,6 +93,11 @@ data:
   TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
   INTENT_CONFIDENCE_THRESHOLD: {{ $c.intentConfidenceThreshold | quote }}
 
+  # --- 10b. LLM-based output scanner (defense layer 4) ---
+  LLM_OUTPUT_SCANNER_ENABLED: {{ $c.llmOutputScannerEnabled | quote }}
+  LLM_OUTPUT_SCANNER_MODEL: {{ $c.llmOutputScannerModel | quote }}
+  LLM_OUTPUT_SCANNER_TIMEOUT_MS: {{ int $c.llmOutputScannerTimeoutMs | quote }}
+
   # --- 10. Agent max turns ---
   {{- if ne ($c.defaultMaxTurns | toString) "" }}
   DEFAULT_MAXTURNS: {{ $c.defaultMaxTurns | quote }}
