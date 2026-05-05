@@ -56,3 +56,5 @@ annotations:
       description: "Rolling-rotation support for `DAEMON_AUTH_TOKEN`: orchestrator accepts EITHER the primary or `DAEMON_AUTH_TOKEN_PREVIOUS` (constant-time) until the rotation window closes (upstream #103)."
     - kind: changed
       description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
+    - kind: changed
+      description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
