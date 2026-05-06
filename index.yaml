@@ -89,6 +89,49 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: fixed
+          description: "Bumped appVersion to 1.10.2. Executor drops the `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` flag that was blocking Claude CLI startup (upstream #106). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.10.1. Executor now captures Claude CLI stderr via SDK callback so failures surface in logs instead of being swallowed (upstream #105). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.10.0. Exposes 5 new optional env vars mirroring src/config.ts: `secrets.githubPersonalAccessToken` (group 3, PAT override — single-tenant only, app hard-fails unless `config.allowedOwners` has exactly one owner), `secrets.daemonAuthTokenPrevious` (group 8, rotation-window predecessor for orchestrator-side daemon Bearer auth), and group 10b LLM output-scanner tunables (`config.llmOutputScannerEnabled`, `config.llmOutputScannerModel`, `config.llmOutputScannerTimeoutMs`)."
+        - kind: added
+          description: "Defense layer 4: optional second-pass LLM scan on every agent-generated body before posting to GitHub, catching encoded/obfuscated secrets the regex pass misses (upstream #104). Default ON, fail-open on outage."
+        - kind: added
+          description: "Optional `GITHUB_PERSONAL_ACCESS_TOKEN` override of GitHub App installation token; commit author/committer metadata still pinned to `chrisleekr-bot[bot]` (upstream #104)."
+        - kind: added
+          description: "Rolling-rotation support for `DAEMON_AUTH_TOKEN`: orchestrator accepts EITHER the primary or `DAEMON_AUTH_TOKEN_PREVIOUS` (constant-time) until the rotation window closes (upstream #103)."
+        - kind: changed
+          description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
+        - kind: changed
+          description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
+    apiVersion: v2
+    appVersion: 1.10.2
+    created: "2026-05-06T22:30:35.826490851Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 66a2952396bbfe8b688dfe9bfe67108565ad45a016297aafe27fd996644b912e
+    home: https://github.com/chrisleekr/github-app-playground
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app-playground
+    sources:
+    - https://github.com/chrisleekr/github-app-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.13.2/github-app-playground-0.13.2.tgz
+    version: 0.13.2
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: fixed
           description: "Bumped appVersion to 1.10.1. Executor now captures Claude CLI stderr via SDK callback so failures surface in logs instead of being swallowed (upstream #105). Internal fix only — no chart values, env vars, or template surface changes."
         - kind: added
           description: "Bumped appVersion to 1.10.0. Exposes 5 new optional env vars mirroring src/config.ts: `secrets.githubPersonalAccessToken` (group 3, PAT override — single-tenant only, app hard-fails unless `config.allowedOwners` has exactly one owner), `secrets.daemonAuthTokenPrevious` (group 8, rotation-window predecessor for orchestrator-side daemon Bearer auth), and group 10b LLM output-scanner tunables (`config.llmOutputScannerEnabled`, `config.llmOutputScannerModel`, `config.llmOutputScannerTimeoutMs`)."
@@ -993,4 +1036,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-05-06T12:11:44.356133904Z"
+generated: "2026-05-06T22:30:35.826632616Z"
