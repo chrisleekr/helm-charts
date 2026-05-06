@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.13.0
+version: 0.13.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.10.0"
+appVersion: "1.10.1"
 
 kubeVersion: ">= 1.31.0"
 
@@ -46,6 +46,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "Bumped appVersion to 1.10.1. Executor now captures Claude CLI stderr via SDK callback so failures surface in logs instead of being swallowed (upstream #105). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: added
       description: "Bumped appVersion to 1.10.0. Exposes 5 new optional env vars mirroring src/config.ts: `secrets.githubPersonalAccessToken` (group 3, PAT override — single-tenant only, app hard-fails unless `config.allowedOwners` has exactly one owner), `secrets.daemonAuthTokenPrevious` (group 8, rotation-window predecessor for orchestrator-side daemon Bearer auth), and group 10b LLM output-scanner tunables (`config.llmOutputScannerEnabled`, `config.llmOutputScannerModel`, `config.llmOutputScannerTimeoutMs`)."
     - kind: added
