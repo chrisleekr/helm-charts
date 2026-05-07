@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.13.2
+version: 0.14.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.10.2"
+appVersion: "1.11.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -46,6 +46,10 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: added
+      description: "Bumped appVersion to 1.11.0. Resolve workflow now gates handler success on post-fix CI state (upstream #107). Internal logic only — no chart values, env vars, or template surface changes."
+    - kind: fixed
+      description: "Bumped appVersion to 1.11.0. Implement workflow now matches PR author by login in PAT mode (upstream #108). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: fixed
       description: "Bumped appVersion to 1.10.2. Executor drops the `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` flag that was blocking Claude CLI startup (upstream #106). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: fixed
