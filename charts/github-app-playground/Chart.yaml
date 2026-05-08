@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.14.0
+version: 0.14.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.11.0"
+appVersion: "1.11.1"
 
 kubeVersion: ">= 1.31.0"
 
@@ -46,6 +46,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "Bumped appVersion to 1.11.1. Tracking-mirror setState is now idempotent via embedded run markers and orphan adoption, eliminating duplicate tracking comments caused by octokit retry on transient 5xx (upstream #109/#111). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: added
       description: "Bumped appVersion to 1.11.0. Resolve workflow now gates handler success on post-fix CI state (upstream #107). Internal logic only — no chart values, env vars, or template surface changes."
     - kind: fixed
