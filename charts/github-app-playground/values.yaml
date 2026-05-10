@@ -359,11 +359,21 @@ config:
 
   # --- 9. Triage (binary heavy classifier) ---
   triageEnabled: true                           # Kill-switch for the triage LLM call.
+  triageToolsEnabled: true                      # Kill-switch for tool-driven triage (upstream #117). When false, falls back to snapshot-only triage classifier.
   triageModel: sonnet-4-6
   triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise.
   triageMaxTokens: 256
   triageTimeoutMs: 5000
   intentConfidenceThreshold: 0.75               # Below this, the dispatcher treats the comment as ambiguous and posts a clarification request (FR-009). Matches SC-005 target band.
+
+  # --- 10a. Chat-thread executor (conversational scoped intent) ---
+  # Tunables for the chat-thread workflow (added in app v1.12.0). Drives the
+  # conversational dispatch path that runs after triage with full PR context,
+  # producing a proposal that the user reacts to before workflow dispatch.
+  chatThreadExecuteThreshold: 0.8               # Minimum LLM confidence required to dispatch directly from chat-thread without going through the human-confirm proposal gate. Stricter than intentConfidenceThreshold because chat-thread runs with full PR context.
+  chatThreadProposalTtlHours: 24                # TTL for awaiting chat-thread proposals. After this point the proposal-poller transitions the row to `expired` and any subsequent reaction is logged-but-ignored.
+  chatThreadMaxTurns: 8                         # Per-AWAITING-PROPOSAL cap on conversational turns. Once hit, chat-thread declines further LLM work and tells the user to react. Reset on proposal status transition.
+  chatThreadToolsEnabled: true                  # Kill-switch for chat-thread's tool-call path (upstream #117). When false, falls back to snapshot-only context.
 
   # --- 10b. LLM-based output scanner (defense layer 4) ---
   # Second-pass LLM scan on every agent-generated body before it is posted to
