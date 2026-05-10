@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.15.0
+version: 0.15.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.12.0"
+appVersion: "1.12.1"
 
 kubeVersion: ">= 1.31.0"
 
@@ -46,6 +46,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "Bumped appVersion to 1.12.1. Restores per-line inline review comments on PRs by resolving `github_comment` and `github_inline_comment` MCP server scripts via `import.meta.url` so the SDK can spawn them from the cloned-repo workDir, and disallows `ToolSearch` so the model trusts the eager tool list (upstream #123). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: added
       description: "Bumped appVersion to 1.12.0. Exposes 5 new optional config keys mirroring src/config.ts: `config.triageToolsEnabled` (group 10, kill-switch for tool-driven triage classifier) and group 10a chat-thread executor tunables (`config.chatThreadExecuteThreshold`, `config.chatThreadProposalTtlHours`, `config.chatThreadMaxTurns`, `config.chatThreadToolsEnabled`)."
     - kind: added
