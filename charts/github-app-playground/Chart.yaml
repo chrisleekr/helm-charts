@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.15.1
+version: 0.15.2
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.12.1"
+appVersion: "1.12.2"
 
 kubeVersion: ">= 1.31.0"
 
@@ -45,7 +45,12 @@ sources:
 
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
+  artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "Bumped appVersion to 1.12.2. Bundles all stdio MCP servers (`github_comment`, `github_inline_comment`, `github_state`, `repo_memory`) and resolves their script paths from any bundle layout via a shared resolver (upstream #125). Internal fix only — no chart values, env vars, or template surface changes."
+    - kind: security
+      description: "Bumped appVersion to 1.12.2. Closes a cross-session prompt-injection vector via `repo_memory`: sanitizes attacker-controlled content before it is stored or replayed into prompts, and adds a backfill migration for existing rows (upstream #124). Internal hardening only — no chart values, env vars, or template surface changes."
     - kind: fixed
       description: "Bumped appVersion to 1.12.1. Restores per-line inline review comments on PRs by resolving `github_comment` and `github_inline_comment` MCP server scripts via `import.meta.url` so the SDK can spawn them from the cloned-repo workDir, and disallows `ToolSearch` so the model trusts the eager tool list (upstream #123). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: added
