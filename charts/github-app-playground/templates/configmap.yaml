@@ -87,11 +87,18 @@ data:
 
   # --- 9. Triage (binary heavy classifier) ---
   TRIAGE_ENABLED: {{ $c.triageEnabled | quote }}
+  TRIAGE_TOOLS_ENABLED: {{ $c.triageToolsEnabled | quote }}
   TRIAGE_MODEL: {{ $c.triageModel | quote }}
   TRIAGE_CONFIDENCE_THRESHOLD: {{ $c.triageConfidenceThreshold | quote }}
   TRIAGE_MAX_TOKENS: {{ $c.triageMaxTokens | quote }}
   TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
   INTENT_CONFIDENCE_THRESHOLD: {{ $c.intentConfidenceThreshold | quote }}
+
+  # --- 10a. Chat-thread executor (conversational scoped intent) ---
+  CHAT_THREAD_EXECUTE_THRESHOLD: {{ $c.chatThreadExecuteThreshold | quote }}
+  CHAT_THREAD_PROPOSAL_TTL_HOURS: {{ $c.chatThreadProposalTtlHours | quote }}
+  CHAT_THREAD_MAX_TURNS: {{ $c.chatThreadMaxTurns | quote }}
+  CHAT_THREAD_TOOLS_ENABLED: {{ $c.chatThreadToolsEnabled | quote }}
 
   # --- 10b. LLM-based output scanner (defense layer 4) ---
   LLM_OUTPUT_SCANNER_ENABLED: {{ $c.llmOutputScannerEnabled | quote }}
