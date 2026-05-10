@@ -2,3 +2,5 @@
 /charts/*/charts
 .DS_Store
 /charts/*/template
+
+.claude
