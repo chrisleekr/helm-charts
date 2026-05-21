@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.15.2
+version: 0.16.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.12.2"
+appVersion: "1.13.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -45,8 +45,21 @@ sources:
 
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
-  artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
+    - kind: added
+      description: "Bumped appVersion to 1.13.0. Exposes 8 new optional config keys mirroring src/config.ts: `config.digestModel` (group 9, comment-aware workflows digest model), `config.promptCacheLayout` (group 12a, prompt cache layout selector — chart default flipped to `cacheable` to opt into cache hits), and group 14 scheduled-actions tunables (`config.schedulerEnabled` — chart default `true`, `config.schedulerScanIntervalMs`, `config.schedulerAllowAutoMerge`, `config.schedulerConfigFile`, `config.reviewLearningsEnabled`, `config.reviewLearningsRagEnabled` — chart default `true`)."
+    - kind: added
+      description: "Scheduled actions via `.github-app.yaml` (upstream #159): scheduler walks installed repos on a cron and enqueues per-repo declarative actions. Chart default ON via `config.schedulerEnabled: true`; `config.schedulerAllowAutoMerge` left OFF (privilege gate for the `merge_readiness` MCP tool — opt-in per deployment)."
+    - kind: added
+      description: "Persistent review-learnings (upstream #160/#161/#162): per-repo review-policy directives saved via `@bot remember` or autonomous capture, replayed into prompts. Chart default ON via `config.reviewLearningsEnabled: true`. Stage 2 RAG path (`config.reviewLearningsRagEnabled: true`) enabled by chart default — requires Postgres migration 015 (pgvector extension) to be applied; if missing, falls back to legacy file-glob filter."
+    - kind: added
+      description: "Comment-aware structured workflows (upstream #148): LLM digest distills issue/PR comment threads into guidance for structured workflows. Model selected via new `config.digestModel` (default `sonnet-4-6`)."
+    - kind: added
+      description: "Opt-in cacheable system/user prompt split (upstream #135): lifts static prompt scaffolding into `systemPrompt.append` with `excludeDynamicSections: true` so the Anthropic prompt cache hits across jobs. Chart default flipped to `cacheable`. Operators should verify non-zero `cacheReadInputTokens` in executor logs after rollout."
+    - kind: fixed
+      description: "Bumped appVersion to 1.13.0. Webhook subscribes `issue_comment.edited`/`.deleted` (upstream #131) and write-through populates `target_cache` on `issues`/`pull_request` events (upstream #130/#132). Internal fix only — no chart values, env vars, or template surface changes."
+    - kind: fixed
+      description: "Bumped appVersion to 1.13.0. Dependency bumps: `@anthropic-ai/bedrock-sdk` ^0.29.0 (upstream #147) and `@anthropic-ai/claude-agent-sdk` ^0.3.0 (upstream #154). Internal updates only — no chart surface changes."
     - kind: fixed
       description: "Bumped appVersion to 1.12.2. Bundles all stdio MCP servers (`github_comment`, `github_inline_comment`, `github_state`, `repo_memory`) and resolves their script paths from any bundle layout via a shared resolver (upstream #125). Internal fix only — no chart values, env vars, or template surface changes."
     - kind: security

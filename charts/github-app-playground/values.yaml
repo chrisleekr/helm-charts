@@ -361,6 +361,7 @@ config:
   triageEnabled: true                           # Kill-switch for the triage LLM call.
   triageToolsEnabled: true                      # Kill-switch for tool-driven triage (upstream #117). When false, falls back to snapshot-only triage classifier.
   triageModel: sonnet-4-6
+  digestModel: sonnet-4-6                       # Model for the discussion-digest LLM call (upstream #148, src/workflows/discussion-digest.ts). Distills issue/PR comment threads into guidance for the structured workflows. Sonnet default — reduce-merge precedence and low-hallucination extraction need the reasoning headroom.
   triageConfidenceThreshold: 1.0                # Lower to 0.75 only after SC-003/SC-004 stabilise.
   triageMaxTokens: 256
   triageTimeoutMs: 5000
@@ -391,6 +392,19 @@ config:
   # --- 12. Composite ship review/resolve loop ---
   reviewResolveMaxIterations: ""                # Leave empty to use the upstream default (2). Range: 1–5. Caps how many review→resolve passes the ship pipeline runs before terminating with a manual-re-review hint when findings remain.
 
+  # --- 12a. Prompt cache layout (upstream #134/#135) ---
+  # `legacy`: single user-role string; system prompt embeds dynamic sections
+  #   (cwd, platform, shell, OS). Because cwd is unique per delivery (per-event
+  #   mkdtemp), the prefix is unique per job and the Anthropic prompt cache
+  #   misses every invocation.
+  # `cacheable`: lifts static scaffolding (security_directive, freshness_directive,
+  #   workflow steps, commit/CAPABILITIES boilerplate) into `systemPrompt.append`
+  #   with `excludeDynamicSections: true`. System-prompt prefix is byte-identical
+  #   across jobs of the same shape and reused via the prompt cache.
+  # Chart default `cacheable`; verify non-zero `cacheReadInputTokens` in executor
+  # completion logs after rollout. Revert to `legacy` if cache hits stay zero.
+  promptCacheLayout: cacheable                  # legacy | cacheable.
+
   # --- 13. Ship workflow (PR shepherding to merge-ready) ---
   # Tunables for the upstream `bot:ship` workflow (added in app v1.7.0). All
   # have sensible defaults — override only when the deployment needs a
@@ -402,6 +416,19 @@ config:
   reviewBarrierSafetyMarginMs: 1200000          # 20min. Single global safety margin for the reviewer-latency barrier. When no non-bot review is observed on the current head SHA, the barrier defers `ready` until at least this much time has elapsed since the most recent push. Single-knob design is intentional — no reviewer-login list is carried anywhere.
   fixAttemptsPerSignatureCap: 3                 # Per-(intent, signature) cap on resolve/review fix attempts. On reaching this count for a derived signature, the next attempt halts with `BlockerCategory='flake-cap'`. Backed by the `ship_fix_attempts` table.
   shipForbiddenTargetBranches: ""               # Eligibility gate. Comma-separated list of branch names the bot must refuse to shepherd against (e.g. `main,master,release`). Empty (default) imposes no branch restriction beyond the standard owner/fork/state checks.
+
+  # --- 14. Scheduled actions + review-learnings (upstream #159, #160, #161, #162) ---
+  # Scheduled actions: scheduler walks each installation's repos on a cron,
+  # fetches `.github-app.yaml` from the default branch, and enqueues any action
+  # whose cron slot is due. Server mode only — daemon processes ignore.
+  # Review-learnings: per-repo review-policy directives saved via explicit
+  # `@bot remember` or autonomous capture, replayed into prompts at job time.
+  schedulerEnabled: true                        # Chart default ON (upstream defaults OFF). Master kill-switch for the scheduler. When false the scheduler never starts.
+  schedulerScanIntervalMs: 300000               # Tick cadence (5m). Zod range [60000, 3600000]. Below 60s the per-tick GitHub API cost is not worth it; above 1h cron precision degrades.
+  schedulerAllowAutoMerge: false                # Privilege gate for the `merge_readiness` MCP tool. When true (and an action sets `auto_merge: true`), the tool can merge PRs. Does NOT sandbox the agent from merging by other means: `allowed_tools` is owner-trusted config. Default OFF — opt-in per deployment.
+  schedulerConfigFile: ".github-app.yaml"       # Filename the scheduler reads from each installed repo's default-branch root.
+  reviewLearningsEnabled: true                  # Master kill-switch for review-learnings. When false the orchestrator never loads learnings into job:payload, the prompt block stays empty, and save/delete MCP calls are dropped. Additive feature — safe to leave ON.
+  reviewLearningsRagEnabled: true               # Chart default ON (upstream defaults OFF). Stage 2 pgvector RAG path: orchestrator embeds each directive at save time + each PR's changed-file paths at handleAccept, then runs pgvector top-K against `review_learnings.embedding`. REQUIRES Postgres migration 015 (pgvector extension); if missing or migration not applied, falls back to legacy file-glob filter.
 
 # ─────────────────────────── DAEMON POOLS ─────────────────────────────
 # `daemon:` configures 0..N stateless daemon worker pools. Each pool
