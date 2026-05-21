@@ -89,6 +89,7 @@ data:
   TRIAGE_ENABLED: {{ $c.triageEnabled | quote }}
   TRIAGE_TOOLS_ENABLED: {{ $c.triageToolsEnabled | quote }}
   TRIAGE_MODEL: {{ $c.triageModel | quote }}
+  DISCUSSION_DIGEST_MODEL: {{ $c.digestModel | quote }}
   TRIAGE_CONFIDENCE_THRESHOLD: {{ $c.triageConfidenceThreshold | quote }}
   TRIAGE_MAX_TOKENS: {{ $c.triageMaxTokens | quote }}
   TRIAGE_TIMEOUT_MS: {{ $c.triageTimeoutMs | quote }}
@@ -115,6 +116,9 @@ data:
   REVIEW_RESOLVE_MAX_ITERATIONS: {{ $c.reviewResolveMaxIterations | quote }}
   {{- end }}
 
+  # --- 12a. Prompt cache layout ---
+  PROMPT_CACHE_LAYOUT: {{ $c.promptCacheLayout | quote }}
+
   # --- 13. Ship workflow (PR shepherding to merge-ready) ---
   MAX_WALL_CLOCK_PER_SHIP_RUN: {{ $c.maxWallClockPerShipRun | quote }}
   MAX_SHIP_ITERATIONS: {{ $c.maxShipIterations | quote }}
@@ -125,3 +129,11 @@ data:
   {{- if $c.shipForbiddenTargetBranches }}
   SHIP_FORBIDDEN_TARGET_BRANCHES: {{ $c.shipForbiddenTargetBranches | quote }}
   {{- end }}
+
+  # --- 14. Scheduled actions + review-learnings ---
+  SCHEDULER_ENABLED: {{ $c.schedulerEnabled | quote }}
+  SCHEDULER_SCAN_INTERVAL_MS: {{ int $c.schedulerScanIntervalMs | quote }}
+  SCHEDULER_ALLOW_AUTO_MERGE: {{ $c.schedulerAllowAutoMerge | quote }}
+  SCHEDULER_CONFIG_FILE: {{ $c.schedulerConfigFile | quote }}
+  REVIEW_LEARNINGS_ENABLED: {{ $c.reviewLearningsEnabled | quote }}
+  REVIEW_LEARNINGS_RAG_ENABLED: {{ $c.reviewLearningsRagEnabled | quote }}
