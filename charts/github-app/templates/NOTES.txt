@@ -1,3 +1,23 @@
+UPGRADING to chart 0.17.0 (BREAKING: chart renamed github-app-playground to github-app):
+  The chart and its Docker image were renamed to match the upstream repo rename
+  (image chrisleekr/github-app-playground → chrisleekr/github-app, appVersion → 1.14.0).
+  Because app.kubernetes.io/name derives from the chart name, the selector label
+  changes from github-app-playground to github-app. Deployment and StatefulSet
+  .spec.selector is immutable, so an in-place `helm upgrade` of a release created
+  from the OLD chart FAILS with a "field is immutable" error on the orchestrator
+  Deployment, every daemon-pool Deployment, the Valkey Deployment, and (if using
+  the in-chart Postgres) the Postgres StatefulSet.
+
+  Fresh install: nothing to do. Upgrading an existing release, delete the old
+  workloads first, then upgrade:
+    # In-chart Postgres only, orphan-delete so the PVC and its data survive:
+    kubectl delete statefulset <release>-postgres --cascade=orphan -n <namespace>
+    # Stateless workloads (recreated by the upgrade):
+    kubectl delete deployment -l app.kubernetes.io/instance=<release> -n <namespace>
+    helm upgrade <release> <repo>/github-app
+  The new Postgres StatefulSet reuses the same volumeClaimTemplate PVC name, so
+  data persists across the recreate. External-Postgres users are unaffected.
+
 Upgrading from chart 0.6.x? (chart 0.7.0+ / appVersion 1.3.2)
   Upstream v1.3.0 ships label-dispatched bot workflows, review-handler
   progress streaming, and end-to-end runs that no longer lose progress to
@@ -57,16 +77,16 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   {{- end }}
 {{- end }}
 {{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "github-app-playground.fullname" . }})
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "github-app.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
 {{- else if contains "LoadBalancer" .Values.service.type }}
      NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           Watch with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "github-app-playground.fullname" . }}
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "github-app-playground.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+           Watch with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "github-app.fullname" . }}
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "github-app.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
   echo http://$SERVICE_IP:{{ .Values.service.port }}
 {{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "github-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:{{ .Values.config.port }}
   echo "Visit http://127.0.0.1:8080"
 {{- end }}
@@ -84,10 +104,10 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
    config.ephemeralDaemon.namespace (defaults to the release namespace).
 
 4. Verify the bot is healthy:
-   kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }}"
+   kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app.name" . }}"
 
 5. Tail dispatch / triage decisions:
-   kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
+   kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app.fullname" . }} \
      | jq 'select(.msg | test("dispatch decision|triage"))'
 
 DAEMON POOLS:

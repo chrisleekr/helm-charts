@@ -6,9 +6,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}
+  name: {{ include "github-app.fullname" . }}
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
 rules:
   # src/k8s/ephemeral-daemon-spawner.ts creates bare Pods (restartPolicy: Never)
   # as scale-up daemons, then polls their status until completion/reclaim.

@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}
+  name: {{ include "github-app.fullname" . }}
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "github-app-playground.selectorLabels" . | nindent 6 }}
+      {{- include "github-app.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "github-app-playground.labels" . | nindent 8 }}
+        {{- include "github-app.labels" . | nindent 8 }}
         app.kubernetes.io/component: orchestrator
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
@@ -28,7 +28,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "github-app-playground.serviceAccountName" . }}
+      serviceAccountName: {{ include "github-app.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -41,7 +41,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "github-app-playground.image.orchestrator" (dict "root" .) | quote }}
+          image: {{ include "github-app.image.orchestrator" (dict "root" .) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -52,9 +52,9 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "github-app-playground.fullname" . }}-config
+                name: {{ include "github-app.fullname" . }}-config
             - secretRef:
-                name: {{ include "github-app-playground.secretName" . }}
+                name: {{ include "github-app.secretName" . }}
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}
@@ -83,7 +83,7 @@ spec:
         {{- if .Values.workspace.persistence.enabled }}
         - name: workspace
           persistentVolumeClaim:
-            claimName: {{ include "github-app-playground.workspacePVCName" . }}
+            claimName: {{ include "github-app.workspacePVCName" . }}
         {{- end }}
         {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}

@@ -2,12 +2,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}-workspace
+  name: {{ include "github-app.fullname" . }}-workspace
   annotations:
     # Prevent accidental deletion of workspace data on helm uninstall
     "helm.sh/resource-policy": keep
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
     app.kubernetes.io/component: workspace
 spec:
   accessModes:

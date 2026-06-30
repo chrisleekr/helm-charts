@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}-config
+  name: {{ include "github-app.fullname" . }}-config
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
 data:
   # Non-secret env vars. Each optional key is gated by `ne <val> ""` so empty
   # values become "not set" at the pod level and src/config.ts Zod applies
@@ -80,7 +80,7 @@ data:
   EPHEMERAL_DAEMON_SPAWN_COOLDOWN_MS: {{ $c.ephemeralDaemon.spawnCooldownMs | quote }}
   EPHEMERAL_DAEMON_SPAWN_QUEUE_THRESHOLD: {{ $c.ephemeralDaemon.spawnQueueThreshold | quote }}
   EPHEMERAL_DAEMON_NAMESPACE: {{ default .Release.Namespace $c.ephemeralDaemon.namespace | quote }}
-  DAEMON_IMAGE: {{ default (include "github-app-playground.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image | quote }}
+  DAEMON_IMAGE: {{ default (include "github-app.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image | quote }}
   {{- if $c.ephemeralDaemon.orchestratorPublicUrl }}
   ORCHESTRATOR_PUBLIC_URL: {{ $c.ephemeralDaemon.orchestratorPublicUrl | quote }}
   {{- end }}

@@ -1,5 +1,5 @@
 apiVersion: v2
-name: github-app-playground
+name: github-app
 description: A Helm chart for GitHub App that responds to @chrisleekr-bot
   mentions on PRs and issues, using Claude Agent SDK with MCP servers for GitHub
   interactions.
@@ -17,13 +17,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.16.0
+version: 0.17.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.13.0"
+appVersion: "1.14.0"
 
 kubeVersion: ">= 1.31.0"
 
@@ -39,13 +39,15 @@ keywords:
   - webhook
   - mcp
 
-home: https://github.com/chrisleekr/github-app-playground
+home: https://github.com/chrisleekr/github-app
 sources:
-  - https://github.com/chrisleekr/github-app-playground
+  - https://github.com/chrisleekr/github-app
 
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Renamed chart `github-app-playground` to `github-app` and image repository `chrisleekr/github-app-playground` to `chrisleekr/github-app` (upstream repository rename). Bumped appVersion to 1.14.0 so the default image tag resolves in the new registry, which has no historical tags. WARNING: `app.kubernetes.io/name` derives from the chart name, so the selector label changes; live deployments need a resource recreate (delete old Deployments/StatefulSets), not an in-place upgrade, because selectors are immutable."
     - kind: added
       description: "Bumped appVersion to 1.13.0. Exposes 8 new optional config keys mirroring src/config.ts: `config.digestModel` (group 9, comment-aware workflows digest model), `config.promptCacheLayout` (group 12a, prompt cache layout selector — chart default flipped to `cacheable` to opt into cache hits), and group 14 scheduled-actions tunables (`config.schedulerEnabled` — chart default `true`, `config.schedulerScanIntervalMs`, `config.schedulerAllowAutoMerge`, `config.schedulerConfigFile`, `config.reviewLearningsEnabled`, `config.reviewLearningsRagEnabled` — chart default `true`)."
     - kind: added

@@ -6,16 +6,16 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  name: {{ include "github-app.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
   labels:
-    {{- include "github-app-playground.labels" $ | nindent 4 }}
+    {{- include "github-app.labels" $ | nindent 4 }}
     app.kubernetes.io/component: daemon
     app.kubernetes.io/pool: {{ $poolName }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+    name: {{ include "github-app.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
   minReplicas: {{ $autoscaling.minReplicas | default 1 }}
   maxReplicas: {{ $autoscaling.maxReplicas | default 5 }}
   metrics:

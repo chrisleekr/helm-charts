@@ -6,9 +6,9 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  name: {{ include "github-app.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
   labels:
-    {{- include "github-app-playground.labels" $ | nindent 4 }}
+    {{- include "github-app.labels" $ | nindent 4 }}
     app.kubernetes.io/component: daemon
     app.kubernetes.io/pool: {{ $poolName }}
 spec:
@@ -21,7 +21,7 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "github-app-playground.daemon.selectorLabels" (dict "root" $ "poolName" $poolName) | nindent 6 }}
+      {{- include "github-app.daemon.selectorLabels" (dict "root" $ "poolName" $poolName) | nindent 6 }}
 {{- end }}
 {{- end }}
 {{- end }}
