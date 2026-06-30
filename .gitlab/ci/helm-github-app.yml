@@ -10,9 +10,9 @@ test-github-app-helm:
     - helm template ./charts/github-app > ./template-github-app.yaml
     # Also render the bedrock provider path to catch conditional template issues
     - helm template ./charts/github-app
-        --set app.claudeProvider=bedrock
-        --set app.awsRegion=us-east-1
-        --set app.claudeModel=us.anthropic.claude-sonnet-4-5-v1:0
+        --set config.provider=bedrock
+        --set config.awsRegion=us-east-1
+        --set config.model=us.anthropic.claude-sonnet-4-5-v1:0
         > ./template-github-app-bedrock.yaml
     - helm lint ./charts/github-app
   artifacts:
