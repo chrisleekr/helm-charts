@@ -8,13 +8,13 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}
+  name: {{ include "github-app.fullname" . }}
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      {{- include "github-app-playground.selectorLabels" . | nindent 6 }}
+      {{- include "github-app.selectorLabels" . | nindent 6 }}
   {{- if ne .Values.podDisruptionBudget.minAvailable nil }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
   {{- end }}

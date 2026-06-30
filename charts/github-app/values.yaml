@@ -1,4 +1,4 @@
-# Default values for github-app-playground.
+# Default values for github-app.
 # This is a YAML-formatted file. Declare variables to be passed into your templates.
 #
 # Commenting rule: every non-obvious parameter has one short line that names the
@@ -14,7 +14,7 @@ replicaCount: 1
 #   <repo>:<tag>-orchestrator  webhook Deployment
 #   <repo>:<tag>-daemon        daemon pool Deployments + ephemeral daemon Pods
 image:
-  repository: chrisleekr/github-app-playground
+  repository: chrisleekr/github-app
   pullPolicy: IfNotPresent
   orchestrator:
     tag: ""                                     # Leave empty to use "{{ .Chart.AppVersion }}-orchestrator".
@@ -448,7 +448,7 @@ daemon:
   serviceAccount:
     name: ""                           # empty → inherits orchestrator SA
 
-  # Daemon-runtime defaults sourced from github-app-playground/.env.example.
+  # Daemon-runtime defaults sourced from github-app/.env.example.
   # Each pool can override any key under its own `config:` block.
   config:
     heartbeatIntervalMs: 30000         # HEARTBEAT_INTERVAL_MS

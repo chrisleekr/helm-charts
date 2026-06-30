@@ -1,3 +1,41 @@
+UPGRADING to chart 0.17.0 (BREAKING: chart renamed github-app-playground to github-app):
+  The chart and its Docker image were renamed to match the upstream repo rename
+  (image chrisleekr/github-app-playground → chrisleekr/github-app, appVersion → 1.14.0).
+  Because app.kubernetes.io/name derives from the chart name, the selector label
+  changes from github-app-playground to github-app. Deployment and StatefulSet
+  .spec.selector is immutable, so an in-place `helm upgrade` of a release created
+  from the OLD chart FAILS with a "field is immutable" error on the orchestrator
+  Deployment, every daemon-pool Deployment, the Valkey Deployment, and (if using
+  the in-chart Postgres) the Postgres StatefulSet.
+
+  Fresh install: nothing to do.
+
+  Upgrading an existing release. Generated Secret and PVC names come from the
+  RELEASE name (the fullname helper), NOT the chart name, so your migration risk
+  depends on whether you also rename the Helm release:
+
+  Path A, keep the release name (recommended, least risk). fullname is unchanged,
+  so every generated Secret and PVC keeps its name and data. Only the selector
+  recreate is needed. Orphan-delete the in-chart Postgres StatefulSet so its PVC
+  survives, then recreate the stateless workloads:
+    kubectl delete statefulset <release>-postgres --cascade=orphan -n <namespace>
+    kubectl delete deployment -l app.kubernetes.io/instance=<release> -n <namespace>
+    helm upgrade <release> <repo>/github-app
+  The new Postgres StatefulSet reuses the same volumeClaimTemplate PVC, so data
+  persists. External-Postgres/Valkey users only need this step.
+
+  Path B, also rename the release (clean naming, migrate state explicitly).
+  fullname changes, so generated Secrets and PVCs get NEW names. Without action
+  the chart generates a NEW Postgres/Valkey password (breaking auth against the
+  retained PGDATA) and binds fresh empty workspace/Valkey PVCs, orphaning the old
+  ones. Before upgrading, pin state to the old release's resources:
+    --set postgres.auth.existingSecret=<old-release>-postgres-secret
+    --set valkey.auth.existingSecret=<old-release>-valkey-secret
+    --set workspace.persistence.existingClaim=<old-release>-workspace
+  In-chart Postgres/Valkey DATA PVCs come from StatefulSet/Deployment claim names
+  and are non-trivial to re-point under a new release name; prefer Path A unless
+  you are prepared to migrate volumes manually.
+
 Upgrading from chart 0.6.x? (chart 0.7.0+ / appVersion 1.3.2)
   Upstream v1.3.0 ships label-dispatched bot workflows, review-handler
   progress streaming, and end-to-end runs that no longer lose progress to
@@ -57,16 +95,16 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   {{- end }}
 {{- end }}
 {{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "github-app-playground.fullname" . }})
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "github-app.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
 {{- else if contains "LoadBalancer" .Values.service.type }}
      NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           Watch with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "github-app-playground.fullname" . }}
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "github-app-playground.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+           Watch with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "github-app.fullname" . }}
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "github-app.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
   echo http://$SERVICE_IP:{{ .Values.service.port }}
 {{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "github-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:{{ .Values.config.port }}
   echo "Visit http://127.0.0.1:8080"
 {{- end }}
@@ -84,10 +122,10 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
    config.ephemeralDaemon.namespace (defaults to the release namespace).
 
 4. Verify the bot is healthy:
-   kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app-playground.name" . }}"
+   kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app.name" . }}"
 
 5. Tail dispatch / triage decisions:
-   kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app-playground.fullname" . }} \
+   kubectl --namespace {{ .Release.Namespace }} logs -f deploy/{{ include "github-app.fullname" . }} \
      | jq 'select(.msg | test("dispatch decision|triage"))'
 
 DAEMON POOLS:

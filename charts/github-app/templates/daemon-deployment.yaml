@@ -36,9 +36,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
+  name: {{ include "github-app.daemon.fullname" (dict "root" $ "poolName" $poolName) }}
   labels:
-    {{- include "github-app-playground.labels" $ | nindent 4 }}
+    {{- include "github-app.labels" $ | nindent 4 }}
     app.kubernetes.io/component: daemon
     app.kubernetes.io/pool: {{ $poolName }}
 spec:
@@ -48,7 +48,7 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "github-app-playground.daemon.selectorLabels" (dict "root" $ "poolName" $poolName) | nindent 6 }}
+      {{- include "github-app.daemon.selectorLabels" (dict "root" $ "poolName" $poolName) | nindent 6 }}
   template:
     metadata:
       {{- with $pool.podAnnotations }}
@@ -56,7 +56,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "github-app-playground.labels" $ | nindent 8 }}
+        {{- include "github-app.labels" $ | nindent 8 }}
         app.kubernetes.io/component: daemon
         app.kubernetes.io/pool: {{ $poolName }}
         {{- with $pool.podLabels }}
@@ -67,7 +67,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "github-app-playground.daemon.serviceAccountName" (dict "root" $ "pool" $pool) }}
+      serviceAccountName: {{ include "github-app.daemon.serviceAccountName" (dict "root" $ "pool" $pool) }}
       {{- /* Coerce every supplementalGroup entry to int so mixed string/int
              operator input does not defeat uniq and still renders as a
              homogeneous int64 list the Kubernetes API accepts. */}}
@@ -97,50 +97,50 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- $poolImg := $pool.image | default dict }}
-          image: {{ include "github-app-playground.image.daemon" (dict "root" $ "repoOverride" $poolImg.repository "tagOverride" $poolImg.tag) | quote }}
+          image: {{ include "github-app.image.daemon" (dict "root" $ "repoOverride" $poolImg.repository "tagOverride" $poolImg.tag) | quote }}
           imagePullPolicy: {{ $poolImg.pullPolicy | default $.Values.image.pullPolicy }}
           command: ["bun", "run", "dist/daemon/main.js"]
           envFrom:
             - secretRef:
-                name: {{ include "github-app-playground.secretName" $ }}
+                name: {{ include "github-app.secretName" $ }}
           env:
             - name: ORCHESTRATOR_URL
-              value: {{ include "github-app-playground.daemon.orchestratorUrl" (dict "root" $ "pool" $pool) | quote }}
+              value: {{ include "github-app.daemon.orchestratorUrl" (dict "root" $ "pool" $pool) | quote }}
             # Shared config keys sourced from the orchestrator ConfigMap
             - name: CLAUDE_PROVIDER
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: CLAUDE_PROVIDER
                   optional: true
             - name: CLAUDE_MODEL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: CLAUDE_MODEL
                   optional: true
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: LOG_LEVEL
                   optional: true
             - name: NODE_ENV
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: NODE_ENV
                   optional: true
             - name: CLONE_BASE_DIR
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: CLONE_BASE_DIR
                   optional: true
             - name: AGENT_TIMEOUT_MS
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: AGENT_TIMEOUT_MS
                   optional: true
             # Required by the daemon's config validator when CLAUDE_CODE_OAUTH_TOKEN
@@ -150,7 +150,7 @@ spec:
             - name: ALLOWED_OWNERS
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "github-app-playground.fullname" $ }}-config
+                  name: {{ include "github-app.fullname" $ }}-config
                   key: ALLOWED_OWNERS
                   optional: true
             # Daemon-only knobs: pool override → cross-pool daemon.config default
@@ -279,7 +279,7 @@ spec:
         - name: dind-graph
           {{- if eq $dindStorageType "pvc" }}
           persistentVolumeClaim:
-            claimName: {{ include "github-app-playground.daemon.fullname" (dict "root" $ "poolName" $poolName) }}-dind
+            claimName: {{ include "github-app.daemon.fullname" (dict "root" $ "poolName" $poolName) }}-dind
           {{- else }}
           emptyDir:
             sizeLimit: {{ $dindSizeLimit }}

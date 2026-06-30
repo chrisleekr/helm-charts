@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}-valkey
+  name: {{ include "github-app.fullname" . }}-valkey
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
     app.kubernetes.io/component: valkey
 spec:
   replicas: {{ .Values.valkey.replicaCount }}
   selector:
     matchLabels:
-      {{- include "github-app-playground.selectorLabels" . | nindent 6 }}
+      {{- include "github-app.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: valkey
   template:
     metadata:
       labels:
-        {{- include "github-app-playground.labels" . | nindent 8 }}
+        {{- include "github-app.labels" . | nindent 8 }}
         app.kubernetes.io/component: valkey
     spec:
       {{- with .Values.valkey.podSecurityContext }}
@@ -45,7 +45,7 @@ spec:
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "github-app-playground.valkeySecretName" . }}
+                  name: {{ include "github-app.valkeySecretName" . }}
                   key: password
           {{- end }}
           {{- if .Values.valkey.persistence.enabled }}
@@ -77,7 +77,7 @@ spec:
       volumes:
         - name: valkey-data
           persistentVolumeClaim:
-            claimName: {{ include "github-app-playground.fullname" . }}-valkey-pvc
+            claimName: {{ include "github-app.fullname" . }}-valkey-pvc
       {{- end }}
       {{- with .Values.valkey.nodeSelector }}
       nodeSelector:

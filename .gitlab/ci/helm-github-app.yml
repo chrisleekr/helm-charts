@@ -1,25 +1,25 @@
-# GitHub App Playground Jobs
-test-github-app-playground-helm:
+# GitHub App Jobs
+test-github-app-helm:
   stage: testing
   image: alpine/helm:3.20.0
   interruptible: true
   rules:
     - changes:
-        - charts/github-app-playground/**/*
+        - charts/github-app/**/*
   script:
-    - helm template ./charts/github-app-playground > ./template-github-app-playground.yaml
+    - helm template ./charts/github-app > ./template-github-app.yaml
     # Also render the bedrock provider path to catch conditional template issues
-    - helm template ./charts/github-app-playground
-        --set app.claudeProvider=bedrock
-        --set app.awsRegion=us-east-1
-        --set app.claudeModel=us.anthropic.claude-sonnet-4-5-v1:0
-        > ./template-github-app-playground-bedrock.yaml
-    - helm lint ./charts/github-app-playground
+    - helm template ./charts/github-app
+        --set config.provider=bedrock
+        --set config.awsRegion=us-east-1
+        --set config.model=us.anthropic.claude-sonnet-4-5-v1:0
+        > ./template-github-app-bedrock.yaml
+    - helm lint ./charts/github-app
   artifacts:
     paths:
-      - ./template-github-app-playground.yaml
+      - ./template-github-app.yaml
 
-publish-github-app-playground-helm-dev:
+publish-github-app-helm-dev:
   stage: build development
   image: alpine/helm:3.20.0
   interruptible: true
@@ -27,22 +27,22 @@ publish-github-app-playground-helm-dev:
     # - if: $CI_COMMIT_BRANCH != "main"
     - if: $CI_COMMIT_BRANCH != ""
       changes:
-        - charts/github-app-playground/**/*
+        - charts/github-app/**/*
   before_script:
     - helm plugin install https://github.com/chartmuseum/helm-push.git --version v0.11.1
     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
   script:
     - |
-      VERSION=$(yq e '.version' ./charts/github-app-playground/Chart.yaml)
-      helm cm-push ./charts/github-app-playground --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
+      VERSION=$(yq e '.version' ./charts/github-app/Chart.yaml)
+      helm cm-push ./charts/github-app --version="${VERSION}-dev-${CI_COMMIT_SHORT_SHA}" gitlab
 
-# bump-github-app-playground-helm-version:
+# bump-github-app-helm-version:
 #   stage: bump production
 #   image: node:lts-alpine
 #   rules:
 #     - if: $CI_COMMIT_BRANCH == "main"
 #       changes:
-#         - charts/github-app-playground/**/*
+#         - charts/github-app/**/*
 #   interruptible: true
 #   before_script:
 #     - apk update
@@ -50,28 +50,28 @@ publish-github-app-playground-helm-dev:
 #     - npm install -g semver
 #   script:
 #     - |
-#       VERSION=$(yq e '.version' ./charts/github-app-playground/Chart.yaml)
+#       VERSION=$(yq e '.version' ./charts/github-app/Chart.yaml)
 #       VERSION=$(semver -i patch $VERSION)
-#       yq e -i '.version = "'${VERSION}'"' ./charts/github-app-playground/Chart.yaml
+#       yq e -i '.version = "'${VERSION}'"' ./charts/github-app/Chart.yaml
 
 #       git remote set-url origin https://gitlab-ci-token:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}.git
 #       git config --global user.email "$GITLAB_USER_EMAIL"
 #       git config --global user.name "$GITLAB_USER_NAME"
 #       git pull origin main
-#       git commit -am "bump: github-app-playground helm chart version to ${VERSION} [skip ci]"
+#       git commit -am "bump: github-app helm chart version to ${VERSION} [skip ci]"
 #       git push origin HEAD:"${CI_COMMIT_REF_NAME}"
 
-# publish-github-app-playground-helm:
+# publish-github-app-helm:
 #   stage: build production
 #   image: alpine/helm:3.20.0
 #   dependencies:
-#     - bump-github-app-playground-helm-version
+#     - bump-github-app-helm-version
 #   rules:
 #     - if: $CI_COMMIT_BRANCH == "main"
 #       changes:
-#         - charts/github-app-playground/**/*
+#         - charts/github-app/**/*
 #   before_script:
 #     - helm plugin install https://github.com/chartmuseum/helm-push.git --version v0.11.1
 #     - helm repo add --username "gitlab-ci-token" --password "${CI_JOB_TOKEN}" gitlab "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable"
 #   script:
-#     - helm cm-push ./charts/github-app-playground gitlab
+#     - helm cm-push ./charts/github-app gitlab

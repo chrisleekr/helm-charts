@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "github-app-playground.name" -}}
+{{- define "github-app.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "github-app-playground.fullname" -}}
+{{- define "github-app.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "github-app-playground.chart" -}}
+{{- define "github-app.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "github-app-playground.labels" -}}
-helm.sh/chart: {{ include "github-app-playground.chart" . }}
-{{ include "github-app-playground.selectorLabels" . }}
+{{- define "github-app.labels" -}}
+helm.sh/chart: {{ include "github-app.chart" . }}
+{{ include "github-app.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "github-app-playground.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "github-app-playground.name" . }}
+{{- define "github-app.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "github-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "github-app-playground.serviceAccountName" -}}
+{{- define "github-app.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "github-app-playground.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "github-app.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
@@ -65,41 +65,41 @@ Create the name of the service account to use
 Name of the Secret holding app credentials. Uses secrets.existingSecret when set,
 otherwise the chart-managed name <fullname>-secret.
 */}}
-{{- define "github-app-playground.secretName" -}}
+{{- define "github-app.secretName" -}}
 {{- if .Values.secrets.existingSecret }}
 {{- .Values.secrets.existingSecret }}
 {{- else }}
-{{- printf "%s-secret" (include "github-app-playground.fullname" .) }}
+{{- printf "%s-secret" (include "github-app.fullname" .) }}
 {{- end }}
 {{- end }}
 
 {{/*
 Workspace PVC name. Uses existingClaim when set, otherwise <fullname>-workspace.
 */}}
-{{- define "github-app-playground.workspacePVCName" -}}
+{{- define "github-app.workspacePVCName" -}}
 {{- if .Values.workspace.persistence.existingClaim }}
 {{- .Values.workspace.persistence.existingClaim }}
 {{- else }}
-{{- printf "%s-workspace" (include "github-app-playground.fullname" .) }}
+{{- printf "%s-workspace" (include "github-app.fullname" .) }}
 {{- end }}
 {{- end }}
 
 {{/*
 Postgres / Valkey Secret names (chart-managed, for the stateful sidecars).
 */}}
-{{- define "github-app-playground.postgresSecretName" -}}
+{{- define "github-app.postgresSecretName" -}}
 {{- if .Values.postgres.auth.existingSecret }}
 {{- .Values.postgres.auth.existingSecret }}
 {{- else }}
-{{- printf "%s-postgres-secret" (include "github-app-playground.fullname" .) }}
+{{- printf "%s-postgres-secret" (include "github-app.fullname" .) }}
 {{- end }}
 {{- end }}
 
-{{- define "github-app-playground.valkeySecretName" -}}
+{{- define "github-app.valkeySecretName" -}}
 {{- if .Values.valkey.auth.existingSecret }}
 {{- .Values.valkey.auth.existingSecret }}
 {{- else }}
-{{- printf "%s-valkey-secret" (include "github-app-playground.fullname" .) }}
+{{- printf "%s-valkey-secret" (include "github-app.fullname" .) }}
 {{- end }}
 {{- end }}
 
@@ -111,7 +111,7 @@ Args (dict): key (secret data key, e.g. DAEMON_AUTH_TOKEN),
              root (.).
 Falls back to `randAlphaNum 64` when no existing Secret holds the key.
 */}}
-{{- define "github-app-playground.stableToken" -}}
+{{- define "github-app.stableToken" -}}
 {{- $override := .override -}}
 {{- if $override -}}
 {{- $override -}}
@@ -132,16 +132,16 @@ Reads from whichever Secret the StatefulSet mounts:
   - otherwise                     → chart-managed Secret, stable across upgrades.
 This keeps DATABASE_URL in sync with the password the Postgres pod actually uses.
 */}}
-{{- define "github-app-playground.postgresPassword" -}}
+{{- define "github-app.postgresPassword" -}}
 {{- if .Values.postgres.auth.existingSecret -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace .Values.postgres.auth.existingSecret -}}
 {{- if and $existing (index $existing.data "POSTGRES_PASSWORD") -}}
 {{- index $existing.data "POSTGRES_PASSWORD" | b64dec -}}
 {{- end -}}
 {{- else -}}
-{{- include "github-app-playground.stableToken" (dict
+{{- include "github-app.stableToken" (dict
     "key" "POSTGRES_PASSWORD"
-    "secretName" (printf "%s-postgres-secret" (include "github-app-playground.fullname" .))
+    "secretName" (printf "%s-postgres-secret" (include "github-app.fullname" .))
     "override" ""
     "root" .) -}}
 {{- end -}}
@@ -155,7 +155,7 @@ Reads from whichever Secret the Deployment mounts:
   - valkey.auth.password literal  → use verbatim.
   - otherwise                     → chart-managed Secret, stable across upgrades.
 */}}
-{{- define "github-app-playground.valkeyPassword" -}}
+{{- define "github-app.valkeyPassword" -}}
 {{- if .Values.valkey.auth.existingSecret -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace .Values.valkey.auth.existingSecret -}}
 {{- if and $existing (index $existing.data "password") -}}
@@ -164,9 +164,9 @@ Reads from whichever Secret the Deployment mounts:
 {{- else if .Values.valkey.auth.password -}}
 {{- .Values.valkey.auth.password -}}
 {{- else -}}
-{{- include "github-app-playground.stableToken" (dict
+{{- include "github-app.stableToken" (dict
     "key" "password"
-    "secretName" (printf "%s-valkey-secret" (include "github-app-playground.fullname" .))
+    "secretName" (printf "%s-valkey-secret" (include "github-app.fullname" .))
     "override" ""
     "root" .) -}}
 {{- end -}}
@@ -178,7 +178,7 @@ Order: external.existingSecret (read at render time) → external.password liter
 When external.existingSecret is set and exists, return its password key; else "".
 Callers should only use when composing the DATABASE_URL from external fields.
 */}}
-{{- define "github-app-playground.externalPostgresPassword" -}}
+{{- define "github-app.externalPostgresPassword" -}}
 {{- if .Values.postgres.external.existingSecret -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace .Values.postgres.external.existingSecret -}}
 {{- if and $existing (index $existing.data .Values.postgres.external.existingSecretPasswordKey) -}}
@@ -192,7 +192,7 @@ Callers should only use when composing the DATABASE_URL from external fields.
 {{/*
 Resolved external-Valkey password. Mirrors externalPostgresPassword.
 */}}
-{{- define "github-app-playground.externalValkeyPassword" -}}
+{{- define "github-app.externalValkeyPassword" -}}
 {{- if .Values.valkey.external.auth.existingSecret -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace .Values.valkey.external.auth.existingSecret -}}
 {{- if and $existing (index $existing.data .Values.valkey.external.auth.existingSecretPasswordKey) -}}
@@ -211,14 +211,14 @@ Composed DATABASE_URL. Resolution order (stops at first match):
   4. nothing                      → empty string.
 Consumers: template that emits it skips writing the key when empty.
 */}}
-{{- define "github-app-playground.databaseUrl" -}}
+{{- define "github-app.databaseUrl" -}}
 {{- if .Values.secrets.databaseUrl -}}
 {{- .Values.secrets.databaseUrl -}}
 {{- else if .Values.postgres.enabled -}}
-{{- $pw := include "github-app-playground.postgresPassword" . -}}
-{{- printf "postgresql://%s:%s@%s-postgres:%d/%s?sslmode=disable" .Values.postgres.auth.username $pw (include "github-app-playground.fullname" .) (int .Values.postgres.service.port) .Values.postgres.auth.database -}}
+{{- $pw := include "github-app.postgresPassword" . -}}
+{{- printf "postgresql://%s:%s@%s-postgres:%d/%s?sslmode=disable" .Values.postgres.auth.username $pw (include "github-app.fullname" .) (int .Values.postgres.service.port) .Values.postgres.auth.database -}}
 {{- else if .Values.postgres.external.enabled -}}
-{{- $pw := include "github-app-playground.externalPostgresPassword" . -}}
+{{- $pw := include "github-app.externalPostgresPassword" . -}}
 {{- printf "postgresql://%s:%s@%s:%d/%s?sslmode=%s" .Values.postgres.external.username $pw .Values.postgres.external.host (int .Values.postgres.external.port) .Values.postgres.external.database .Values.postgres.external.sslmode -}}
 {{- end -}}
 {{- end }}
@@ -233,9 +233,9 @@ The pool suffix is preserved by truncating the base to fit, preventing collision
 when a long release name would push two different pool names to the same string.
 Args (dict): root (.), poolName (string).
 */}}
-{{- define "github-app-playground.daemon.fullname" -}}
+{{- define "github-app.daemon.fullname" -}}
 {{- $suffix := printf "-daemon-%s" .poolName -}}
-{{- $base := include "github-app-playground.fullname" .root | trunc (int (sub 63 (len $suffix))) | trimSuffix "-" -}}
+{{- $base := include "github-app.fullname" .root | trunc (int (sub 63 (len $suffix))) | trimSuffix "-" -}}
 {{- printf "%s%s" $base $suffix | trimSuffix "-" -}}
 {{- end }}
 
@@ -243,8 +243,8 @@ Args (dict): root (.), poolName (string).
 Daemon pool selector labels. Extends base selectorLabels with component + pool.
 Args (dict): root (.), poolName (string).
 */}}
-{{- define "github-app-playground.daemon.selectorLabels" -}}
-{{- include "github-app-playground.selectorLabels" .root }}
+{{- define "github-app.daemon.selectorLabels" -}}
+{{- include "github-app.selectorLabels" .root }}
 app.kubernetes.io/component: daemon
 app.kubernetes.io/pool: {{ .poolName }}
 {{- end }}
@@ -254,14 +254,14 @@ Daemon pool service account name.
 Resolution: pool.serviceAccount.name → daemon.serviceAccount.name → orchestrator SA name.
 Args (dict): root (.), pool (pool spec).
 */}}
-{{- define "github-app-playground.daemon.serviceAccountName" -}}
+{{- define "github-app.daemon.serviceAccountName" -}}
 {{- $poolSA := .pool.serviceAccount | default dict }}
 {{- if $poolSA.name }}
 {{- $poolSA.name }}
 {{- else if .root.Values.daemon.serviceAccount.name }}
 {{- .root.Values.daemon.serviceAccount.name }}
 {{- else }}
-{{- include "github-app-playground.serviceAccountName" .root }}
+{{- include "github-app.serviceAccountName" .root }}
 {{- end }}
 {{- end }}
 
@@ -270,33 +270,33 @@ ORCHESTRATOR_URL for a daemon pool.
 Resolution: pool.orchestratorUrl → daemon.orchestratorUrl → ws://<fullname>:<wsPort>/ws.
 Args (dict): root (.), pool (pool spec).
 */}}
-{{- define "github-app-playground.daemon.orchestratorUrl" -}}
+{{- define "github-app.daemon.orchestratorUrl" -}}
 {{- if .pool.orchestratorUrl }}
 {{- .pool.orchestratorUrl }}
 {{- else if .root.Values.daemon.orchestratorUrl }}
 {{- .root.Values.daemon.orchestratorUrl }}
 {{- else }}
-{{- printf "ws://%s:%v/ws" (include "github-app-playground.fullname" .root) .root.Values.config.wsPort }}
+{{- printf "ws://%s:%v/ws" (include "github-app.fullname" .root) .root.Values.config.wsPort }}
 {{- end }}
 {{- end }}
 
 {{/*
 Composed VALKEY_URL. Same resolution order as databaseUrl.
 */}}
-{{- define "github-app-playground.valkeyUrl" -}}
+{{- define "github-app.valkeyUrl" -}}
 {{- if .Values.secrets.valkeyUrl -}}
 {{- .Values.secrets.valkeyUrl -}}
 {{- else if .Values.valkey.enabled -}}
-{{- $host := printf "%s-valkey" (include "github-app-playground.fullname" .) -}}
+{{- $host := printf "%s-valkey" (include "github-app.fullname" .) -}}
 {{- if .Values.valkey.auth.enabled -}}
-{{- $pw := include "github-app-playground.valkeyPassword" . -}}
+{{- $pw := include "github-app.valkeyPassword" . -}}
 {{- printf "redis://default:%s@%s:%d/0" $pw $host (int .Values.valkey.service.port) -}}
 {{- else -}}
 {{- printf "redis://%s:%d/0" $host (int .Values.valkey.service.port) -}}
 {{- end -}}
 {{- else if .Values.valkey.external.enabled -}}
 {{- if .Values.valkey.external.auth.enabled -}}
-{{- $pw := include "github-app-playground.externalValkeyPassword" . -}}
+{{- $pw := include "github-app.externalValkeyPassword" . -}}
 {{- printf "redis://default:%s@%s:%d/%d" $pw .Values.valkey.external.host (int .Values.valkey.external.port) (int .Values.valkey.external.database) -}}
 {{- else -}}
 {{- printf "redis://%s:%d/%d" .Values.valkey.external.host (int .Values.valkey.external.port) (int .Values.valkey.external.database) -}}
@@ -310,7 +310,7 @@ Tag precedence: tagOverride arg → .Values.image.orchestrator.tag → "{{ .Char
 Repository precedence: repoOverride arg → .Values.image.repository.
 Args (dict): root (.), repoOverride (string, optional), tagOverride (string, optional).
 */}}
-{{- define "github-app-playground.image.orchestrator" -}}
+{{- define "github-app.image.orchestrator" -}}
 {{- $args := . -}}
 {{- $repo := $args.repoOverride | default $args.root.Values.image.repository -}}
 {{- $tag := $args.tagOverride | default $args.root.Values.image.orchestrator.tag | default (printf "%s-orchestrator" $args.root.Chart.AppVersion) -}}
@@ -322,7 +322,7 @@ Daemon-variant image (repository:tag). Used by daemon pool Deployments and
 the ephemeral-daemon DAEMON_IMAGE fallback. Precedence mirrors .image.orchestrator.
 Args (dict): root (.), repoOverride (string, optional), tagOverride (string, optional).
 */}}
-{{- define "github-app-playground.image.daemon" -}}
+{{- define "github-app.image.daemon" -}}
 {{- $args := . -}}
 {{- $repo := $args.repoOverride | default $args.root.Values.image.repository -}}
 {{- $tag := $args.tagOverride | default $args.root.Values.image.daemon.tag | default (printf "%s-daemon" $args.root.Chart.AppVersion) -}}

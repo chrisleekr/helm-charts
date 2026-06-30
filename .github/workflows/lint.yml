@@ -24,12 +24,12 @@ jobs:
         # for any chart whose files have changed since the target branch
         run: ct lint --config ct.yaml
 
-      - name: Render github-app-playground feature matrix
+      - name: Render github-app feature matrix
         # Exercises every conditional branch in the chart so a template error
         # in any mode surfaces on the PR, not after publish. Uses only static,
         # literal --set flags — no untrusted input from github.* contexts.
         run: |
-          chart=charts/github-app-playground
+          chart=charts/github-app
           set -euo pipefail
           # 1. Defaults — daemon-only dispatch, no ephemeral spawn knobs overridden.
           helm template "$chart" > /dev/null

@@ -2,21 +2,21 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "github-app-playground.fullname" . }}-postgres
+  name: {{ include "github-app.fullname" . }}-postgres
   labels:
-    {{- include "github-app-playground.labels" . | nindent 4 }}
+    {{- include "github-app.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
   replicas: 1
-  serviceName: {{ include "github-app-playground.fullname" . }}-postgres
+  serviceName: {{ include "github-app.fullname" . }}-postgres
   selector:
     matchLabels:
-      {{- include "github-app-playground.selectorLabels" . | nindent 6 }}
+      {{- include "github-app.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        {{- include "github-app-playground.labels" . | nindent 8 }}
+        {{- include "github-app.labels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
       {{- with .Values.postgres.podSecurityContext }}
@@ -43,7 +43,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "github-app-playground.postgresSecretName" . }}
+                  name: {{ include "github-app.postgresSecretName" . }}
                   key: POSTGRES_PASSWORD
             # pgvector/pgvector:pg17 respects PGDATA; use the subpath convention so
             # the Postgres process owns a clean subdirectory under the PVC.
@@ -113,7 +113,7 @@ spec:
                 change on every chart bump and would create a permanent ArgoCD OutOfSync diff that
                 cannot be reconciled without orphan-deleting the PVC. Pin to selectorLabels (stable
                 name + instance) plus constant extras only. */}}
-          {{- include "github-app-playground.selectorLabels" . | nindent 10 }}
+          {{- include "github-app.selectorLabels" . | nindent 10 }}
           app.kubernetes.io/component: postgres
           app.kubernetes.io/managed-by: {{ .Release.Service }}
       spec:
