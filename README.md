@@ -17,8 +17,10 @@ helm repo add chrisleekr https://chrisleekr.github.io/helm-charts
 
 The `Sync github-app release` workflow (`.github/workflows/github-app-sync.yml`) keeps the
 `github-app` chart aligned with [chrisleekr/github-app](https://github.com/chrisleekr/github-app)
-releases. It is run manually via `workflow_dispatch` (for example after a github-app release),
-and when the chart's `appVersion` is behind it opens a PR that bumps `Chart.yaml`. When the app's
+releases. It fires automatically when github-app cuts a stable release (its release-please
+pipeline sends a `repository_dispatch`), and can also be run manually via `workflow_dispatch`
+(blank input = latest release). When the chart's `appVersion` is behind it opens a PR that bumps
+`Chart.yaml`. When the app's
 env-var surface changed between releases it also runs `claude-code-action` to reconcile
 `values.yaml` / `configmap.yaml` / `secret.yaml`; otherwise the PR is a plain version bump with
 no LLM step. Every sync PR is gated by the `env-parity` check in `lint.yml`, which asserts the

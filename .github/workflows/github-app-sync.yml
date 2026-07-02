@@ -7,14 +7,20 @@
 # added/removed keys; its output is verified by the env-parity gate in lint.yml
 # before merge. If nothing in the env surface changed, no LLM runs at all.
 #
-# Trigger is manual (workflow_dispatch): run it after a github-app release. It
-# reads github-app's public releases API and its published env-contract.json, so
-# no cross-repo token is needed. The only token used is this repo's RELEASE_TOKEN,
-# to open a PR here so lint.yml triggers (a PR opened by the default GITHUB_TOKEN
-# would not).
+# Triggers:
+#   - repository_dispatch (github-app-released): github-app's release-please
+#     pipeline fires this on every stable release, passing the version in
+#     client_payload. This is the normal, automatic path.
+#   - workflow_dispatch: manual re-run / backfill (blank input = latest release).
+# It reads github-app's public releases API and its published env-contract.json,
+# so no cross-repo read token is needed. The only token used is this repo's
+# RELEASE_TOKEN, to open a PR here so lint.yml triggers (a PR opened by the
+# default GITHUB_TOKEN would not).
 name: Sync github-app release
 
 on:
+  repository_dispatch:
+    types: [github-app-released]
   workflow_dispatch:
     inputs:
       version:
@@ -31,8 +37,10 @@ jobs:
   sync:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Belt-and-suspenders on top of workflow_dispatch's own write-access
-    # requirement: only the repo owner runs this. Outsiders cannot trigger it.
+    # Owner-pinned for both triggers: the automated repository_dispatch runs as
+    # the dispatching token's owner (chrisleekr), and workflow_dispatch requires
+    # the owner. A repository_dispatch also needs a token with write access to
+    # this repo, so outsiders can trigger neither path.
     if: github.actor == 'chrisleekr'
     # Least privilege: every write in this job goes through RELEASE_TOKEN (checkout
     # read, the explicit-token push, and gh pr create), so GITHUB_TOKEN needs no
@@ -56,7 +64,10 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }} # reading a public repo needs no PAT
-          FORCE_V: ${{ github.event.inputs.version }}
+          # repository_dispatch carries the version in client_payload; manual runs
+          # use the input. Either is untrusted until the regex check below, which
+          # gates it before it reaches any branch name or git command.
+          FORCE_V: ${{ github.event.inputs.version || github.event.client_payload.version }}
         run: |
           set -euo pipefail
           new="${FORCE_V:-$(gh api repos/chrisleekr/github-app/releases/latest --jq .tag_name | sed 's/^v//')}"
@@ -95,7 +106,13 @@ jobs:
           old_ok=true
           new_ok=true
           curl -fsSL "$base/v$old/env-contract.json" | jq -r '.[].env' | sort > "$old_keys" || old_ok=false
-          curl -fsSL "$base/v$new/env-contract.json" | jq -r '.[].env' | sort > "$new_keys" || new_ok=false
+          # The new tag may be seconds old on the automatic (repository_dispatch)
+          # path; raw.githubusercontent.com can briefly 404 a freshly pushed ref.
+          # Retry so a CDN lag is not misread as "no contract" (which would skip
+          # reconciliation and silently drop real env changes). The old tag is
+          # already published, so it needs no retry.
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            "$base/v$new/env-contract.json" | jq -r '.[].env' | sort > "$new_keys" || new_ok=false
           if [ "$old_ok" = true ] && [ "$new_ok" = true ]; then
             added=$(comm -13 "$old_keys" "$new_keys" | paste -sd, -)
             removed=$(comm -23 "$old_keys" "$new_keys" | paste -sd, -)
@@ -155,8 +172,12 @@ jobs:
           # GitHub writes (the deterministic steps own push + PR via RELEASE_TOKEN).
           # Falling back to the job's read-only GITHUB_TOKEN keeps the PAT out of
           # the agent subprocess entirely, so an injected agent has no PAT to leak.
-          # No allowed_bots needed: the trigger is a human workflow_dispatch, which
-          # passes claude-code-action's checkHumanActor without an allowlist.
+          # No allowed_bots needed: checkHumanActor inspects github.actor. Both
+          # triggers resolve it to a User (chrisleekr) - workflow_dispatch is the
+          # human owner, and repository_dispatch runs as the dispatching token's
+          # owner - so both pass without an allowlist. If that token is ever
+          # swapped for an App/bot identity, add allowed_bots or this step fails
+          # on env-surface-change releases.
           # No git/gh in allowedTools: the agent only edits files. All git is done
           # deterministically by the workflow's own steps, so a model slip or
           # prompt-injection cannot push with the PAT.
