@@ -71,3 +71,17 @@ jobs:
           helm template "$chart" \
             --set rbac.create=false \
             --set config.ephemeralDaemon.namespace=agents > /dev/null
+
+      - name: github-app env-parity self-test
+        # Exercises the gate's comparison logic against a synthetic contract
+        # derived from the chart, so the logic has coverage even while the live
+        # contract at v<appVersion> 404s (bootstrap window) and the gate SKIPs.
+        run: bash scripts/check-env-parity.test.sh
+
+      - name: github-app env-parity gate
+        # Fails when the chart's ConfigMap/Secret env surface drifts from
+        # github-app's env-contract.json (published at v<appVersion>). Catches the
+        # case helm template cannot: a config.ts var the chart never mirrored.
+        # Skips (does not fail) for appVersions predating the contract. jq + yq are
+        # preinstalled on GitHub-hosted ubuntu runners.
+        run: bash scripts/check-env-parity.sh

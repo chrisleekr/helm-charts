@@ -1,0 +1,4 @@
+# Patterns to ignore when packaging the chart.
+# Repo tooling metadata consumed by scripts/check-env-parity.sh, not part of the
+# runtime chart, so keep it out of the published package.
+.env-contract-ignore
