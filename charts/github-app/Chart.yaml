@@ -17,7 +17,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.17.0
+version: 0.17.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
@@ -46,6 +46,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: added
+      description: "CI: added an env-parity gate (`scripts/check-env-parity.sh`, run in `lint.yml`) that fails when the chart's ConfigMap/Secret env surface drifts from github-app's published `env-contract.json`, and a `Sync github-app release` workflow that polls github-app releases and opens a chart-bump PR (reconciling env-var changes via claude-code-action only when the env surface changed). No runtime chart, values, env var, or template surface changes."
     - kind: changed
       description: "Renamed chart `github-app-playground` to `github-app` and image repository `chrisleekr/github-app-playground` to `chrisleekr/github-app` (upstream repository rename). Bumped appVersion to 1.14.0 so the default image tag resolves in the new registry, which has no historical tags. WARNING: `app.kubernetes.io/name` derives from the chart name, so the selector label changes; live deployments need a resource recreate (delete old Deployments/StatefulSets), not an in-place upgrade, because selectors are immutable."
     - kind: added
