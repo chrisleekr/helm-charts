@@ -129,20 +129,78 @@ jobs:
             echo "contract missing (old_ok=$old_ok new_ok=$new_ok); version-only bump"
           fi
 
-      - name: Bump chart (deterministic, always)
+      - name: Bump chart + changelog (deterministic, always)
         if: steps.plan.outputs.changed == 'true'
         env:
+          GH_TOKEN: ${{ github.token }} # reading a public release needs no PAT
           NEW: ${{ steps.plan.outputs.new }}
           ENVCHANGED: ${{ steps.plan.outputs.envchanged }}
         run: |
           set -euo pipefail
-          cur=$(yq '.version' charts/github-app/Chart.yaml | tr -d '"')
+          chart=charts/github-app/Chart.yaml
+          cur=$(yq '.version' "$chart" | tr -d '"')
           IFS=. read -r MA MI PA <<<"$cur"
           # Minor bump when env surface changed (new/removed values), else patch.
           if [ "$ENVCHANGED" = "true" ]; then NEWCHART="$MA.$((MI + 1)).0"; else NEWCHART="$MA.$MI.$((PA + 1))"; fi
+          echo "oldchart=$cur" >> "$GITHUB_OUTPUT"
           echo "newchart=$NEWCHART" >> "$GITHUB_OUTPUT"
           NEW="$NEW" NEWCHART="$NEWCHART" yq -i \
-            '.appVersion = strenv(NEW) | .version = strenv(NEWCHART)' charts/github-app/Chart.yaml
+            '.appVersion = strenv(NEW) | .version = strenv(NEWCHART)' "$chart"
+
+          # Deterministic Artifact Hub changelog from the app's release-please
+          # notes (no LLM). Runs on every sync, including the version-only path,
+          # so the chart never publishes with a stale/empty changelog.
+          rel="$RUNNER_TEMP/app-release.md"
+          # On the automatic path this is the first releases-API hit for $NEW, so a
+          # freshly published tag can briefly 404. Retry, and fail hard on a
+          # definitive failure rather than publish an empty/mislabeled changelog.
+          # `.body // ""` collapses a null body to empty so the fallback applies.
+          for attempt in 1 2 3 4 5; do
+            gh api "repos/chrisleekr/github-app/releases/tags/v$NEW" --jq '.body // ""' > "$rel" && break
+            [ "$attempt" = 5 ] && { echo "::error::could not fetch github-app v$NEW release notes"; exit 1; }
+            sleep 3
+          done
+          # Security bump only on an explicit CVE reference (e.g. "CVEs", "CVE-2026-1").
+          # Matching the bare word "security" over-flags: it appears in routine
+          # feature/hardening notes, which would desensitise the Artifact Hub signal.
+          if grep -qE '\bCVE' "$rel"; then SEC=true; else SEC=false; fi
+          echo "sec=$SEC" >> "$GITHUB_OUTPUT"
+          # Compact one-line highlights: bullet titles with the markdown issue link
+          # reduced to (#NNN) and the commit link dropped.
+          highlights=$(grep -E '^\* ' "$rel" \
+            | sed -E 's/\(\[#([0-9]+)\]\([^)]*\)\)/(#\1)/g; s/ *\(\[[0-9a-f]{7,}\]\([^)]*\)\)//g; s/^\* //' \
+            | awk 'NR>1{printf "; "}{printf "%s", $0}' || true)
+          [ -z "$highlights" ] && highlights="see release notes"
+          desc="Sync to github-app v$NEW: ${highlights}. Release notes: https://github.com/chrisleekr/github-app/releases/tag/v$NEW"
+          [ "$SEC" = true ] && kind=security || kind=changed
+          # Force single line, then escape for a YAML double-quoted scalar (backslash
+          # first, then quote). The single-line invariant is what makes the two-char
+          # escape complete, so strip CR/LF explicitly rather than rely on the pipeline.
+          esc=$(printf '%s' "$desc" | tr -d '\r\n' | sed -E 's/\\/\\\\/g; s/"/\\"/g')
+          ENTRY=$(printf -- '- kind: %s\n  description: "%s"' "$kind" "$esc")
+          # The annotation is a block-scalar string holding a YAML list; prepend
+          # the new entry as text and let yq re-render.
+          ENTRY="$ENTRY" yq -i \
+            '.annotations."artifacthub.io/changes" = strenv(ENTRY) + "\n" + .annotations."artifacthub.io/changes"' "$chart"
+          # Per-version flag: set on security bumps, cleared otherwise so a later
+          # non-security version does not inherit a stale "true".
+          if [ "$SEC" = true ]; then
+            yq -i '.annotations."artifacthub.io/containsSecurityUpdates" = "true"' "$chart"
+          else
+            yq -i 'del(.annotations."artifacthub.io/containsSecurityUpdates")' "$chart"
+          fi
+          # Fail fast on malformed YAML. Both the outer document AND the embedded
+          # artifacthub.io/changes list (the part Artifact Hub actually parses) must
+          # be valid; the outer check alone would miss a broken inner list.
+          yq '.' "$chart" > /dev/null
+          # from_yaml re-parses the annotation's string value as a list, so a broken
+          # embedded entry fails here in CI instead of at Artifact Hub ingestion.
+          if ! yq -e \
+            '.annotations."artifacthub.io/changes" | from_yaml | .[0] | has("kind") and has("description")' \
+            "$chart" > /dev/null 2>&1; then
+            echo "::error::artifacthub.io/changes did not parse as a valid change list"; exit 1
+          fi
+
           git config user.name "chrisleekr-bot"
           git config user.email "chrisleekr-bot@users.noreply.github.com"
           git checkout -b "chore/github-app-$NEW"
@@ -210,10 +268,10 @@ jobs:
             charts/github-app/.env-contract-ignore instead.
             For each REMOVED key: delete it from values.yaml and the templates.
 
-            Then prepend one artifacthub.io/changes entry to Chart.yaml annotations
-            describing this appVersion bump and the env changes, matching the style
-            of the existing entries. Run `helm template charts/github-app` to confirm
-            it renders.
+            The Artifact Hub changelog entry (artifacthub.io/changes) and the
+            version numbers are already set by an earlier deterministic step, do
+            NOT touch them. After your edits, run `helm template charts/github-app`
+            to confirm the chart renders.
 
             Do NOT commit, push, or open a PR: leave every change in the working
             tree. The next workflow step commits and opens the PR. Do NOT change
@@ -225,8 +283,11 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           NEW: ${{ steps.plan.outputs.new }}
+          OLD: ${{ steps.plan.outputs.old }}
           NEWCHART: ${{ steps.bump.outputs.newchart }}
+          OLDCHART: ${{ steps.bump.outputs.oldchart }}
           ENVCHANGED: ${{ steps.plan.outputs.envchanged }}
+          SEC: ${{ steps.bump.outputs.sec }}
           ADDED: ${{ steps.plan.outputs.added }}
           REMOVED: ${{ steps.plan.outputs.removed }}
         run: |
@@ -242,16 +303,28 @@ jobs:
           # for this one push. Avoid printing the token: set the remote URL quietly.
           git push "https://x-access-token:${RELEASE_TOKEN}@github.com/chrisleekr/helm-charts.git" \
             "HEAD:refs/heads/chore/github-app-$NEW"
-          body="Automated sync to github-app v$NEW (chart v$NEWCHART).
 
-          Env surface changed: $ENVCHANGED"
-          if [ "$ENVCHANGED" = "true" ]; then
-            body="$body
-          - added: $ADDED
-          - removed: $REMOVED
-
-          Env keys reconciled by claude-code-action; verify the values.yaml /
-          configmap.yaml / secret.yaml diff and the artifacthub changelog."
-          fi
-          printf '%s\n' "$body" | gh pr create --base main --head "chore/github-app-$NEW" \
-            --title "chore(github-app): sync chart to v$NEW" --body-file -
+          # Build the PR body from the app release notes written by the bump step.
+          # printf owns the templated parts; the release notes are inserted with
+          # cat (not a heredoc) so backticks in the notes are not shell-evaluated.
+          rel="$RUNNER_TEMP/app-release.md"
+          bodyfile="$RUNNER_TEMP/pr-body.md"
+          {
+            printf '## Chart sync: github-app v%s to v%s\n\n' "$OLD" "$NEW"
+            printf '**Chart version:** %s to %s\n' "$OLDCHART" "$NEWCHART"
+            printf '**Image tag (appVersion):** `%s`\n\n' "$NEW"
+            if [ "$SEC" = "true" ]; then
+              printf '> **Contains security updates.** `artifacthub.io/containsSecurityUpdates` is set on this chart version.\n\n'
+            fi
+            if [ "$ENVCHANGED" = "true" ]; then
+              printf '**Env surface changed** (values.yaml / configmap.yaml / secret.yaml reconciled by claude-code-action, review that diff):\n'
+              printf -- '- added: `%s`\n- removed: `%s`\n\n' "$ADDED" "$REMOVED"
+            else
+              printf '**Env surface unchanged**: version-only bump (appVersion + chart version + changelog). No values or template changes.\n\n'
+            fi
+            printf '### Upstream release notes (github-app v%s)\n\n' "$NEW"
+            cat "$rel"
+            printf '\n\n---\nValidated by `lint.yml`: ct lint (version-increment), the helm template matrix, and the env-parity gate against the v%s contract.\n' "$NEW"
+          } > "$bodyfile"
+          gh pr create --base main --head "chore/github-app-$NEW" \
+            --title "chore(github-app): sync chart to v$NEW" --body-file "$bodyfile"
