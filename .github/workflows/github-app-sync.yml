@@ -7,19 +7,18 @@
 # added/removed keys; its output is verified by the env-parity gate in lint.yml
 # before merge. If nothing in the env surface changed, no LLM runs at all.
 #
-# Trigger is a poll inside this repo (no cross-repo token needed): it reads
-# github-app's public releases API and its published env-contract.json. The only
-# token used is this repo's RELEASE_TOKEN, to open a PR here so lint.yml triggers
-# (a PR opened by the default GITHUB_TOKEN would not).
+# Trigger is manual (workflow_dispatch): run it after a github-app release. It
+# reads github-app's public releases API and its published env-contract.json, so
+# no cross-repo token is needed. The only token used is this repo's RELEASE_TOKEN,
+# to open a PR here so lint.yml triggers (a PR opened by the default GITHUB_TOKEN
+# would not).
 name: Sync github-app release
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
       version:
-        description: "Force a specific github-app version to sync (e.g. 1.14.1). Blank = latest release."
+        description: "github-app version to sync (e.g. 1.14.1). Blank = latest release."
         required: false
 
 concurrency:
@@ -32,9 +31,9 @@ jobs:
   sync:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Belt-and-suspenders on top of the write-access requirement: scheduled runs,
-    # or a manual dispatch by the repo owner. Outsiders cannot trigger either.
-    if: github.event_name == 'schedule' || github.actor == 'chrisleekr'
+    # Belt-and-suspenders on top of workflow_dispatch's own write-access
+    # requirement: only the repo owner runs this. Outsiders cannot trigger it.
+    if: github.actor == 'chrisleekr'
     # Least privilege: every write in this job goes through RELEASE_TOKEN (checkout
     # read, the explicit-token push, and gh pr create), so GITHUB_TOKEN needs no
     # write scopes. id-token:write is required by claude-code-action.
@@ -77,7 +76,7 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
           # Idempotency: if a sync branch for this version already exists on the
-          # remote, a PR is already open. Skip so the 6-hourly poll does not churn.
+          # remote, a PR is already open. Skip so a re-run does not churn.
           if git ls-remote --exit-code --heads origin "chore/github-app-$new" >/dev/null 2>&1; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "branch chore/github-app-$new already exists; skipping"
@@ -156,11 +155,8 @@ jobs:
           # GitHub writes (the deterministic steps own push + PR via RELEASE_TOKEN).
           # Falling back to the job's read-only GITHUB_TOKEN keeps the PAT out of
           # the agent subprocess entirely, so an injected agent has no PAT to leak.
-          # Required so claude-code-action's checkHumanActor does not block the
-          # scheduled trigger (upstream #900). Safe here: the only triggers are
-          # schedule + owner workflow_dispatch, so no external/bot actor can drive
-          # this step regardless of the wildcard.
-          allowed_bots: "*"
+          # No allowed_bots needed: the trigger is a human workflow_dispatch, which
+          # passes claude-code-action's checkHumanActor without an allowlist.
           # No git/gh in allowedTools: the agent only edits files. All git is done
           # deterministically by the workflow's own steps, so a model slip or
           # prompt-injection cannot push with the PAT.
