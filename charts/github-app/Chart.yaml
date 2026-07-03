@@ -1,9 +1,6 @@
 apiVersion: v2
 name: github-app
-description: A Helm chart for GitHub App that responds to @chrisleekr-bot
-  mentions on PRs and issues, using Claude Agent SDK with MCP servers for GitHub
-  interactions.
-
+description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
@@ -13,24 +10,19 @@ description: A Helm chart for GitHub App that responds to @chrisleekr-bot
 # a dependency of application charts to inject those utilities and functions into the rendering
 # pipeline. Library charts do not define any templates and therefore cannot be deployed.
 type: application
-
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.17.1
-
+version: 0.17.2
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.14.0"
-
+appVersion: "1.15.0"
 kubeVersion: ">= 1.31.0"
-
 maintainers:
   - name: Chris Lee
     url: https://github.com/chrisleekr
-
 keywords:
   - github-app
   - claude
@@ -38,14 +30,14 @@ keywords:
   - bot
   - webhook
   - mcp
-
 home: https://github.com/chrisleekr/github-app
 sources:
   - https://github.com/chrisleekr/github-app
-
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: security
+      description: "Sync to github-app v1.15.0: add env-var contract + CI gate for helm-charts sync (#258); patch three HIGH CVEs blocking orchestrator Trivy scan (#254). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.15.0"
     - kind: added
       description: "CI: added an env-parity gate (`scripts/check-env-parity.sh`, run in `lint.yml`) that fails when the chart's ConfigMap/Secret env surface drifts from github-app's published `env-contract.json`, and a `Sync github-app release` workflow that polls github-app releases and opens a chart-bump PR (reconciling env-var changes via claude-code-action only when the env surface changed). No runtime chart, values, env var, or template surface changes."
     - kind: changed
@@ -104,3 +96,4 @@ annotations:
       description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
     - kind: changed
       description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
+  artifacthub.io/containsSecurityUpdates: "true"
