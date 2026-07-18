@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "mcp-server-boilerplate.fullname" . }}-valkey
+  name: {{ include "mcp-server-playground.fullname" . }}-valkey
   labels:
-    {{- include "mcp-server-boilerplate.labels" . | nindent 4 }}
+    {{- include "mcp-server-playground.labels" . | nindent 4 }}
     app.kubernetes.io/component: valkey
 spec:
   replicas: {{ .Values.valkey.replicaCount }}
   selector:
     matchLabels:
-      {{- include "mcp-server-boilerplate.selectorLabels" . | nindent 6 }}
+      {{- include "mcp-server-playground.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: valkey
   template:
     metadata:
       labels:
-        {{- include "mcp-server-boilerplate.labels" . | nindent 8 }}
+        {{- include "mcp-server-playground.labels" . | nindent 8 }}
         app.kubernetes.io/component: valkey
     spec:
       {{- with .Values.valkey.podSecurityContext }}
@@ -38,7 +38,7 @@ spec:
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "mcp-server-boilerplate.fullname" . }}-valkey-secret
+                  name: {{ include "mcp-server-playground.fullname" . }}-valkey-secret
                   key: password
           {{- end }}
           {{- if .Values.valkey.persistence.enabled }}
@@ -70,5 +70,5 @@ spec:
       volumes:
         - name: valkey-data
           persistentVolumeClaim:
-            claimName: {{ include "mcp-server-boilerplate.fullname" . }}-valkey-pvc
+            claimName: {{ include "mcp-server-playground.fullname" . }}-valkey-pvc
       {{- end }}

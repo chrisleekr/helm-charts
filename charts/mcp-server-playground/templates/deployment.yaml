@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "mcp-server-boilerplate.fullname" . }}
+  name: {{ include "mcp-server-playground.fullname" . }}
   labels:
-    {{- include "mcp-server-boilerplate.labels" . | nindent 4 }}
+    {{- include "mcp-server-playground.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "mcp-server-boilerplate.selectorLabels" . | nindent 6 }}
+      {{- include "mcp-server-playground.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "mcp-server-boilerplate.labels" . | nindent 8 }}
+        {{- include "mcp-server-playground.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -27,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "mcp-server-boilerplate.serviceAccountName" . }}
+      serviceAccountName: {{ include "mcp-server-playground.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -46,11 +46,11 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "mcp-server-boilerplate.fullname" . }}-config
+                name: {{ include "mcp-server-playground.fullname" . }}-config
             - secretRef:
-                name: {{ include "mcp-server-boilerplate.fullname" . }}-secret
+                name: {{ include "mcp-server-playground.fullname" . }}-secret
             - secretRef:
-                name: {{ include "mcp-server-boilerplate.fullname" . }}-storage-secret
+                name: {{ include "mcp-server-playground.fullname" . }}-storage-secret
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

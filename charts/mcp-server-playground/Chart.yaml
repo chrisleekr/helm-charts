@@ -1,7 +1,6 @@
 apiVersion: v2
-name: mcp-server-boilerplate
+name: mcp-server-playground
 description: A Helm chart for Model Context Protocol (MCP) server boilerplate built with TypeScript and Streamable HTTP transport with an OAuth Proxy for 3rd party authorization servers like Auth0
-
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
@@ -11,12 +10,10 @@ description: A Helm chart for Model Context Protocol (MCP) server boilerplate bu
 # a dependency of application charts to inject those utilities and functions into the rendering
 # pipeline. Library charts do not define any templates and therefore cannot be deployed.
 type: application
-
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.0.2
-
+version: 0.0.3
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -28,12 +25,12 @@ maintainers:
 keywords:
   - mcp
   - server
-  - boilerplate
+  - playground
   - typescript
   - streamable
   - http
   - oauth
   - auth0
-home: https://github.com/chrisleekr/mcp-server-boilerplate
+home: https://github.com/chrisleekr/mcp-server-playground
 sources:
-  - https://github.com/chrisleekr/mcp-server-boilerplate
+  - https://github.com/chrisleekr/mcp-server-playground
