@@ -89,6 +89,96 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: security
+          description: "Sync to github-app v1.16.1: **deps:** pin transitive adm-zip to 0.6.0 for CVE-2026-39244 (#268). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.16.1"
+        - kind: security
+          description: "Sync to github-app v1.15.0: add env-var contract + CI gate for helm-charts sync (#258); patch three HIGH CVEs blocking orchestrator Trivy scan (#254). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.15.0"
+        - kind: added
+          description: "CI: added an env-parity gate (`scripts/check-env-parity.sh`, run in `lint.yml`) that fails when the chart's ConfigMap/Secret env surface drifts from github-app's published `env-contract.json`, and a `Sync github-app release` workflow that polls github-app releases and opens a chart-bump PR (reconciling env-var changes via claude-code-action only when the env surface changed). No runtime chart, values, env var, or template surface changes."
+        - kind: changed
+          description: "Renamed chart `github-app-playground` to `github-app` and image repository `chrisleekr/github-app-playground` to `chrisleekr/github-app` (upstream repository rename). Bumped appVersion to 1.14.0 so the default image tag resolves in the new registry, which has no historical tags. WARNING: `app.kubernetes.io/name` derives from the chart name, so the selector label changes; live deployments need a resource recreate (delete old Deployments/StatefulSets), not an in-place upgrade, because selectors are immutable."
+        - kind: added
+          description: "Bumped appVersion to 1.13.0. Exposes 8 new optional config keys mirroring src/config.ts: `config.digestModel` (group 9, comment-aware workflows digest model), `config.promptCacheLayout` (group 12a, prompt cache layout selector — chart default flipped to `cacheable` to opt into cache hits), and group 14 scheduled-actions tunables (`config.schedulerEnabled` — chart default `true`, `config.schedulerScanIntervalMs`, `config.schedulerAllowAutoMerge`, `config.schedulerConfigFile`, `config.reviewLearningsEnabled`, `config.reviewLearningsRagEnabled` — chart default `true`)."
+        - kind: added
+          description: "Scheduled actions via `.github-app.yaml` (upstream #159): scheduler walks installed repos on a cron and enqueues per-repo declarative actions. Chart default ON via `config.schedulerEnabled: true`; `config.schedulerAllowAutoMerge` left OFF (privilege gate for the `merge_readiness` MCP tool — opt-in per deployment)."
+        - kind: added
+          description: "Persistent review-learnings (upstream #160/#161/#162): per-repo review-policy directives saved via `@bot remember` or autonomous capture, replayed into prompts. Chart default ON via `config.reviewLearningsEnabled: true`. Stage 2 RAG path (`config.reviewLearningsRagEnabled: true`) enabled by chart default — requires Postgres migration 015 (pgvector extension) to be applied; if missing, falls back to legacy file-glob filter."
+        - kind: added
+          description: "Comment-aware structured workflows (upstream #148): LLM digest distills issue/PR comment threads into guidance for structured workflows. Model selected via new `config.digestModel` (default `sonnet-4-6`)."
+        - kind: added
+          description: "Opt-in cacheable system/user prompt split (upstream #135): lifts static prompt scaffolding into `systemPrompt.append` with `excludeDynamicSections: true` so the Anthropic prompt cache hits across jobs. Chart default flipped to `cacheable`. Operators should verify non-zero `cacheReadInputTokens` in executor logs after rollout."
+        - kind: fixed
+          description: "Bumped appVersion to 1.13.0. Webhook subscribes `issue_comment.edited`/`.deleted` (upstream #131) and write-through populates `target_cache` on `issues`/`pull_request` events (upstream #130/#132). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.13.0. Dependency bumps: `@anthropic-ai/bedrock-sdk` ^0.29.0 (upstream #147) and `@anthropic-ai/claude-agent-sdk` ^0.3.0 (upstream #154). Internal updates only — no chart surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.2. Bundles all stdio MCP servers (`github_comment`, `github_inline_comment`, `github_state`, `repo_memory`) and resolves their script paths from any bundle layout via a shared resolver (upstream #125). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: security
+          description: "Bumped appVersion to 1.12.2. Closes a cross-session prompt-injection vector via `repo_memory`: sanitizes attacker-controlled content before it is stored or replayed into prompts, and adds a backfill migration for existing rows (upstream #124). Internal hardening only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.1. Restores per-line inline review comments on PRs by resolving `github_comment` and `github_inline_comment` MCP server scripts via `import.meta.url` so the SDK can spawn them from the cloned-repo workDir, and disallows `ToolSearch` so the model trusts the eager tool list (upstream #123). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.12.0. Exposes 5 new optional config keys mirroring src/config.ts: `config.triageToolsEnabled` (group 10, kill-switch for tool-driven triage classifier) and group 10a chat-thread executor tunables (`config.chatThreadExecuteThreshold`, `config.chatThreadProposalTtlHours`, `config.chatThreadMaxTurns`, `config.chatThreadToolsEnabled`)."
+        - kind: added
+          description: "Tool-driven LLM with a new in-process `github-state` MCP server (upstream #117/#118): triage and chat-thread agents now fetch fresh PR state on demand instead of relying on a snapshot. Internal architecture only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Chat-thread executor (upstream #113): conversational scoped intent path with structured-output chokepoint and OAuth gate fix. Default ON via the new `config.chatThread*` tunables."
+        - kind: added
+          description: "Defense layer 5 (upstream #121): hardens bot against prompt-injection comment attacks. Adds Unicode TAG-block stripping, nonced spotlight tags, and routes every remaining Phase-2 GitHub write path through `safePostToGitHub`. Internal hardening only — no chart values or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.0. Sanitizes attacker-controlled filenames in `formatChangedFiles` (upstream #110). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.0. Reroutes iteration-0 terminal-bad ship verdicts to chat-thread (upstream #119/#120). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.11.1. Tracking-mirror setState is now idempotent via embedded run markers and orphan adoption, eliminating duplicate tracking comments caused by octokit retry on transient 5xx (upstream #109/#111). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.11.0. Resolve workflow now gates handler success on post-fix CI state (upstream #107). Internal logic only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.11.0. Implement workflow now matches PR author by login in PAT mode (upstream #108). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.10.2. Executor drops the `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` flag that was blocking Claude CLI startup (upstream #106). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.10.1. Executor now captures Claude CLI stderr via SDK callback so failures surface in logs instead of being swallowed (upstream #105). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.10.0. Exposes 5 new optional env vars mirroring src/config.ts: `secrets.githubPersonalAccessToken` (group 3, PAT override — single-tenant only, app hard-fails unless `config.allowedOwners` has exactly one owner), `secrets.daemonAuthTokenPrevious` (group 8, rotation-window predecessor for orchestrator-side daemon Bearer auth), and group 10b LLM output-scanner tunables (`config.llmOutputScannerEnabled`, `config.llmOutputScannerModel`, `config.llmOutputScannerTimeoutMs`)."
+        - kind: added
+          description: "Defense layer 4: optional second-pass LLM scan on every agent-generated body before posting to GitHub, catching encoded/obfuscated secrets the regex pass misses (upstream #104). Default ON, fail-open on outage."
+        - kind: added
+          description: "Optional `GITHUB_PERSONAL_ACCESS_TOKEN` override of GitHub App installation token; commit author/committer metadata still pinned to `chrisleekr-bot[bot]` (upstream #104)."
+        - kind: added
+          description: "Rolling-rotation support for `DAEMON_AUTH_TOKEN`: orchestrator accepts EITHER the primary or `DAEMON_AUTH_TOKEN_PREVIOUS` (constant-time) until the rotation window closes (upstream #103)."
+        - kind: changed
+          description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
+        - kind: changed
+          description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
+      artifacthub.io/containsSecurityUpdates: "true"
+    apiVersion: v2
+    appVersion: 1.16.1
+    created: "2026-07-22T12:02:46.902033868Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 73196ab50e205bf6e1ecba67014d6e64b5eb8d213dd85c55b70c685633fec21d
+    home: https://github.com/chrisleekr/github-app
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app
+    sources:
+    - https://github.com/chrisleekr/github-app
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-0.18.0/github-app-0.18.0.tgz
+    version: 0.18.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: security
           description: "Sync to github-app v1.15.0: add env-var contract + CI gate for helm-charts sync (#258); patch three HIGH CVEs blocking orchestrator Trivy scan (#254). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.15.0"
         - kind: added
           description: "CI: added an env-parity gate (`scripts/check-env-parity.sh`, run in `lint.yml`) that fails when the chart's ConfigMap/Secret env surface drifts from github-app's published `env-contract.json`, and a `Sync github-app release` workflow that polls github-app releases and opens a chart-bump PR (reconciling env-var changes via claude-code-action only when the env surface changed). No runtime chart, values, env var, or template surface changes."
@@ -1717,4 +1807,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-07-22T09:37:48.275228216Z"
+generated: "2026-07-22T12:02:46.902128379Z"
