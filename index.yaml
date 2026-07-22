@@ -1689,6 +1689,33 @@ entries:
   mcp-server-playground:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-07-22T12:06:09.310044583Z"
+    description: A Helm chart for Model Context Protocol (MCP) server boilerplate
+      built with TypeScript and Streamable HTTP transport with an OAuth Proxy for
+      3rd party authorization servers like Auth0
+    digest: a0e2500ac4d5e0ddf941e22ff6c3858e9fa3aebc4f1162c7391e925aa7f122a3
+    home: https://github.com/chrisleekr/mcp-server-playground
+    keywords:
+    - mcp
+    - server
+    - playground
+    - typescript
+    - streamable
+    - http
+    - oauth
+    - auth0
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: mcp-server-playground
+    sources:
+    - https://github.com/chrisleekr/mcp-server-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-playground-0.0.5/mcp-server-playground-0.0.5.tgz
+    version: 0.0.5
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2026-07-22T09:37:48.275125604Z"
     description: A Helm chart for Model Context Protocol (MCP) server boilerplate
       built with TypeScript and Streamable HTTP transport with an OAuth Proxy for
@@ -1807,4 +1834,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-07-22T12:02:46.902128379Z"
+generated: "2026-07-22T12:06:09.310186339Z"
