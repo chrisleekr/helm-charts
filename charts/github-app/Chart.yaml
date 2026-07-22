@@ -13,12 +13,12 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.17.2
+version: 0.18.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.15.0"
+appVersion: "1.16.1"
 kubeVersion: ">= 1.31.0"
 maintainers:
   - name: Chris Lee
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: security
+      description: "Sync to github-app v1.16.1: **deps:** pin transitive adm-zip to 0.6.0 for CVE-2026-39244 (#268). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.16.1"
     - kind: security
       description: "Sync to github-app v1.15.0: add env-var contract + CI gate for helm-charts sync (#258); patch three HIGH CVEs blocking orchestrator Trivy scan (#254). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.15.0"
     - kind: added
