@@ -185,6 +185,7 @@ valkey:
     enabled: true
     # If empty, then it will be auto-generated.
     password: ""
+    # Name of an existing secret holding key `password`. Takes precedence over `password`.
     existingSecret: ""
 
   # Valkey persistence

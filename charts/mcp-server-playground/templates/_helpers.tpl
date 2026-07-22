@@ -83,8 +83,19 @@ Generate JWT secret if empty.
 Generate Valkey password if empty.
   If secret exists, then use the existing value to avoid re-generating it.
 */}}
+{{/*
+  Precedence: existingSecret > password > generated. existingSecret must win over
+  password so the storage URL and the Valkey Deployment (which reads existingSecret)
+  agree on one password. When existingSecret is unset, keep password-over-generated
+  so an updated password value is not shadowed by the sticky generated secret.
+*/}}
 {{- define "mcp-server-playground.valkeyPassword" -}}
-{{- if .Values.valkey.auth.password }}
+{{- if .Values.valkey.auth.existingSecret }}
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace .Values.valkey.auth.existingSecret }}
+{{- if $existingSecret }}
+{{- $existingSecret.data.password | b64dec }}
+{{- end }}
+{{- else if .Values.valkey.auth.password }}
 {{- .Values.valkey.auth.password }}
 {{- else }}
 {{- $secretName := printf "%s-valkey-secret" (include "mcp-server-playground.fullname" .) }}
