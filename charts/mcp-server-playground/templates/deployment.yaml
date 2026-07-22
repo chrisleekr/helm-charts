@@ -48,7 +48,7 @@ spec:
             - configMapRef:
                 name: {{ include "mcp-server-playground.fullname" . }}-config
             - secretRef:
-                name: {{ include "mcp-server-playground.fullname" . }}-secret
+                name: {{ .Values.mcpServer.secrets.existingSecret | default (printf "%s-secret" (include "mcp-server-playground.fullname" .)) }}
             - secretRef:
                 name: {{ include "mcp-server-playground.fullname" . }}-storage-secret
           {{- with .Values.livenessProbe }}
