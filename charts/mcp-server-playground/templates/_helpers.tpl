@@ -87,7 +87,8 @@ Generate Valkey password if empty.
 {{- if .Values.valkey.auth.password }}
 {{- .Values.valkey.auth.password }}
 {{- else }}
-{{- $secretName := printf "%s-valkey-secret" (include "mcp-server-playground.fullname" .) }}
+{{- /* Read from the user-supplied secret when set, else the chart-generated one. */}}
+{{- $secretName := .Values.valkey.auth.existingSecret | default (printf "%s-valkey-secret" (include "mcp-server-playground.fullname" .)) }}
 {{- $existingSecret := lookup "v1" "Secret" .Release.Namespace $secretName }}
 {{- if $existingSecret }}
 {{- $existingSecret.data.password | b64dec }}

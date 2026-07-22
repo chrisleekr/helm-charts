@@ -38,7 +38,7 @@ spec:
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "mcp-server-playground.fullname" . }}-valkey-secret
+                  name: {{ .Values.valkey.auth.existingSecret | default (printf "%s-valkey-secret" (include "mcp-server-playground.fullname" .)) }}
                   key: password
           {{- end }}
           {{- if .Values.valkey.persistence.enabled }}
