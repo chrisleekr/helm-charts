@@ -1,0 +1,5 @@
+# Values for chart-testing (ct) install and CI `helm template` / `helm lint`.
+# Supplies the required initial dashboard password so rendering and installation
+# succeed in CI without a real secret. Not for production use.
+auth:
+  initialPassword: "ci-test-password-do-not-use"

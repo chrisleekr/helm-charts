@@ -1,0 +1,179 @@
+# OmniRoute - self-hostable AI gateway.
+# Single stateful container backed by SQLite on a PVC at /app/data.
+# Reference: https://github.com/diegosouzapw/OmniRoute
+
+# HARD CONSTRAINT: OmniRoute persists all state in SQLite, a single-writer store.
+# Never set replicaCount > 1 and never change the Deployment strategy away from
+# Recreate. Two pods on the same PVC would corrupt the database. There is no HPA
+# for the same reason.
+replicaCount: 1
+
+image:
+  repository: diegosouzapw/omniroute
+  # Lean flavor by default. For web-cookie providers (gemini-web, claude-web,
+  # claude-turnstile) use the "-web" flavor, e.g. tag: "3.8.49-web".
+  tag: "" # Defaults to the chart appVersion.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Authentication secrets.
+# Prefer existingSecret in production / GitOps. It MUST contain the keys
+# JWT_SECRET, API_KEY_SECRET, INITIAL_PASSWORD, and optionally
+# STORAGE_ENCRYPTION_KEY - they are injected verbatim as environment variables.
+#
+# IMPORTANT (GitOps): chart-managed generation relies on a cluster `lookup`,
+# which only works during a live `helm install/upgrade` (Terraform helm_release,
+# helm CLI). Client-side rendering - `helm template`, or ArgoCD/Flux without
+# server-side apply - cannot see the existing Secret and mints NEW JWT_SECRET /
+# API_KEY_SECRET on every sync, making stored provider keys unreadable. For those
+# consumers, always set existingSecret.
+#
+# When existingSecret is empty the chart manages the Secret itself with this
+# precedence per key: explicit value below > value already in the cluster
+# (persisted) > generated / required:
+#   - JWT_SECRET / API_KEY_SECRET: generated once, then persisted across upgrades
+#     via a cluster lookup so they are NEVER rotated. Rotating API_KEY_SECRET makes
+#     every stored provider API key unreadable.
+#   - INITIAL_PASSWORD: required (no default). Only used on first boot; change it
+#     from the dashboard afterwards.
+#   - STORAGE_ENCRYPTION_KEY: blank disables DB encryption (OmniRoute default),
+#     so provider API keys are stored in PLAINTEXT on the PVC. Set it for
+#     production (and rely on PVC/backup encryption at rest). Rotating it later
+#     makes an already-encrypted database unreadable.
+auth:
+  existingSecret: ""
+  jwtSecret: "" # blank => generated + persisted
+  apiKeySecret: "" # blank => generated + persisted
+  initialPassword: "" # REQUIRED when existingSecret is empty
+  storageEncryptionKey: "" # blank => DB encryption disabled
+
+# Non-secret environment, rendered into a ConfigMap and injected via envFrom.
+config:
+  PORT: "20128"
+  DATA_DIR: /app/data
+  NODE_ENV: production
+  HOSTNAME: 0.0.0.0
+  # Node heap ceiling in MB (OmniRoute default 512). Kept in lockstep with
+  # resources.limits.memory below - the limit must exceed heap + Node overhead
+  # or the pod OOMs. Raise both together for heavy workloads (compression,
+  # vector memory). OmniRoute's docs list 1 GB RAM as the minimum machine spec.
+  OMNIROUTE_MEMORY_MB: "384"
+  # SECURITY: "false" lets any client that can reach the proxy spend the
+  # configured provider keys. When ingress.enabled=true, front OmniRoute with
+  # oauth2-proxy / forward-auth, or set this to "true" to require an API key on
+  # /v1 calls.
+  REQUIRE_API_KEY: "false"
+# Arbitrary extra non-secret env keys, merged over config above.
+extraConfig: {}
+
+# External Redis for the rate limiter (optional). Blank uses OmniRoute's built-in
+# in-memory limiter. Set e.g. redis://redis:6379 to enable. Injected as REDIS_URL.
+# NOTE: this renders into a ConfigMap (non-secret). Use only a credential-less
+# URL here; for an authenticated Redis, inject REDIS_URL via `env` + secretKeyRef.
+redis:
+  url: ""
+
+# Extra environment variables passed straight to the container. Use this for
+# advanced / optional secrets (e.g. OMNIROUTE_WS_BRIDGE_SECRET) via secretKeyRef.
+env: []
+# - name: SOME_VAR
+#   value: "some-value"
+# - name: OMNIROUTE_WS_BRIDGE_SECRET
+#   valueFrom:
+#     secretKeyRef:
+#       name: my-secret
+#       key: ws-bridge-secret
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  # Use an existing PVC instead of one created by this chart.
+  existingClaim: ""
+
+service:
+  type: ClusterIP
+  port: 20128
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: omniroute.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: omniroute-tls
+  #    hosts:
+  #      - omniroute.example.com
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podSecurityContext:
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Matches the image's baked-in non-root `node` user (UID/GID 1000).
+# readOnlyRootFilesystem is intentionally unset: the OmniRoute image (Next.js
+# standalone) writes cache/scratch outside the /app/data mount at runtime.
+# Enable it only alongside emptyDir mounts for the paths the app writes.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# CPU is compressible: a low request/limit only slows the pod, it never OOMs.
+# Memory is not: the limit must stay above the Node heap ceiling
+# (config.OMNIROUTE_MEMORY_MB, 384 MB) plus runtime overhead. To go lower, drop
+# OMNIROUTE_MEMORY_MB and limits.memory together; to go higher, raise both.
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 640Mi
+
+livenessProbe:
+  httpGet:
+    path: /api/monitoring/health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/monitoring/health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+extraVolumes: []
+extraVolumeMounts: []
+initContainers: []
+sidecars: []

@@ -1,0 +1,39 @@
+OmniRoute is deployed.
+
+1. Reach the dashboard and API:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "omniroute.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 20128:{{ .Values.config.PORT | default .Values.service.port }}
+  # then open http://127.0.0.1:20128
+{{- end }}
+
+2. First-boot login:
+{{- if .Values.auth.existingSecret }}
+   The initial dashboard password comes from key INITIAL_PASSWORD in secret
+   "{{ .Values.auth.existingSecret }}". Change it after first login.
+{{- else }}
+   Log in with the INITIAL_PASSWORD you set via auth.initialPassword, then change
+   it from Dashboard -> Settings -> Security.
+{{- end }}
+
+{{- if not .Values.auth.existingSecret }}
+
+3. Secret handling:
+   JWT_SECRET and API_KEY_SECRET are stored in this chart-managed Secret and
+   persisted across upgrades (generated automatically if you did not supply them).
+   Do NOT rotate API_KEY_SECRET or STORAGE_ENCRYPTION_KEY on an existing install:
+   rotating them makes stored provider keys / the encrypted database unreadable.
+{{- end }}
+{{- if and .Values.ingress.enabled (ne (toString (.Values.config.REQUIRE_API_KEY | default "false")) "true") }}
+
+WARNING: ingress.enabled=true but config.REQUIRE_API_KEY is not "true". OmniRoute
+is now reachable from outside the cluster with no API-key check, so any caller can
+spend your configured provider keys. Front it with oauth2-proxy / forward-auth, or
+set config.REQUIRE_API_KEY="true".
+{{- end }}
