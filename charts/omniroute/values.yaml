@@ -12,7 +12,7 @@ image:
   repository: diegosouzapw/omniroute
   # Lean flavor by default. For web-cookie providers (gemini-web, claude-web,
   # claude-turnstile) use the "-web" flavor, e.g. tag: "3.8.49-web".
-  tag: "" # Defaults to the chart appVersion.
+  tag: ""  # Defaults to the chart appVersion.
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -43,10 +43,10 @@ imagePullSecrets: []
 #     makes an already-encrypted database unreadable.
 auth:
   existingSecret: ""
-  jwtSecret: "" # blank => generated + persisted
-  apiKeySecret: "" # blank => generated + persisted
-  initialPassword: "" # REQUIRED when existingSecret is empty
-  storageEncryptionKey: "" # blank => DB encryption disabled
+  jwtSecret: ""  # blank => generated + persisted
+  apiKeySecret: ""  # blank => generated + persisted
+  initialPassword: ""  # REQUIRED when existingSecret is empty
+  storageEncryptionKey: ""  # blank => DB encryption disabled
 
 # Non-secret environment, rendered into a ConfigMap and injected via envFrom.
 config:
