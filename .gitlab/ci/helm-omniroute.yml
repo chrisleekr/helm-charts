@@ -18,8 +18,10 @@ test-omniroute-helm:
     - helm template ./charts/omniroute -f ./charts/omniroute/ci/ct-values.yaml --set persistence.enabled=false > /dev/null
     # serviceAccount.create=false exercises the serviceAccountName else-branch.
     - helm template ./charts/omniroute -f ./charts/omniroute/ci/ct-values.yaml --set serviceAccount.create=false > /dev/null
-    # extraConfig overlapping a config key must merge, not emit a duplicate key.
-    - helm template ./charts/omniroute -f ./charts/omniroute/ci/ct-values.yaml --set config.PORT=20128 --set extraConfig.PORT=9000 > /dev/null
+    # extraConfig overlapping a config key must merge (extraConfig wins), not emit
+    # a duplicate key. Assert the effective value rather than only that it renders.
+    - helm template ./charts/omniroute -f ./charts/omniroute/ci/ct-values.yaml --set config.PORT=20128 --set extraConfig.PORT=9000 > ./template-omniroute-extra-config.yaml
+    - test "$(yq e 'select(.kind == "ConfigMap") | .data.PORT' ./template-omniroute-extra-config.yaml)" = "9000"
   artifacts:
     paths:
       - ./template-omniroute.yaml

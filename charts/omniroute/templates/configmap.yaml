@@ -8,9 +8,12 @@ data:
   {{/* extraConfig wins over config (see values.yaml). Merge once so an
        overlapping key never renders as a duplicate YAML mapping key, which
        would fail at install/upgrade. deepCopy avoids mutating .Values in place. */}}
-  {{- range $key, $value := merge (deepCopy .Values.extraConfig) .Values.config }}
+  {{- $config := merge (deepCopy .Values.extraConfig) .Values.config }}
+  {{- range $key, $value := $config }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
-  {{- with .Values.redis.url }}
-  REDIS_URL: {{ . | quote }}
+  {{/* redis.url is a convenience alias for REDIS_URL; skip it if the key was
+       already supplied via config/extraConfig, else it renders twice. */}}
+  {{- if and .Values.redis.url (not (hasKey $config "REDIS_URL")) }}
+  REDIS_URL: {{ .Values.redis.url | quote }}
   {{- end }}

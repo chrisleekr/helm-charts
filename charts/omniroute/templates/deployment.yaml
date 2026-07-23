@@ -1,3 +1,9 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be exactly 1: OmniRoute persists to a single-writer SQLite database on the PVC. A second pod on the same claim would corrupt it." }}
+{{- end }}
+{{/* extraConfig overrides config (see values.yaml). Resolve once so containerPort
+     and the data mount below stay aligned with what the ConfigMap actually sets. */}}
+{{- $config := merge (deepCopy .Values.extraConfig) .Values.config }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -53,7 +59,7 @@ spec:
             - name: http
               # Derives from the app's real listen port (config.PORT) so an
               # override keeps the probe and Service targetPort chain aligned.
-              containerPort: {{ .Values.config.PORT | default .Values.service.port }}
+              containerPort: {{ $config.PORT | default .Values.service.port }}
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -78,7 +84,7 @@ spec:
           {{- end }}
           volumeMounts:
             - name: data
-              mountPath: {{ .Values.config.DATA_DIR | default "/app/data" }}
+              mountPath: {{ $config.DATA_DIR | default "/app/data" }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
