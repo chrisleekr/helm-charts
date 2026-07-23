@@ -11,7 +11,7 @@ replicaCount: 1
 image:
   repository: diegosouzapw/omniroute
   # Lean flavor by default. For web-cookie providers (gemini-web, claude-web,
-  # claude-turnstile) use the "-web" flavor, e.g. tag: "3.8.49-web".
+  # claude-turnstile) use the "-web" flavor, e.g. tag: "3.8.48-web".
   tag: ""  # Defaults to the chart appVersion.
   pullPolicy: IfNotPresent
 
