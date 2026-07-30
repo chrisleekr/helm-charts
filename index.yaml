@@ -1796,6 +1796,34 @@ entries:
   omniroute:
   - apiVersion: v2
     appVersion: 3.8.48
+    created: "2026-07-30T10:23:19.860746993Z"
+    description: A Helm chart for OmniRoute - a self-hostable AI gateway
+    digest: 945c4d298ab52b34cbc47d62f9e72b336aab817dae16dd0d3f97a5db09cba088
+    home: https://omniroute.online
+    icon: https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/public/icon-512.png
+    keywords:
+    - ai
+    - ai-gateway
+    - llm
+    - llm-gateway
+    - llm-router
+    - proxy
+    - openai
+    - anthropic
+    - omniroute
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: omniroute
+    sources:
+    - https://github.com/diegosouzapw/OmniRoute
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/omniroute-0.2.0/omniroute-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
+    appVersion: 3.8.48
     created: "2026-07-23T13:50:18.352009129Z"
     description: A Helm chart for OmniRoute - a self-hostable AI gateway
     digest: 4b7ee459f3f2210e5a392c5fa55f9ce1a469cad91c9802e40bf99e669af40fe9
@@ -1891,4 +1919,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-07-23T13:50:18.352105253Z"
+generated: "2026-07-30T10:23:19.860823945Z"
