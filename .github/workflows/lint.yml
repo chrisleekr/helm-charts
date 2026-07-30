@@ -17,7 +17,7 @@ jobs:
         # this workspace. ct lint needs fetch-depth:0 to diff against the target
         # branch, but that is a local history read and needs no credentials.
         # Mirrors the same setting and rationale in github-app-sync.yml.
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -35,7 +35,10 @@ jobs:
         # defaults to Node 22.x. npm's engine-strict is false by default, so npx
         # would install anyway and run on an unsupported runtime. Pin it instead of
         # relying on that working.
-        uses: actions/setup-node@v4
+        # SHA-pinned per the convention in github-app-sync.yml. Note these pins are
+        # not Renovate-monitored while enabledManagers excludes github-actions, so
+        # they need a manual bump.
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
 
