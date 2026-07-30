@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "timezone": "Australia/Melbourne",
+  "schedule": ["before 4am on Monday"],
+  "labels": ["dependencies", "renovate"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 2,
+  "enabledManagers": ["custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "OmniRoute image is pinned by Chart.yaml appVersion. values.yaml sets tag: \"\" so the helm-values manager has nothing to anchor on. Quotes are optional in YAML, so match either style.",
+      "managerFilePatterns": ["/^charts/omniroute/Chart\\.yaml$/"],
+      "matchStrings": ["appVersion:[ \\t]*\"?(?<currentValue>[^\"\\s]+)\"?"],
+      "depNameTemplate": "diegosouzapw/omniroute",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "bumpVersions": [
+    {
+      "name": "omniroute chart version",
+      "description": "ct.yaml sets check-version-increment, and release.yml rejects a changed chart under an existing tag. An appVersion-only PR fails CI.",
+      "filePatterns": ["{{packageFileDir}}/Chart.yaml"],
+      "matchStrings": ["\\nversion:\\s*(?<version>\\S+)"],
+      "bumpType": "{{#if isPatch}}patch{{else}}minor{{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Auto-merge appVersion patch bumps. The lint job is a required status check on main and the ruleset requires 0 approvals, so GitHub auto-merge waits for CI then merges. Minor and major wait for review.",
+      "matchDepNames": ["diegosouzapw/omniroute"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
+      "description": "Hold every bump 3 days so a withdrawn upstream release surfaces first. A longer window does not stall updates: Renovate walks releases newest-first and takes the first one older than the window, so the chart simply trails upstream by that much. 3 days is the chosen lag against upstream's 1-3 day cadence.",
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "minimumReleaseAge": "3 days"
+    }
+  ]
+}

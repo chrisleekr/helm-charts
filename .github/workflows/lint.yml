@@ -12,9 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        # persist-credentials:false keeps GITHUB_TOKEN out of .git/config, because
+        # the renovate-config-validator step below executes third-party npm code in
+        # this workspace. ct lint needs fetch-depth:0 to diff against the target
+        # branch, but that is a local history read and needs no credentials.
+        # Mirrors the same setting and rationale in github-app-sync.yml.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.8.0
@@ -23,6 +29,67 @@ jobs:
         # check-version-increment in ct.yaml enforces Chart.yaml version bump
         # for any chart whose files have changed since the target branch
         run: ct lint --config ct.yaml
+
+      - name: Set up Node for the Renovate validator
+        # renovate@44.2.3 declares engines.node ^24.11.0; the ubuntu-24.04 runner
+        # defaults to Node 22.x. npm's engine-strict is false by default, so npx
+        # would install anyway and run on an unsupported runtime. Pin it instead of
+        # relying on that working.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Validate renovate.json
+        # Renovate fails silently on a bad config: it warns in its own logs and
+        # stops opening PRs, so no PR ever turns red. Since renovate.json grants
+        # auto-merge, catch the breakage here instead. Verified to reject unknown
+        # keys, malformed JSON, wrong value types, the deprecated fileMatch name,
+        # and invalid regex. It does NOT check enum values (a bogus bumpType
+        # passes), so this is a schema gate, not a semantic one.
+        #
+        # The filename is passed explicitly on purpose: with no argument the
+        # validator only scans default locations "if files exist" and exits 0 when
+        # it finds none (renovatebot/renovate#16025), so deleting or renaming
+        # renovate.json would silently pass. Version is pinned rather than
+        # floating on latest since this step executes third-party npm code; a
+        # schema change in a newer Renovate turns this red, which is the signal
+        # to bump the pin.
+        run: npx --yes --package renovate@44.2.3 -- renovate-config-validator --strict renovate.json
+
+      - name: omniroute memory invariant
+        # values.yaml requires limits.memory to clear the V8 heap ceiling by the
+        # >=250Mi that lives outside the heap. Breaking it fails quietly: V8
+        # aborts and the container ends up exiting 0 ("Completed"), which never
+        # reaches CrashLoopBackOff and so fires no crash-loop alert. See issue #53.
+        # Enforced here because appVersion patch bumps auto-merge with no human
+        # reading the values.yaml comment.
+        run: |
+          set -euo pipefail
+          chart=charts/omniroute
+          rendered="${RUNNER_TEMP:-/tmp}/omniroute.yaml"
+          helm template "$chart" -f "$chart/ci/ct-values.yaml" > "$rendered"
+          cap=$(yq e 'select(.kind == "ConfigMap") | .data.OMNIROUTE_MEMORY_MB' "$rendered")
+          limit=$(yq e 'select(.kind == "Deployment") | .spec.template.spec.containers[0].resources.limits.memory' "$rendered")
+          # yq prints "null" for a missing key and bash arithmetic reads that as 0,
+          # which would pass this check. Reject non-numeric up front so a renamed or
+          # deleted key fails closed. Also catches multi-line (duplicate resource).
+          require_int() {
+            case "$2" in ''|*[!0-9]*)
+              echo "::error file=$chart/values.yaml::$1 is not a plain integer: '$2'"; exit 1 ;;
+            esac
+          }
+          require_int OMNIROUTE_MEMORY_MB "$cap"
+          case "$limit" in
+            *Gi) mib=${limit%Gi}; require_int limits.memory "$mib"; limit_mi=$(( mib * 1024 )) ;;
+            *Mi) mib=${limit%Mi}; require_int limits.memory "$mib"; limit_mi=$mib ;;
+            *) echo "::error file=$chart/values.yaml::unhandled limits.memory unit: '$limit'"; exit 1 ;;
+          esac
+          headroom=$(( limit_mi - cap ))
+          echo "heap ceiling ${cap}Mi, limit ${limit_mi}Mi, headroom ${headroom}Mi"
+          if [ "$headroom" -lt 250 ]; then
+            echo "::error file=$chart/values.yaml::limits.memory ($limit) must exceed OMNIROUTE_MEMORY_MB ($cap) by >=250Mi, got ${headroom}Mi"
+            exit 1
+          fi
 
       - name: Render github-app feature matrix
         # Exercises every conditional branch in the chart so a template error

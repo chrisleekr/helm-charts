@@ -11,7 +11,9 @@ replicaCount: 1
 image:
   repository: diegosouzapw/omniroute
   # Lean flavor by default. For web-cookie providers (gemini-web, claude-web,
-  # claude-turnstile) use the "-web" flavor, e.g. tag: "3.8.48-web".
+  # claude-turnstile) use the "-web" flavor, e.g. tag: "<appVersion>-web".
+  # Left blank so Chart.yaml appVersion is the only version string, which is what
+  # Renovate bumps. Pinning a tag here silently decouples the two.
   tag: ""  # Defaults to the chart appVersion.
   pullPolicy: IfNotPresent
 
@@ -54,11 +56,18 @@ config:
   DATA_DIR: /app/data
   NODE_ENV: production
   HOSTNAME: 0.0.0.0
-  # Node heap ceiling in MB (OmniRoute default 512). Kept in lockstep with
-  # resources.limits.memory below - the limit must exceed heap + Node overhead
-  # or the pod OOMs. Raise both together for heavy workloads (compression,
-  # vector memory). OmniRoute's docs list 1 GB RAM as the minimum machine spec.
-  OMNIROUTE_MEMORY_MB: "384"
+  # V8 old-space ceiling in MB. The image entrypoint (run-standalone.mjs) appends
+  # this to NODE_OPTIONS as --max-old-space-size. It bounds the heap only, not the
+  # container footprint, so it is sized together with resources.limits.memory
+  # below. Raise both or neither.
+  #
+  # 1024 rather than the 512 the image bakes into NODE_OPTIONS as a fallback:
+  # upstream replaced its own flat 512 with a ceiling derived from host RAM
+  # (~35%, clamped 512-4096) because the flat value OOM-crashed RAM-rich hosts
+  # with large provider catalogs. That calibration never applies here, since the
+  # launcher takes OMNIROUTE_MEMORY_MB verbatim, so the chart has to pick a sane
+  # value. Issue #53 measured 368.8Mi of heap in use against the old 384 cap.
+  OMNIROUTE_MEMORY_MB: "1024"
   # SECURITY: "false" lets any client that can reach the proxy spend the
   # configured provider keys. When ingress.enabled=true, front OmniRoute with
   # oauth2-proxy / forward-auth, or set this to "true" to require an API key on
@@ -137,16 +146,41 @@ securityContext:
       - ALL
 
 # CPU is compressible: a low request/limit only slows the pod, it never OOMs.
-# Memory is not: the limit must stay above the Node heap ceiling
-# (config.OMNIROUTE_MEMORY_MB, 384 MB) plus runtime overhead. To go lower, drop
-# OMNIROUTE_MEMORY_MB and limits.memory together; to go higher, raise both.
+# Memory is not. The decomposition measured in issue #53, at the old 384 cap:
+#
+#   heap committed (heapTotal)     389.5Mi
+#   non-heap in the server process 172.6Mi   (RSS 562.1 - heapTotal)
+#   supervisor process               41.9Mi
+#   -> outside the V8 heap          214.5Mi
+#
+# 250Mi is that rounded up, for buffers that scale with concurrent streams. So
+# limits.memory must clear config.OMNIROUTE_MEMORY_MB by at least 250Mi: 1536Mi
+# against a 1024 ceiling gives 512Mi of headroom, 262Mi above the budget. The
+# "omniroute memory invariant" step in lint.yml enforces the 250Mi floor, since
+# appVersion patch bumps auto-merge with nobody reading this comment.
+#
+# Which limit binds first decides how a too-small size presents:
+#   - Heap ceiling binds (the case here, and what #53 hit: cgroup oom_kill was 0).
+#     V8 aborts with "Reached heap limit" and exit 134; the image's launcher
+#     supervises the server and restarts it, so the pod usually stays Running, and
+#     when the launcher gives up the container exits 0 and Kubernetes reports
+#     Completed. Never reaches CrashLoopBackOff, so crash-loop alerts stay silent.
+#   - limits.memory binds. The cgroup OOM-kills the container: OOMKilled, exit 137,
+#     restart count climbs, and CrashLoopBackOff does fire. This one is visible.
+# Alert on container restart count, which catches both.
+#
+# requests.memory is a packing choice, not a usage estimate. RSS was already
+# 562Mi at the 384 cap, and a 1024 cap lets the heap settle higher, so the pod
+# sits above a 1Gi request much of the time and lands in the kubelet's
+# first-evicted tier under node memory pressure. Set it equal to limits.memory if
+# eviction ranking matters more than node density.
 resources:
   requests:
     cpu: 50m
-    memory: 256Mi
+    memory: 1Gi
   limits:
     cpu: "1"
-    memory: 640Mi
+    memory: 1536Mi
 
 livenessProbe:
   httpGet:
