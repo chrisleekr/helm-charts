@@ -30,7 +30,11 @@ trap 'rm -f "$rendered"' EXIT
 helm template "$chart" -f "$chart/ci/ct-values.yaml" > "$rendered"
 
 cap=$(yq e 'select(.kind == "ConfigMap") | .data.OMNIROUTE_MEMORY_MB' "$rendered")
-limit=$(yq e 'select(.kind == "Deployment") | .spec.template.spec.containers[0].resources.limits.memory' "$rendered")
+# Selected by container name, not by index: an added sidecar or a reordered
+# spec would otherwise silently compare the heap ceiling against some other
+# container's limit and report passing headroom. A missing name yields null,
+# which require_int below rejects.
+limit=$(yq e 'select(.kind == "Deployment") | .spec.template.spec.containers[] | select(.name == "omniroute") | .resources.limits.memory' "$rendered")
 
 # yq prints "null" for a missing key and bash arithmetic reads that as 0, which
 # would pass this check. Reject non-numeric up front so a renamed or deleted key

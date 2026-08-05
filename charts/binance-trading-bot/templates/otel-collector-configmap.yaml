@@ -7,7 +7,13 @@ that ended in an error or ran slow. Only a collector sees the completed trace.
 $exporter is resolved once because the exporters block and the pipeline's
 exporter list have to name the same thing or the collector rejects the config.
 */}}
-{{- $exporter := ternary "otlphttp" "debug" (ne .Values.otlp.endpoint "") }}
+{{/*
+otlp_http, not otlphttp: the collector still accepts the old alias but logs
+`"otlphttp" alias is deprecated; use "otlp_http" instead` at startup, and an
+alias on a deprecation path is a config that breaks on a routine image bump.
+Verified against otel/opentelemetry-collector-contrib:0.158.0.
+*/}}
+{{- $exporter := ternary "otlp_http" "debug" (ne .Values.otlp.endpoint "") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -47,8 +53,8 @@ data:
       batch:
         timeout: 5s
     exporters:
-    {{- if eq $exporter "otlphttp" }}
-      otlphttp:
+    {{- if eq $exporter "otlp_http" }}
+      otlp_http:
         endpoint: {{ .Values.otlp.endpoint | quote }}
         {{- with .Values.otlp.headers }}
         # Values come from the collector's Secret via env substitution. A

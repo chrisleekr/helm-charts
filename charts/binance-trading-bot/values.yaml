@@ -133,13 +133,20 @@ postgres:
     # Fixed at install time. Raising it on an existing release renders cleanly
     # and does nothing; resize the PVC directly instead.
     size: 20Gi
-  # synchronous_commit=off trades a few hundred ms of durability for tick
-  # persist latency, which is the app's hot path.
+  # Probe budget for the first boot, at 5s per attempt. initdb plus the
+  # TimescaleDB extension setup runs once and can take minutes on slow storage;
+  # without the startup probe covering it the liveness probe kills the container
+  # mid-initdb and the pod crash-loops. 120 = 10 minutes.
+  startupFailureThreshold: 120
   args:
     - -c
     - max_connections=50
-    - -c
-    - synchronous_commit=off
+  # Uncomment to trade durability for tick-persist latency, which is the app's
+  # hot path. Off means Postgres acknowledges a commit before its WAL reaches
+  # disk, so a node or database crash silently loses trades the app already
+  # treated as recorded. That is a deliberate choice, not a default.
+  #  - -c
+  #  - synchronous_commit=off
   resources:
     limits:
       memory: 2Gi
@@ -161,6 +168,10 @@ externalDatabase:
 
 valkey:
   enabled: true
+  # Probe budget for the first boot, at 5s per attempt. Valkey answers LOADING
+  # while it reads an existing RDB back, and the liveness probe would otherwise
+  # kill it partway and restart the same load. 60 = 5 minutes.
+  startupFailureThreshold: 60
   image:
     repository: valkey/valkey
     tag: 8-alpine
@@ -186,7 +197,14 @@ externalRedis:
 # ──────────────────────────────── STORAGE ─────────────────────────────────
 # BACKUP_DIR. The worker writes database dumps here and the api lists them, so
 # in split topology both mount the same claim and the access mode must allow
-# multi-node writes (ReadWriteMany).
+# multi-node writes (ReadWriteMany), which the chart enforces at render time.
+#
+# This claim carries no helm.sh/resource-policy, so `helm uninstall` deletes it
+# and the dumps in it. That is deliberately not the bundled database's
+# behaviour: its PVC comes from volumeClaimTemplates, which Kubernetes never
+# garbage-collects, so Postgres data survives an uninstall and the backups do
+# not. Copy anything you need out first, or set existingClaim to a PVC this
+# release does not own.
 persistence:
   enabled: true
   existingClaim: ""
@@ -253,6 +271,13 @@ metrics:
   prometheusRule:
     enabled: false
     labels: {}
+    # Restricts every built-in expression to this release's own targets, via a
+    # label the ServiceMonitor above stamps on each series. The metric names are
+    # generic enough that a second release, or an unrelated exporter, would
+    # otherwise fire these alerts. Needs serviceMonitor.enabled, and the render
+    # fails rather than leaving the alerts silently unmatchable. Turn off if you
+    # scrape these pods some other way; additionalRules are never rewritten.
+    scopeToChartTargets: true
     # Only metrics the v1.0.0 image actually exports. See the README for the
     # failure modes that have no alert coverage.
     #

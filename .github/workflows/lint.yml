@@ -16,6 +16,14 @@ on:
     branches:
       - main
 
+# Keyed on the PR, so a rapid second push cancels the first run's whole fan-out
+# rather than holding two complete pipelines. Safe for the required check: the
+# cancelled run belongs to a superseded head SHA, and the ruleset evaluates the
+# `lint` context on the current one.
+concurrency:
+  group: lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     permissions:
@@ -121,6 +129,11 @@ jobs:
         # that have no dedicated gate. renovate.json does not enable the
         # github-actions manager, so bump this by hand.
         uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
+        with:
+          # Stated rather than left to the action default, which is a separate
+          # moving part from the SHA pin above. Keep equal to the image tag in
+          # .gitlab/ci/lint-ct.yml so both hosts lint with the same binary.
+          version: v3.14.0
 
       - name: Run chart-testing (lint)
         # Lints every chart whose files changed since the target branch, so the

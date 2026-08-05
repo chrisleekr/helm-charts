@@ -2,7 +2,7 @@
 
 Helm chart for [chrisleekr/binance-trading-bot](https://github.com/chrisleekr/binance-trading-bot), a self-hosted automated crypto trading bot.
 
-Chart `1.0.0` targets upstream `v1.0.0`, which rewrote the application. It shares no data model with what chart `0.x` deployed, so there is no upgrade path: install it fresh.
+Chart `1.x` targets upstream `v1.0.0`, which rewrote the application. It shares no data model with what chart `0.x` deployed, so there is no upgrade path: install it fresh.
 
 ## Install
 

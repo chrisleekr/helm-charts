@@ -27,5 +27,18 @@ spec:
       {{- with $.Values.metrics.serviceMonitor.scrapeTimeout }}
       scrapeTimeout: {{ . }}
       {{- end }}
+      # Stamps a constant label on every series this release produces, which is
+      # what the PrometheusRule expressions match on. Without it those
+      # expressions are unscoped and any other target exporting the same metric
+      # names drives this release's alerts. A constant is set by writing the
+      # replacement with no sourceLabels: the empty concatenation matches the
+      # default (.*) regex.
+      #
+      # Not the `job` label: the operator derives that from the Service name by
+      # default but hands it to jobLabel when the Service carries one, so it is
+      # not under this chart's control.
+      relabelings:
+        - targetLabel: btb_release
+          replacement: {{ include "binance-trading-bot.fullname" $ | quote }}
     {{- end }}
 {{- end }}

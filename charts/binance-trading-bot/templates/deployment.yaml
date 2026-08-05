@@ -150,8 +150,14 @@ spec:
             {{- with $.Values.livenessProbe }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          {{/*
+          hasKey rather than `default`, for the same reason as replicaCount
+          above: sprig treats {} as empty, and `resources: {}` on a role is the
+          obvious way to drop the global requests and limits for that role. With
+          `default` it would silently reinstate them.
+          */}}
           resources:
-            {{- toYaml ($override.resources | default $.Values.resources) | nindent 12 }}
+            {{- toYaml (ternary $override.resources $.Values.resources (hasKey $override "resources")) | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

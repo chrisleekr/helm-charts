@@ -58,5 +58,15 @@ helm template "$chart" \
 helm template "$chart" \
   --set rbac.create=false \
   --set config.ephemeralDaemon.namespace=agents > /dev/null
+# 9. Negative case for the guard case 7 and 8 straddle: chart-managed RBAC
+#    grants a Role in the release namespace only, so a cross-namespace spawn
+#    target must be rejected at render time. Cases 7 and 8 both take the
+#    passing side, so without this the guard could be deleted and CI stay green.
+if helm template "$chart" \
+  --set rbac.create=true \
+  --set config.ephemeralDaemon.namespace=agents > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/role.yaml::rbac.create=true with a cross-namespace config.ephemeralDaemon.namespace rendered instead of failing; the namespace guard is gone" >&2
+  exit 1
+fi
 
-echo "github-app render matrix: 8/8 cases rendered"
+echo "github-app render matrix: 9/9 cases rendered"

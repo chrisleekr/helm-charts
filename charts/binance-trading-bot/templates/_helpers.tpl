@@ -59,15 +59,21 @@ Name for a resource this chart derives from the release name by suffix.
 fullname already truncates to 63, so appending to it can exceed the RFC 1035
 limit that Services, StatefulSets and PVCs are held to, and the API server
 rejects the object at apply time. For the bundled Postgres that lands mid
-hook-phase and leaves the earlier hooks behind, so re-truncate after the suffix
-instead. Every consumer of a derived name goes through here, including the DSN
+hook-phase and leaves the earlier hooks behind.
+
+The base is shortened by the suffix length first, rather than truncating the
+joined string: a 63-character fullname would otherwise lose the suffix outright
+and every derived name would collapse onto the same string, so the postgres and
+valkey Services would collide and the install would fail on a duplicate
+resource. Every consumer of a derived name goes through here, including the DSN
 in secret.yaml, so a truncated Service and the host that addresses it cannot
 disagree.
 
 Usage: include "binance-trading-bot.componentName" (dict "ctx" $ "suffix" "postgres")
 */}}
 {{- define "binance-trading-bot.componentName" -}}
-{{- printf "%s-%s" (include "binance-trading-bot.fullname" .ctx) .suffix | trunc 63 | trimSuffix "-" }}
+{{- $budget := int (sub 62 (len .suffix)) }}
+{{- printf "%s-%s" (include "binance-trading-bot.fullname" .ctx | trunc $budget | trimSuffix "-") .suffix }}
 {{- end }}
 
 {{/*

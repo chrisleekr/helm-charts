@@ -60,7 +60,8 @@ spec:
         - name: valkey
           image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
           imagePullPolicy: {{ .Values.valkey.image.pullPolicy }}
-          # No readOnlyRootFilesystem: valkey writes its snapshot outside /data.
+          # No readOnlyRootFilesystem: the image entrypoint writes under / on
+          # start, and BGSAVE's temp file lands next to the snapshot.
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -68,9 +69,21 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           args:
+            # `dir` defaults to the working directory, which is /data in this
+            # image, so the snapshot already lands on the mounted volume. Stated
+            # anyway: nothing else here would notice if a future image changed
+            # WORKDIR, and the failure mode is a snapshot written to the
+            # container layer and lost on every restart.
+            - --dir
+            - /data
             - --save
             - "60"
             - "1"
+            # The kubelet expands this before exec, so the password is visible
+            # in the valkey process cmdline to anything sharing the PID
+            # namespace. Keeping it out of the pod spec is the part that
+            # matters, and valkey has no file-based password option that does
+            # not also mean shipping a rendered config.
             - --requirepass
             - $(VALKEY_PASSWORD)
             - --loglevel
@@ -82,8 +95,9 @@ spec:
                   name: {{ include "binance-trading-bot.secretName" . }}
                   key: VALKEY_PASSWORD
             # Same value under the name valkey-cli reads on its own, so the
-            # probes below never put the password in an argv where /proc makes
-            # it readable. valkey 8 honours REDISCLI_AUTH, not VALKEYCLI_AUTH.
+            # probes below do not add a second argv copy of the password, one
+            # per probe interval for the pod's whole life. valkey 8 honours
+            # REDISCLI_AUTH, not VALKEYCLI_AUTH.
             - name: REDISCLI_AUTH
               valueFrom:
                 secretKeyRef:
@@ -93,6 +107,15 @@ spec:
             - name: valkey
               containerPort: 6379
               protocol: TCP
+          # Without this the kubelet starts liveness probing immediately and
+          # kills the container after three failures. While valkey loads an RDB
+          # it answers LOADING, so the probe fails for the whole load and the
+          # restart repeats it, leaving the pod crash-looping.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            periodSeconds: 5
+            failureThreshold: {{ .Values.valkey.startupFailureThreshold }}
           readinessProbe:
             exec:
               # Matching on PONG, not on the exit code: valkey-cli exits 0 even

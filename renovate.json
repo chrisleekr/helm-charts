@@ -19,16 +19,7 @@
     },
     {
       "customType": "regex",
-      "description": "binance-trading-bot image is pinned by Chart.yaml appVersion. values.yaml sets tag: \"\" so the helm-values manager has nothing to anchor on. Upstream tags with a leading v, which docker versioning handles.",
-      "managerFilePatterns": ["/^charts/binance-trading-bot/Chart\\.yaml$/"],
-      "matchStrings": ["appVersion:[ \\t]*\"?(?<currentValue>[^\"\\s]+)\"?"],
-      "depNameTemplate": "chrisleekr/binance-trading-bot",
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "description": "Images the binance-trading-bot chart bundles. Each is matched by name rather than by a generic repository/tag pattern, so adding an image to values.yaml is a deliberate act of adding it here too instead of silently inheriting update PRs.",
+      "description": "Images the binance-trading-bot chart bundles. Deliberately no manager for this chart's Chart.yaml appVersion: binance-trading-bot-sync.yml owns that field, because it also writes the Artifact Hub changelog from the upstream release notes. Two owners on one field means two PRs bumping to the same version, and the workflow's idempotency check only looks for its own branch name. Same split as github-app. Each is matched by name rather than by a generic repository/tag pattern, so adding an image to values.yaml is a deliberate act of adding it here too instead of silently inheriting update PRs.",
       "managerFilePatterns": ["/^charts/binance-trading-bot/values\\.yaml$/"],
       "matchStrings": [
         "repository: (?<depName>timescale/timescaledb)\\s+tag: (?<currentValue>\\S+)",

@@ -178,8 +178,13 @@ want_no_doc() { # <render> <kind> <name> <label>
 
 secret_value() { # <render> <key>  -> prints decoded value, empty when absent
   local raw
+  # Scoped to the Secret document for the reason the header above gives: a key
+  # such as DATABASE_URL appearing as a plain `value:` anywhere else in the
+  # stream would win the head -1, base64 -d would fail on it, and the value
+  # would read as missing.
+  find_doc "$1" Secret "$fullname" || return 0
   # BRE and no -E, because busybox sed in the alpine/helm image predates it.
-  raw=$(grep -E "^[[:space:]]+$2: " "$1" 2>/dev/null | head -1 |
+  raw=$(grep -E "^[[:space:]]+$2: " "$DOC" 2>/dev/null | head -1 |
     sed -e "s/^[[:space:]]*$2:[[:space:]]*//" -e 's/"//g' || true)
   [ -n "$raw" ] || return 0
   # base64 -d exists in both coreutils and busybox, so this runs unchanged in
@@ -291,6 +296,32 @@ else
   r13_rc=$?
 fi
 
+# R18-R20 prove the three guards added for the review round fire. Each protects
+# against a failure that is silent at install time: a Pending pod the rollout
+# calls healthy, a DeadlineExceeded with no diagnostic, and an alert set that
+# matches no series.
+for case in \
+  "r18|--set topology=split" \
+  "r19|--set migrations.databaseWaitSeconds=600 --set migrations.activeDeadlineSeconds=300" \
+  "r20|--set metrics.prometheusRule.enabled=true --set metrics.serviceMonitor.enabled=false"; do
+  nm=${case%%|*}
+  # shellcheck disable=SC2086  # the flag string is a script literal, split on purpose.
+  if helm template "$release" "$chart" -f "$ci/ct-values.yaml" ${case#*|} \
+    >/dev/null 2>"$tmp/$nm.err"; then
+    eval "${nm}_rc=0"
+  else
+    eval "${nm}_rc=\$?"
+  fi
+done
+
+# R21 renders under a release name long enough to exhaust the 63-character
+# budget, which is where every derived name used to collapse onto the same
+# string. 50 characters plus "-binance-trading-bot" overruns it.
+render_long=$tmp/r21.yaml
+helm template a-very-long-release-name-that-eats-the-budget-here \
+  "$chart" -f "$ci/ct-values.yaml" >"$render_long" 2>"$tmp/r21.err" ||
+  printf 'RENDER FAILED r21: %s\n' "$(tr '\n' ' ' <"$tmp/r21.err" | cut -c1-300)" >&2
+
 # R14 proves the cleartext-ingress guard fires: enabling ingress with no TLS and
 # no explicit acknowledgement must not quietly derive an http:// WEB_ORIGIN.
 if helm template "$release" "$chart" -f "$ci/ct-values.yaml" \
@@ -323,11 +354,20 @@ fi
 # The ConfigMap and Secret carry every env-var criterion (C5, C9, C22), but they
 # only reach a pod through envFrom. Without this, deleting that block leaves all
 # three criteria green while the pods receive nothing.
+#
+# The ref kind and the ref name are checked as a pair. Three independent greps
+# would pass on a Deployment carrying `- configMapRef:` with the wrong name plus
+# an unrelated `name: <fullname>` line elsewhere in the pod spec, which is the
+# same coupling gap this script closes for the ServiceMonitor port names.
 want_envfrom() { # <render> <deployment-name> <label>
   if get_doc "$1" Deployment "$2" "$3"; then
-    want "$DOC" '^[[:space:]]*- configMapRef:$' "$3 envFrom"
-    want "$DOC" "^[[:space:]]*name: $fullname\$" "$3 envFrom"
-    want "$DOC" '^[[:space:]]*- secretRef:$' "$3 envFrom"
+    for ref in configMapRef secretRef; do
+      awk -v ref="- $ref:" -v want="name: $fullname" '
+        index($0, ref) { seen = 1; next }
+        seen { if (index($0, want)) { ok = 1 } ; seen = 0 }
+        END { exit (ok ? 0 : 1) }
+      ' "$DOC" || note "$3 envFrom: no $ref naming $fullname"
+    done
   fi
 }
 
@@ -517,12 +557,21 @@ if get_doc "$r3" Job "$fullname-migrate" "R3"; then
   want "$DOC" '^[[:space:]]*initContainers:$' "R3 migrate job"
   want "$DOC" 'pg_isready' "R3 migrate job"
 fi
+# Both containers carry requests. A LimitRange that requires them rejects the
+# pod, and per the template's own note a rejected pod is not a pod failure, so
+# backoffLimit never trips and the install hangs to Helm's timeout.
+if get_doc "$r1" Job "$fullname-migrate" "R1"; then
+  want_count "$DOC" '^[[:space:]]*resources:$' 2 "R1 migrate job"
+fi
 check C10 "migration Job waits for the database via an init container"
 
 # C11 - TimescaleDB is the schema's persistence layer, not an optional add-on.
 if get_doc "$r1" StatefulSet "$fullname-postgres" "R1"; then
   want "$DOC" 'timescale/timescaledb' "R1 postgres"
   want "$DOC" '^[[:space:]]*volumeClaimTemplates:$' "R1 postgres"
+  # Without it the kubelet liveness-kills the container partway through initdb
+  # plus the TimescaleDB extension setup, and the restart repeats the same work.
+  want "$DOC" '^[[:space:]]*startupProbe:$' "R1 postgres"
 fi
 want_secret "$r1" DATABASE_URL "@$fullname-postgres[.:]" "R1"
 # The explicit-password branch of the DSN, which no fixture otherwise reaches.
@@ -545,6 +594,13 @@ want_no_doc "$r3" StatefulSet "$fullname-valkey" "R3"
 want_secret "$r3" REDIS_URL 'redis\.ci\.example\.com:6379' "R3"
 if get_doc "$r1" StatefulSet "$fullname-valkey" "R1"; then
   want "$DOC" '^[[:space:]]*volumeClaimTemplates:$' "R1 valkey"
+  # Valkey answers LOADING while it reads an RDB back, so an unguarded liveness
+  # probe restarts it partway and the load starts over.
+  want "$DOC" '^[[:space:]]*startupProbe:$' "R1 valkey"
+  # The snapshot goes to the mounted volume, not the container layer. It is the
+  # image WORKDIR that makes that true by default, which nothing else here
+  # would notice changing.
+  want "$DOC" '^[[:space:]]*- /data$' "R1 valkey"
 fi
 want_secret "$r1" REDIS_URL "$fullname-valkey[.:]" "R1"
 check C13 "valkey.enabled=false uses externalRedis; enabled renders the bundled Valkey with persistence"
@@ -652,13 +708,24 @@ check C19 "Chart.yaml version and appVersion are >= 1.0.0, clearing the removed 
 
 # C20 - grep-level only; renovate-config-validator is a separate CI step.
 renovate="$repo_root/renovate.json"
+syncwf="$repo_root/.github/workflows/binance-trading-bot-sync.yml"
 if [ -f "$renovate" ]; then
-  want "$renovate" 'charts/binance-trading-bot/Chart' "renovate.json"
-  want "$renovate" 'chrisleekr/binance-trading-bot' "renovate.json"
   want "$renovate" 'timescale/timescaledb' "renovate.json"
   want "$renovate" 'valkey/valkey' "renovate.json"
+  want "$renovate" 'otel/opentelemetry-collector-contrib' "renovate.json"
+  # One owner for appVersion. The sync workflow bumps it together with the
+  # Artifact Hub changelog it builds from the upstream release notes; a Renovate
+  # manager on the same field opens a second PR for the same version, and the
+  # workflow's idempotency check only recognises its own branch name.
+  want_not "$renovate" 'charts/binance-trading-bot/Chart' "renovate.json"
+  want_not "$renovate" 'chrisleekr/binance-trading-bot' "renovate.json"
 else
   note "renovate.json missing"
+fi
+if [ -f "$syncwf" ]; then
+  want "$syncwf" '\.appVersion = strenv' "binance-trading-bot-sync.yml"
+else
+  note "binance-trading-bot-sync.yml missing"
 fi
 # "validates strict" is half the criterion, and it is the half that catches a
 # schema-invalid renovate.json. The greps above pass on a file the validator
@@ -681,7 +748,7 @@ if [ -f "$lintwf" ]; then
 else
   note "lint.yml missing"
 fi
-check C20 "renovate.json tracks the chart appVersion and the bundled datastore images"
+check C20 "renovate.json tracks the bundled datastore images and leaves appVersion to the sync workflow"
 
 # C21 - this script is the branch matrix, so the criterion is that CI runs it.
 # On GitHub the per-chart gates live in reusable workflows, so the invocation is
@@ -774,7 +841,7 @@ if get_doc "$r5" PrometheusRule "$fullname" "R5"; then
   # Anchored to the expression it tunes: a bare '900' matches any digits
   # anywhere in the document and would survive the threshold reverting to the
   # hardcoded default.
-  want "$DOC" '^[[:space:]]*expr: max\(binance_api_weight\) > 900$' "R5 prometheusrule"
+  want "$DOC" '^[[:space:]]*expr: max\(binance_api_weight\{btb_release="[^"]+"\}\) > 900$' "R5 prometheusrule"
   want "$DOC" 'CiExtraRule' "R5 prometheusrule"
 fi
 want_no_doc "$r1" PrometheusRule "$fullname" "R1"
@@ -820,7 +887,9 @@ if get_doc "$r5" ConfigMap "$fullname-otel-collector" "R5"; then
   want "$DOC" 'tail_sampling' "R5 collector config"
   # The forwarding path: real exporter, and header values arriving by env
   # substitution rather than sitting in this world-readable ConfigMap.
-  want "$DOC" '^[[:space:]]*otlphttp:$' "R5 collector config"
+  # otlp_http, not the otlphttp alias the collector logs as deprecated.
+  want "$DOC" '^[[:space:]]*otlp_http:$' "R5 collector config"
+  want_not "$DOC" '^[[:space:]]*otlphttp:$' "R5 collector config"
   want "$DOC" 'authorization: "\$\{env:OTLP_HEADER_AUTHORIZATION\}"' "R5 collector config"
   want_not "$DOC" 'ci-token' "R5 collector config"
 fi
@@ -863,10 +932,20 @@ done
 # Asserting presence keeps a rename or a typo from turning an alert into one
 # that reads as permanently healthy.
 if get_doc "$r5" PrometheusRule "$fullname" "R5"; then
-  want "$DOC" 'expr: max\(binance_api_weight\)' "R5 prometheusrule"
-  want "$DOC" 'expr: worker_members_ready < worker_members_total' "R5 prometheusrule"
-  want "$DOC" 'increase\(otel_dropped_spans_total\[' "R5 prometheusrule"
-  want "$DOC" 'increase\(pino_dropped_logs_total\[' "R5 prometheusrule"
+  want "$DOC" 'expr: max\(binance_api_weight\{' "R5 prometheusrule"
+  want "$DOC" 'expr: worker_members_ready\{.*\} < worker_members_total\{' "R5 prometheusrule"
+  want "$DOC" 'increase\(otel_dropped_spans_total\{.*\}\[' "R5 prometheusrule"
+  want "$DOC" 'increase\(pino_dropped_logs_total\{.*\}\[' "R5 prometheusrule"
+  # Every built-in expression is scoped, and the label is the one the
+  # ServiceMonitor stamps. An expression that lost its matcher would fire on
+  # another release's identically named metrics; a matcher naming a label
+  # nothing applies would go permanently silent, which is worse.
+  sel=$(grep -cE 'expr: .*btb_release="'"$fullname"'"' "$DOC" || true)
+  [ "$sel" = 4 ] || note "R5 prometheusrule: $sel of 4 built-in expressions scoped to btb_release=\"$fullname\""
+fi
+if get_doc "$r5" ServiceMonitor "$fullname" "R5"; then
+  want "$DOC" "^[[:space:]]*- targetLabel: btb_release\$" "R5 servicemonitor"
+  want "$DOC" "^[[:space:]]*replacement: \"$fullname\"\$" "R5 servicemonitor"
 fi
 if [ -f "$readme" ]; then
   if ! grep -qiE 'no alert coverage' "$readme"; then
@@ -877,14 +956,51 @@ else
 fi
 check C27 "no alert references a metric the v1.0.0 image never emits; the weight rule uses binance_api_weight"
 
+# C28 - the 63-character budget. componentName used to truncate after appending
+# the suffix, so a long release name dropped the suffix entirely and postgres,
+# valkey, backups and migrate all resolved to the same string: a duplicate
+# resource at install time, and a DSN pointing at whichever Service won.
+if [ -s "$render_long" ]; then
+  names=$(grep -E '^  name: ' "$render_long" | sed 's/^  name: //' | sort -u)
+  over=$(printf '%s\n' "$names" | awk 'length($0) > 63')
+  [ -z "$over" ] && : || note "R21: derived names over 63 characters: $(echo "$over" | tr '\n' ' ')"
+  # The four suffixed components must stay four distinct names.
+  suffixed=$(printf '%s\n' "$names" | grep -cE -- '-(postgres|valkey|backups|migrate)$' || true)
+  [ "$suffixed" = 4 ] ||
+    note "R21: $suffixed of 4 suffixed component names survived truncation"
+else
+  note "R21: long-release-name render produced nothing"
+fi
+check C28 "derived component names stay distinct and within 63 characters under a long release name"
+
+# C29 - three guards for misconfigurations that are silent at install time. Each
+# has to fail AND say why: a render that fails with an opaque template error
+# sends the operator to the chart source rather than to their values file.
+if [ "$r18_rc" -eq 0 ]; then
+  note "R18: topology=split with the default ReadWriteOnce backups claim rendered instead of failing"
+elif ! grep -q 'ReadWriteMany' "$tmp/r18.err"; then
+  note "R18: render failed but stderr never names ReadWriteMany: $(tr '\n' ' ' <"$tmp/r18.err" | cut -c1-200)"
+fi
+if [ "$r19_rc" -eq 0 ]; then
+  note "R19: databaseWaitSeconds >= activeDeadlineSeconds rendered instead of failing"
+elif ! grep -q 'activeDeadlineSeconds' "$tmp/r19.err"; then
+  note "R19: render failed but stderr never names activeDeadlineSeconds: $(tr '\n' ' ' <"$tmp/r19.err" | cut -c1-200)"
+fi
+if [ "$r20_rc" -eq 0 ]; then
+  note "R20: scoped alerts rendered without the ServiceMonitor that applies the label they match"
+elif ! grep -q 'serviceMonitor' "$tmp/r20.err"; then
+  note "R20: render failed but stderr never names serviceMonitor: $(tr '\n' ' ' <"$tmp/r20.err" | cut -c1-200)"
+fi
+check C29 "render-time guards reject a split-topology RWO claim, a wait longer than the Job deadline, and unmatchable scoped alerts"
+
 # -------------------------------------------------------------------- summary -
 
 total=$((passed + failed))
 printf '\n%s/%s assertions failed\n' "$failed" "$total"
 # A criterion deleted rather than fixed still leaves "0 failed" behind, so pin
-# the count: the acceptance list is exactly 27 and the gate covers all of them.
-if [ "$total" -ne 27 ]; then
-  printf 'FAIL gate: expected 27 criteria, ran %s\n' "$total" >&2
+# the count: the acceptance list is exactly 29 and the gate covers all of them.
+if [ "$total" -ne 29 ]; then
+  printf 'FAIL gate: expected 29 criteria, ran %s\n' "$total" >&2
   exit 1
 fi
 [ "$failed" -eq 0 ]

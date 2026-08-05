@@ -112,6 +112,15 @@ spec:
             - name: postgres
               containerPort: 5432
               protocol: TCP
+          # Without this the kubelet starts liveness probing immediately and
+          # kills the container after three failures. initdb plus the TimescaleDB
+          # extension setup can outlast that on slow storage, and the restart
+          # repeats the same work, so the pod crash-loops with no way out.
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}]
+            periodSeconds: 5
+            failureThreshold: {{ .Values.postgres.startupFailureThreshold }}
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}]

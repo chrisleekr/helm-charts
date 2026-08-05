@@ -1,7 +1,14 @@
 # Mirror of .github/workflows/lint-binance-trading-bot.yml.
 binance-trading-bot:
   stage: lint
-  image: alpine/helm:3.20.0
+  image:
+    name: alpine/helm:3.20.0
+    # The image sets ENTRYPOINT ["helm"]. The Docker executor does not override
+    # an image entrypoint; it passes the job script as the container CMD, so the
+    # container would run `helm sh -c '<script>'` and fail before this job's
+    # first line. An empty entrypoint restores the shell.
+    # https://docs.gitlab.com/runner/executors/docker/#configure-a-docker-entrypoint
+    entrypoint: [""]
   interruptible: true
   rules:
     # The gate reruns when its own script or CI files change, otherwise a broken

@@ -1,5 +1,14 @@
 {{- if .Values.migrations.enabled }}
 {{/*
+The wait has to fit inside the Job deadline with room for the migration itself.
+At or past it, activeDeadlineSeconds kills the pod while the init container is
+still polling, so the "database not reachable" message the wait exists to print
+never runs and the operator is left with a bare DeadlineExceeded.
+*/}}
+{{- if ge (int .Values.migrations.databaseWaitSeconds) (int .Values.migrations.activeDeadlineSeconds) }}
+{{- fail (printf "migrations.databaseWaitSeconds (%d) must be less than migrations.activeDeadlineSeconds (%d), otherwise the Job deadline fires while the wait-for-database init container is still polling and its diagnostic never prints." (int .Values.migrations.databaseWaitSeconds) (int .Values.migrations.activeDeadlineSeconds)) }}
+{{- end }}
+{{/*
 The image entrypoint migrates on every boot and concurrent pods race on the
 migrations table, so migrations are lifted out into this hook and every app
 workload runs with SKIP_MIGRATIONS=1. Weight 0 puts it after the ConfigMap and
@@ -78,6 +87,12 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ include "binance-trading-bot.secretName" . }}
+          # Same block as the migrate container. A namespace with a LimitRange
+          # that requires requests rejects a pod whose init container has none,
+          # and per the note above a rejected pod is not a pod failure, so
+          # backoffLimit never trips and the install hangs to Helm's timeout.
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
       containers:
         - name: migrate
           image: {{ include "binance-trading-bot.image" . | quote }}

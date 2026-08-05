@@ -1,6 +1,13 @@
 publish-devel:
   stage: publish
-  image: alpine/helm:3.20.0
+  image:
+    name: alpine/helm:3.20.0
+    # The image sets ENTRYPOINT ["helm"]. The Docker executor does not override
+    # an image entrypoint; it passes the job script as the container CMD, so the
+    # container would run `helm sh -c '<script>'` and fail before this job's
+    # first line. An empty entrypoint restores the shell.
+    # https://docs.gitlab.com/runner/executors/docker/#configure-a-docker-entrypoint
+    entrypoint: [""]
   # Not interruptible: a cancelled publish leaves the merge with no package.
   interruptible: false
   rules:
@@ -13,6 +20,10 @@ publish-devel:
   script:
     - |
       set -eu
+      # pipefail so a failing git diff below is fatal. Without it the pipeline
+      # reports the exit status of `sort`, the chart list comes out empty, and
+      # the job publishes nothing while still exiting 0.
+      set -o pipefail
       # CI_COMMIT_BEFORE_SHA is the previous tip of main, so a push landing
       # several commits is covered, not just the last one. It is all zeros on a
       # manually run pipeline, and this project has had web-source pipelines.
@@ -21,10 +32,18 @@ publish-devel:
       if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
         base="HEAD~1"
       fi
-      for name in $(git diff --name-only "$base" HEAD -- charts/ | cut -d/ -f2 | sort -u); do
+      # Assigned rather than expanded straight into the `for` word list: a
+      # command substitution there has its exit status discarded, so set -e and
+      # pipefail can only observe the failure through an assignment.
+      changed=$(git diff --name-only "$base" HEAD -- charts/ | cut -d/ -f2 | sort -u)
+      for name in $changed; do
         # A deleted chart still shows in the diff.
         [ -f "charts/$name/Chart.yaml" ] || continue
         version=$(yq e '.version' "charts/$name/Chart.yaml")
+        # helm names the archive after Chart.yaml .name, not after the
+        # directory. They match today; reading both keeps the curl --form path
+        # correct if one ever diverges.
+        chartname=$(yq e '.name' "charts/$name/Chart.yaml")
         # One prerelease identifier, "dev-<sha>", not "dev.<sha>". A short SHA
         # can be all digits, and SemVer rejects a numeric identifier with a
         # leading zero, which helm would refuse to package.
@@ -36,6 +55,6 @@ publish-devel:
         # https://docs.gitlab.com/user/packages/helm_repository/
         curl --fail-with-body --request POST \
           --user "gitlab-ci-token:${CI_JOB_TOKEN}" \
-          --form "chart=@${name}-${devel}.tgz" \
+          --form "chart=@${chartname}-${devel}.tgz" \
           "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/api/devel/charts"
       done
