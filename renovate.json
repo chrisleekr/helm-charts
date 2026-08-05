@@ -16,12 +16,33 @@
       "depNameTemplate": "diegosouzapw/omniroute",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "binance-trading-bot image is pinned by Chart.yaml appVersion. values.yaml sets tag: \"\" so the helm-values manager has nothing to anchor on. Upstream tags with a leading v, which docker versioning handles.",
+      "managerFilePatterns": ["/^charts/binance-trading-bot/Chart\\.yaml$/"],
+      "matchStrings": ["appVersion:[ \\t]*\"?(?<currentValue>[^\"\\s]+)\"?"],
+      "depNameTemplate": "chrisleekr/binance-trading-bot",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Images the binance-trading-bot chart bundles. Each is matched by name rather than by a generic repository/tag pattern, so adding an image to values.yaml is a deliberate act of adding it here too instead of silently inheriting update PRs.",
+      "managerFilePatterns": ["/^charts/binance-trading-bot/values\\.yaml$/"],
+      "matchStrings": [
+        "repository: (?<depName>timescale/timescaledb)\\s+tag: (?<currentValue>\\S+)",
+        "repository: (?<depName>valkey/valkey)\\s+tag: (?<currentValue>\\S+)",
+        "repository: (?<depName>otel/opentelemetry-collector-contrib)\\s+tag: (?<currentValue>\\S+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "bumpVersions": [
     {
-      "name": "omniroute chart version",
-      "description": "ct.yaml sets check-version-increment, and release.yml rejects a changed chart under an existing tag. An appVersion-only PR fails CI.",
+      "name": "chart version",
+      "description": "ct.yaml sets check-version-increment, and release.yml rejects a changed chart under an existing tag. An appVersion-only PR fails CI. packageFileDir resolves to whichever chart the manager matched, so this covers every chart.",
       "filePatterns": ["{{packageFileDir}}/Chart.yaml"],
       "matchStrings": ["\\nversion:\\s*(?<version>\\S+)"],
       "bumpType": "{{#if isPatch}}patch{{else}}minor{{/if}}"

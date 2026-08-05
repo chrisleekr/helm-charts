@@ -1,0 +1,86 @@
+{{- if .Values.networkPolicy.enabled }}
+{{/*
+The admin ports serve /metrics and /readyz unauthenticated on every app pod.
+Leaving them off the Service hides them from DNS but not from the pod network,
+so this policy is the only thing that actually restricts them.
+
+Note the admin rule is omitted entirely when networkPolicy.adminFrom is empty:
+a rule with no peers admits everything, which is the opposite of the intent.
+
+The selector is scoped to the app roles. Selecting on name+instance alone would
+also match the bundled Postgres, Valkey and Collector pods, and selecting a pod
+isolates it: 5432, 6379 and 4318 appear in no rule here, so the app would lose
+its own datastores the moment this policy was enabled. Postgres and Valkey are
+left unisolated, which is the same posture as networkPolicy.enabled=false; both
+authenticate with a password. The Collector gets its own policy below, which is
+keyed on otelCollector.enabled rather than on this flag: its receivers take
+spans from anyone and it forwards them using the operator's vendor token, so
+turning the Collector on has to protect it whether or not the app policy is on.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [{{ include "binance-trading-bot.roles" . | splitList " " | join ", " }}]
+  policyTypes:
+    - Ingress
+  ingress:
+    # Public application port, reachable from anywhere the ingress controller
+    # or another workload sits. A NetworkPolicy port is the port on the target
+    # pod, not the Service port, so this is the container port and stays 3000
+    # regardless of what service.port is remapped to.
+    - ports:
+        - protocol: TCP
+          port: 3000
+    {{- with .Values.networkPolicy.adminFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 9100
+        - protocol: TCP
+          port: 9101
+    {{- end }}
+{{- end }}
+{{- if .Values.otelCollector.enabled }}
+---
+{{/*
+The OTLP receivers are unauthenticated, and the exporter relays whatever arrives
+using the bearer token from the collector's headers Secret. Without this, any
+pod in the cluster can spend the operator's vendor quota. Only this release's
+own pods export spans, so that is the whole peer list.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "otel-collector") }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: otel-collector
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "binance-trading-bot.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+{{- end }}

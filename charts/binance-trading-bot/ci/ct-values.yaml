@@ -1,0 +1,13 @@
+# Values for chart-testing (ct) install and CI `helm lint` / `helm template`.
+#
+# `webOrigin` is the only value the chart cannot default: upstream treats
+# WEB_ORIGIN as an exact-origin allowlist with no wildcard support, and it gates
+# CORS, Better Auth CSRF and the WebSocket upgrade. Supplying it here lets lint
+# and template succeed without a real ingress host.
+#
+# Everything else stays at chart defaults so this file also pins the default
+# branch: topology=all, bundled Postgres + Valkey, migrations on, ingress off,
+# networkPolicy off, all observability off.
+#
+# Not for production use.
+webOrigin: "http://binance-trading-bot.ci.example.com"

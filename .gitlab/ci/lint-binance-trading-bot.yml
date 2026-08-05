@@ -1,0 +1,31 @@
+# Mirror of .github/workflows/lint-binance-trading-bot.yml.
+binance-trading-bot:
+  stage: lint
+  image: alpine/helm:3.20.0
+  interruptible: true
+  rules:
+    # The gate reruns when its own script or CI files change, otherwise a broken
+    # gate could merge without ever executing.
+    - changes:
+        paths:
+          - charts/binance-trading-bot/**/*
+          - scripts/check-binance-trading-bot-render.sh
+          - .gitlab/ci/lint-binance-trading-bot.yml
+          - .gitlab-ci.yml
+          # C20/C21 inside the gate assert the contents of these three, so a PR
+          # touching only them must rerun the gate or those assertions never run.
+          - renovate.json
+          - .github/workflows/lint-renovate.yml
+          - .github/workflows/lint-binance-trading-bot.yml
+        # Without compare_to, a branch pipeline diffs against the previous commit
+        # on the branch, so a file touched in an earlier commit of the same push
+        # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
+        compare_to: refs/heads/main
+  script:
+    # Renders the chart across every conditional branch (default, split topology,
+    # external datastores, ingress + NetworkPolicy, observability, external OTLP,
+    # persistence off) and asserts what each one must produce, including negative
+    # cases such as an unresolvable webOrigin. helm lint runs inside the gate, so
+    # it is not repeated here. The script needs only helm and bash, both already
+    # in alpine/helm.
+    - bash scripts/check-binance-trading-bot-render.sh

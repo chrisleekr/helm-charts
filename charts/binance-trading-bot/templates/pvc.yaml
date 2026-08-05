@@ -1,0 +1,21 @@
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+{{/*
+BACKUP_DIR. In split topology the api lists what the worker wrote, so both
+mount this claim and accessModes has to allow multi-node writes.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "backups") }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

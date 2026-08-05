@@ -1,0 +1,35 @@
+name: Lint omniroute
+
+# Called by lint.yml, never triggered directly. Path filtering lives in lint.yml's
+# `changes` job rather than here on purpose: a workflow skipped by a paths filter
+# leaves its checks Pending and blocks the merge, whereas a job skipped by a
+# conditional reports Success.
+on:
+  workflow_call:
+
+jobs:
+  gate:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # No fetch-depth:0 — nothing here diffs against the target branch, unlike
+        # ct lint. persist-credentials:false keeps GITHUB_TOKEN out of .git/config
+        # as a matter of course; see github-app-sync.yml for the rationale.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Render matrix
+        # Renders every conditional branch of the chart (ingress, TLS,
+        # existingSecret, persistence off, serviceAccount.create=false) and
+        # asserts the extraConfig merge. Ran on GitLab only until the two CIs
+        # were brought to parity, so a branch that failed to render here merged
+        # and broke on the other host.
+        run: bash scripts/check-omniroute-render.sh
+
+      - name: Memory invariant
+        # helm and yq are preinstalled on the ubuntu-24.04 runner image, so this
+        # job needs no setup action.
+        run: bash scripts/check-omniroute-memory.sh

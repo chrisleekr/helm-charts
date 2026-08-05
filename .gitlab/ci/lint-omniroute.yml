@@ -1,0 +1,29 @@
+# Mirror of .github/workflows/lint-omniroute.yml.
+#
+# alpine/helm:3.20.0 already ships bash and yq (mikefarah v4), which is
+# everything both scripts need.
+omniroute:
+  stage: lint
+  image: alpine/helm:3.20.0
+  interruptible: true
+  rules:
+    # The gate reruns when its own scripts or CI files change, otherwise a broken
+    # gate could merge without ever executing.
+    - changes:
+        paths:
+          - charts/omniroute/**/*
+          - scripts/check-omniroute-render.sh
+          - scripts/check-omniroute-memory.sh
+          - .gitlab/ci/lint-omniroute.yml
+          - .gitlab-ci.yml
+        # Without compare_to, a branch pipeline diffs against the previous commit
+        # on the branch, so a file touched in an earlier commit of the same push
+        # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
+        compare_to: refs/heads/main
+  script:
+    # Renders every conditional branch of the chart and asserts the extraConfig
+    # merge, which a single helm template run cannot see.
+    - bash scripts/check-omniroute-render.sh
+    # limits.memory must clear the V8 heap ceiling by >=250Mi. Breaking it fails
+    # quietly: V8 aborts, the container exits 0, and no crash-loop alert fires.
+    - bash scripts/check-omniroute-memory.sh

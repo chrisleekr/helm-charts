@@ -1,0 +1,31 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: admin
+  endpoints:
+    # One entry per admin port. A pod only appears in the subset for a port it
+    # declares, so this does not produce dead targets for roles that bind one
+    # admin server and not the other.
+    {{- range $port := list "admin" "worker-admin" }}
+    - port: {{ $port }}
+      path: /metrics
+      interval: {{ $.Values.metrics.serviceMonitor.interval }}
+      {{- with $.Values.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+    {{- end }}
+{{- end }}

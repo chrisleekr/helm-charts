@@ -1,0 +1,103 @@
+{{- if .Values.migrations.enabled }}
+{{/*
+The image entrypoint migrates on every boot and concurrent pods race on the
+migrations table, so migrations are lifted out into this hook and every app
+workload runs with SKIP_MIGRATIONS=1. Weight 0 puts it after the ConfigMap and
+Secret (weight -10), which it reads through envFrom.
+
+before-hook-creation without hook-succeeded keeps the last run's logs around for
+debugging a failed migration.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "migrate") }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  # backoffLimit counts pod failures, and a pod stuck in the wait-for-database
+  # loop never produces one. Without this an unreachable database hangs the
+  # release until Helm's own timeout, with no Job-level failure to look at.
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "binance-trading-bot.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # No serviceAccountName, deliberately: this is a pre-install hook, and
+      # Helm runs hooks to completion before it creates any plain release
+      # resource, so the chart's own ServiceAccount does not exist yet. The
+      # ServiceAccount admission plugin rejects a pod naming one that is
+      # missing, and a rejected pod is not a pod failure, so backoffLimit never
+      # trips and the install hangs until Helm's timeout. Migrations talk to
+      # Postgres and never to the Kubernetes API, so the namespace default
+      # account is enough. Set here rather than left to the account's own
+      # setting, because default usually automounts.
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # Covers the startup gap: Helm does not block on the Postgres hook, so
+        # the StatefulSet exists but is not accepting connections yet when this
+        # Job starts. pg_isready reads the DSN directly, so this works for a
+        # bundled and an external database alike. Bounded so a wrong DSN or an
+        # unreachable host fails with a readable message instead of hanging.
+        - name: wait-for-database
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - |
+              # Wall-clock deadline, not an attempt count: a failed pg_isready
+              # blocks for its own -t timeout before the sleep, so counting
+              # attempts would overrun databaseWaitSeconds by up to 2.5x and
+              # could hit activeDeadlineSeconds before printing the message
+              # below, which is the whole point of the bound.
+              deadline=$(( $(date +%s) + {{ .Values.migrations.databaseWaitSeconds }} ))
+              while [ "$(date +%s)" -lt "$deadline" ]; do
+                pg_isready -d "$DATABASE_URL" -t 3 && exit 0
+                echo "waiting for database ($(( deadline - $(date +%s) ))s left)"
+                sleep 2
+              done
+              echo "database not reachable via DATABASE_URL after {{ .Values.migrations.databaseWaitSeconds }}s" >&2
+              exit 1
+          envFrom:
+            - secretRef:
+                name: {{ include "binance-trading-bot.secretName" . }}
+      containers:
+        - name: migrate
+          image: {{ include "binance-trading-bot.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # Overrides the entrypoint so only the migration runs, with no app boot.
+          command: ["bun", "/app/dist/migrate.js"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "binance-trading-bot.fullname" . }}
+            - secretRef:
+                name: {{ include "binance-trading-bot.secretName" . }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "binance-trading-bot.nodePlacement" . }}
+{{- end }}

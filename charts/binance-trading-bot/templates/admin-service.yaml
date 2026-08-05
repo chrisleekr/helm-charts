@@ -1,0 +1,36 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{/*
+Scrape-only Service, headless so it never becomes a routable endpoint for
+anything but the ServiceMonitor. Both admin ports are declared: only pods that
+actually bind the named target port join the matching endpoint subset, so a
+worker is never scraped on 9100 nor an api on 9101.
+
+That is also why the selector is name+instance with no component, unlike every
+other Service here. It nominally matches the bundled Postgres, Valkey and
+Collector pods too, but endpoints resolve targetPort by NAME, and none of those
+declare a port called admin or worker-admin, so none of them can join either
+subset. Narrowing it would need a component-based selector, and Service
+selectors are equality-only, so no single one covers all four app roles.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "admin") }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: admin
+      port: 9100
+      targetPort: admin
+      protocol: TCP
+    - name: worker-admin
+      port: 9101
+      targetPort: worker-admin
+      protocol: TCP
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+{{- end }}

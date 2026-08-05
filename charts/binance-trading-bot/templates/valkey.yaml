@@ -1,0 +1,128 @@
+{{- if .Values.valkey.enabled }}
+{{- $name := include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "valkey") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  type: ClusterIP
+  ports:
+    - name: valkey
+      port: {{ .Values.valkey.service.port }}
+      targetPort: valkey
+      protocol: TCP
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+---
+{{/*
+BullMQ queues live here, so the data is not purely a cache: --save keeps a
+snapshot across restarts rather than replaying every queued job from scratch.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: valkey
+  template:
+    metadata:
+      labels:
+        {{- include "binance-trading-bot.labels" . | nindent 8 }}
+        app.kubernetes.io/component: valkey
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Nothing here talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        # 999:1000 is valkey in the image. Alpine already occupies gid 999, so
+        # the group is 1000 while the user is 999. Verified with `id valkey` in
+        # valkey/valkey:8-alpine. fsGroup 1000 is what makes /data writable.
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: valkey
+          image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
+          imagePullPolicy: {{ .Values.valkey.image.pullPolicy }}
+          # No readOnlyRootFilesystem: valkey writes its snapshot outside /data.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+            - --save
+            - "60"
+            - "1"
+            - --requirepass
+            - $(VALKEY_PASSWORD)
+            - --loglevel
+            - warning
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "binance-trading-bot.secretName" . }}
+                  key: VALKEY_PASSWORD
+            # Same value under the name valkey-cli reads on its own, so the
+            # probes below never put the password in an argv where /proc makes
+            # it readable. valkey 8 honours REDISCLI_AUTH, not VALKEYCLI_AUTH.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "binance-trading-bot.secretName" . }}
+                  key: VALKEY_PASSWORD
+          ports:
+            - name: valkey
+              containerPort: 6379
+              protocol: TCP
+          readinessProbe:
+            exec:
+              # Matching on PONG, not on the exit code: valkey-cli exits 0 even
+              # for NOAUTH and LOADING, so the status alone only proves the port
+              # is open. Verified against valkey/valkey:8-alpine.
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              # Matching on PONG, not on the exit code: valkey-cli exits 0 even
+              # for NOAUTH and LOADING, so the status alone only proves the port
+              # is open. Verified against valkey/valkey:8-alpine.
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.valkey.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      {{- include "binance-trading-bot.nodePlacement" . }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.valkey.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.valkey.persistence.size }}
+        {{- with .Values.valkey.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+{{- end }}

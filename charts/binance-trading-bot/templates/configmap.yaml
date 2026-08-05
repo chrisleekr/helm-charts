@@ -1,0 +1,38 @@
+{{/*
+Hook-annotated so it exists before the pre-install migration Job runs. Plain
+release resources are applied after pre-install hooks, which would leave the
+Job's envFrom pointing at nothing on a first install. pre-rollback keeps a
+rolled-back revision on the config it was released with.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade,pre-rollback
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  PORT: "3000"
+  # 127.0.0.1 upstream, which no kubelet probe can reach. NetworkPolicy, not
+  # bind address, is what keeps these ports private.
+  ADMIN_HOST: "0.0.0.0"
+  ADMIN_PORT: "9100"
+  WORKER_ADMIN_HOST: "0.0.0.0"
+  WORKER_ADMIN_PORT: "9101"
+  WEB_ORIGIN: {{ include "binance-trading-bot.webOrigin" . | quote }}
+  PUBLIC_WEB_URL: {{ default (include "binance-trading-bot.webOrigin" .) .Values.publicWebUrl | quote }}
+  BACKUP_DIR: {{ .Values.persistence.mountPath | quote }}
+  # Migrations belong to the hook Job; every app pod opts out so concurrent
+  # boots cannot race on the migrations table.
+  SKIP_MIGRATIONS: "1"
+  TICK_PERSIST_TIMEOUT_MS: {{ .Values.config.tickPersistTimeoutMs | quote }}
+  TICK_CONCURRENCY: {{ .Values.config.tickConcurrency | quote }}
+  KLINE_CONCURRENCY: {{ .Values.config.klineConcurrency | quote }}
+  {{- with (include "binance-trading-bot.otlpEndpoint" .) }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ . | quote }}
+  {{- end }}

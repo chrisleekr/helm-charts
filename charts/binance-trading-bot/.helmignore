@@ -21,3 +21,6 @@
 .idea/
 *.tmproj
 .vscode/
+# chart-testing fixtures. They carry throwaway credentials and must not ship
+# inside the published package, where they are one -f away from production use.
+ci/

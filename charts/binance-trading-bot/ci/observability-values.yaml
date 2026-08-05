@@ -1,0 +1,55 @@
+# Observability-on branch for CI renders and `ct` installs.
+#
+# Turns on every optional monitoring resource at once: ServiceMonitor (plus the
+# separate admin Service it scrapes), PrometheusRule, the bundled OpenTelemetry
+# Collector, and the NetworkPolicy that has to admit the scrape source.
+#
+# Rule tuning below is deliberately non-default so CI can prove the thresholds,
+# `for` durations and severities are values-driven rather than hardcoded.
+#
+# Not for production use.
+webOrigin: "http://binance-trading-bot.ci.example.com"
+
+networkPolicy:
+  enabled: true
+  # Peers allowed to reach the admin ports (9100/9101). Raw NetworkPolicyPeer
+  # entries, passed through untouched. Port 3000 stays open to everything.
+  adminFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: kube-prometheus-stack
+  prometheusRule:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    rules:
+      workerMembersNotReady:
+        enabled: true
+        for: 7m
+        severity: critical
+      binanceApiWeightHigh:
+        enabled: true
+        # `binance_api_weight` is the only weight metric the v1.0.0 image
+        # emits; upstream's alerts.yml uses a name that never fires.
+        threshold: 900
+        for: 3m
+        severity: warning
+    # Operator-supplied rules are appended verbatim to the same group.
+    additionalRules:
+      - alert: CiExtraRule
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: CI passthrough rule
+
+otelCollector:
+  enabled: true

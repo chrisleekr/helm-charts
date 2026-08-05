@@ -1,0 +1,59 @@
+name: Lint renovate config
+
+# Called by lint.yml, never triggered directly. See lint-omniroute.yml for why
+# the paths filter lives in the caller rather than here.
+#
+# Not a chart gate, but it earns its own file for the same reason they do: it is
+# the single most expensive step in the lint workflow (26s of a 38s run, almost
+# all of it the npx download) guarding the least volatile file in the repo
+# (renovate.json, changed in 2 of 82 commits). Splitting it out is what lets
+# lint.yml skip it on the PRs that do not touch it.
+on:
+  workflow_call:
+
+jobs:
+  gate:
+    permissions:
+      # Declaring any scope sets every unlisted one to none, so this is tighter
+      # than the repo default of read-on-all-scopes. Worth having on the one job
+      # that executes third-party npm code.
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # persist-credentials:false keeps GITHUB_TOKEN out of .git/config, because
+        # the validator step below executes third-party npm code in this workspace.
+        # Mirrors the same setting and rationale in github-app-sync.yml.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node for the Renovate validator
+        # renovate@44.2.3 declares engines.node ^24.11.0; the ubuntu-24.04 runner
+        # defaults to Node 22.x. npm's engine-strict is false by default, so npx
+        # would install anyway and run on an unsupported runtime. Pin it instead of
+        # relying on that working.
+        # SHA-pinned per the convention in github-app-sync.yml. Note these pins are
+        # not Renovate-monitored while enabledManagers excludes github-actions, so
+        # they need a manual bump.
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Validate renovate.json
+        # Renovate fails silently on a bad config: it warns in its own logs and
+        # stops opening PRs, so no PR ever turns red. Since renovate.json grants
+        # auto-merge, catch the breakage here instead. Verified to reject unknown
+        # keys, malformed JSON, wrong value types, the deprecated fileMatch name,
+        # and invalid regex. It does NOT check enum values (a bogus bumpType
+        # passes), so this is a schema gate, not a semantic one.
+        #
+        # The filename is passed explicitly on purpose: with no argument the
+        # validator only scans default locations "if files exist" and exits 0 when
+        # it finds none (renovatebot/renovate#16025), so deleting or renaming
+        # renovate.json would silently pass. Version is pinned rather than
+        # floating on latest since this step executes third-party npm code; a
+        # schema change in a newer Renovate turns this red, which is the signal
+        # to bump the pin. Bumping it re-runs this gate, because lint.yml lists
+        # this file in the renovate paths filter.
+        run: npx --yes --package renovate@44.2.3 -- renovate-config-validator --strict renovate.json

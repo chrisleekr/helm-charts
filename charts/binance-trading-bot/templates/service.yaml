@@ -1,0 +1,21 @@
+{{/*
+Port 3000 only. The admin ports serve /metrics and /readyz with no
+authentication, so putting them here would publish an unauthenticated
+Postgres and Redis probe to anything that can resolve the Service.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ include "binance-trading-bot.httpRole" . }}

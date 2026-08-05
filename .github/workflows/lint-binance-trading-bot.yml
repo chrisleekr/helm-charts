@@ -1,0 +1,26 @@
+name: Lint binance-trading-bot
+
+# Called by lint.yml, never triggered directly. See lint-omniroute.yml for why
+# the paths filter lives in the caller rather than here.
+on:
+  workflow_call:
+
+jobs:
+  gate:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Render gate
+        # Renders the chart across every conditional branch (default, split
+        # topology, external datastores, ingress + NetworkPolicy, observability,
+        # external OTLP, persistence off) and asserts the behaviour each branch
+        # is supposed to produce. helm lint and a single template run cannot see
+        # a branch that renders the wrong thing, only one that fails to render.
+        # Includes negative cases that must fail, e.g. an unresolvable webOrigin.
+        run: bash scripts/check-binance-trading-bot-render.sh

@@ -1,0 +1,182 @@
+{{- if not (has .Values.topology (list "all" "split")) }}
+{{- fail (printf "topology must be \"all\" or \"split\", got %q" .Values.topology) }}
+{{- end }}
+{{/*
+One image, four roles. Everything that differs between them lives in this table
+so the workload body below stays single-sourced.
+
+  http/admin/workerAdmin - which listeners the role actually binds. The port
+    names drive the admin Service: Kubernetes only puts a pod in an endpoint
+    subset when it declares the named target port, so a worker never lands in
+    the 9100 subset and is never scraped for a port it does not serve.
+  probePort - the admin port carrying /readyz and /metrics for that role.
+    Port 3000 answers /healthz only, so probing it would report a process that
+    has lost Postgres as healthy.
+  strategy - Recreate wherever the role holds the backups volume as a single
+    writer. The trading roles additionally have no distributed lock upstream,
+    so two live replicas would double-trade.
+  trades - runs the live trading loop, so it cannot be scaled past one replica.
+    Note this is not the same set as workerAdmin: study binds the same admin
+    listener on 9101 but only consumes study jobs, so it scales freely.
+*/}}
+{{- $spec := dict
+  "all"    (dict "http" true  "admin" true  "workerAdmin" true  "probePort" 9100 "sharedBackups" true  "strategy" "Recreate"      "trades" true)
+  "api"    (dict "http" true  "admin" true  "workerAdmin" false "probePort" 9100 "sharedBackups" true  "strategy" "RollingUpdate" "trades" false)
+  "worker" (dict "http" false "admin" false "workerAdmin" true  "probePort" 9101 "sharedBackups" true  "strategy" "Recreate"      "trades" true)
+  "study"  (dict "http" false "admin" false "workerAdmin" true  "probePort" 9101 "sharedBackups" false "strategy" "RollingUpdate" "trades" false)
+}}
+{{- $fullname := include "binance-trading-bot.fullname" . }}
+{{- range $role := splitList " " (include "binance-trading-bot.roles" .) }}
+{{- $s := index $spec $role }}
+{{- $override := default dict (index $.Values.roles $role) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "binance-trading-bot.componentName" (dict "ctx" $ "suffix" $role) }}
+  labels:
+    {{- include "binance-trading-bot.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $role }}
+spec:
+  {{- if $s.trades }}
+  {{/*
+  "all" runs the worker in-process, so the pin has to cover it too and not just
+  the split-topology worker. Fail rather than silently ignore the request:
+  quietly capping a value the operator set is how someone concludes scaling
+  worked while two pods place the same orders.
+  */}}
+  {{/*
+  Only "all" reads the global replicaCount, because under that topology it is
+  the whole deployment. A split worker must not, or the value values.yaml
+  documents as applying to api and study would abort the render.
+  hasKey rather than `default`: sprig treats 0 as empty, and 0 is a real request
+  to stop trading that must not be quietly rounded up to a running worker.
+  */}}
+  {{- $traderDefault := ternary $.Values.replicaCount 1 (eq $.Values.topology "all") }}
+  {{- $requested := int (ternary $override.replicaCount $traderDefault (hasKey $override "replicaCount")) }}
+  {{- if gt $requested 1 }}
+  {{- fail (printf "role %q runs the live trading worker, which has no distributed lock upstream, so it cannot be scaled past 1 without double-trading. Got replicas=%d. Scale the read path instead: topology=split with roles.api.replicaCount." $role $requested) }}
+  {{- end }}
+  replicas: {{ $requested }}
+  {{- else }}
+  replicas: {{ ternary $override.replicaCount $.Values.replicaCount (hasKey $override "replicaCount") }}
+  {{- end }}
+  strategy:
+    type: {{ $s.strategy }}
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $role }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
+        {{- with $.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "binance-trading-bot.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $role }}
+        {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "binance-trading-bot.serviceAccountName" $ }}
+      automountServiceAccountToken: {{ $.Values.serviceAccount.automount }}
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $.Chart.Name }}
+          image: {{ include "binance-trading-bot.image" $ | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          env:
+            - name: ROLE
+              value: {{ $role | quote }}
+            {{- with $.Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}
+            - secretRef:
+                name: {{ include "binance-trading-bot.secretName" $ }}
+          ports:
+            {{- if $s.http }}
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            {{- end }}
+            {{- if $s.admin }}
+            - name: admin
+              containerPort: 9100
+              protocol: TCP
+            {{- end }}
+            {{- if $s.workerAdmin }}
+            - name: worker-admin
+              containerPort: 9101
+              protocol: TCP
+            {{- end }}
+          {{/*
+          `with` rather than a bare toYaml: setting one of these to {} is the
+          obvious way to try to turn a probe off, and toYaml would emit a literal
+          {} as a sibling of httpGet, which is not parseable YAML.
+          */}}
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: {{ $s.probePort }}
+            {{- with $.Values.startupProbe }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ $s.probePort }}
+            {{- with $.Values.readinessProbe }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ $s.probePort }}
+            {{- with $.Values.livenessProbe }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml ($override.resources | default $.Values.resources) | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: backups
+              mountPath: {{ $.Values.persistence.mountPath }}
+            {{- with $.Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        # HOME=/tmp in the image, so a read-only root filesystem needs this.
+        - name: tmp
+          emptyDir: {}
+        - name: backups
+          {{- if and $.Values.persistence.enabled $s.sharedBackups }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "binance-trading-bot.componentName" (dict "ctx" $ "suffix" "backups")) $.Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with $.Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "binance-trading-bot.nodePlacement" $ }}
+{{- end }}

@@ -1,0 +1,35 @@
+# Mirror of .github/workflows/lint-github-app.yml.
+github-app:
+  stage: lint
+  image: alpine/helm:3.20.0
+  interruptible: true
+  rules:
+    # The gate reruns when its own scripts or CI files change, otherwise a broken
+    # gate could merge without ever executing.
+    - changes:
+        paths:
+          - charts/github-app/**/*
+          - scripts/check-github-app-render.sh
+          - scripts/check-env-parity.sh
+          - scripts/check-env-parity.test.sh
+          - .gitlab/ci/lint-github-app.yml
+          - .gitlab-ci.yml
+        # Without compare_to, a branch pipeline diffs against the previous commit
+        # on the branch, so a file touched in an earlier commit of the same push
+        # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
+        compare_to: refs/heads/main
+  before_script:
+    # alpine/helm ships helm, bash, yq and curl. Only jq is missing, and
+    # check-env-parity.sh needs it to read env-contract.json.
+    - apk add --no-cache jq
+  script:
+    # Renders all eight combinations of provider, datastore and RBAC so a
+    # template error in any mode surfaces on the MR, not after publish.
+    - bash scripts/check-github-app-render.sh
+    # Exercises the gate's own comparison logic against a synthetic contract, so
+    # that logic has coverage even while the live contract 404s and the gate SKIPs.
+    - bash scripts/check-env-parity.test.sh
+    # Fails when the chart's ConfigMap/Secret env surface drifts from github-app's
+    # env-contract.json. Catches what helm template cannot: a config.ts var the
+    # chart never mirrored.
+    - bash scripts/check-env-parity.sh

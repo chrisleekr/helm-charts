@@ -1,312 +1,377 @@
 # Default values for binance-trading-bot.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-imagePullPolicy: IfNotPresent
+# Upstream: https://github.com/chrisleekr/binance-trading-bot
 
-serviceAccount:
-  # Specifies whether a service account should be created
-  create: true
-  # Annotations to add to the service account
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+# ──────────────────────────────── TOPOLOGY ────────────────────────────────
+# One image, four roles. "all" runs the api, the live worker and the study
+# consumer in a single process (upstream's default single-box layout).
+# "split" runs one Deployment per role: api, worker, study.
+topology: all
 
-redis:
-  image:
-    repository: redis
-    tag: 6.2.4
-  podAnnotations: {}
-  sysctl:
-    net.core.somaxconn: 1024
+image:
+  repository: chrisleekr/binance-trading-bot
+  tag: ""                                       # Defaults to Chart appVersion.
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Applies only to roles that do not run the live trading loop, which means the
+# api and study roles under topology=split. Under topology=all the single pod
+# runs the worker in-process, so anything above 1 is rejected at render time
+# rather than silently double-trading.
+replicaCount: 1
+
+# Per-role overrides layered on the top-level replicaCount/resources. The roles
+# that trade ("all" and "worker") reject a replicaCount above 1: upstream has no
+# distributed lock, so a second replica places the same orders twice. 0 is
+# honoured as written, so it is the way to stop a role without uninstalling.
+roles:
+  all: {}
+  api: {}
+  worker: {}
+  study: {}
+
+# ──────────────────────────────── IDENTITY ────────────────────────────────
+# Exact browser origin, "scheme://host[:port]". Upstream's WEB_ORIGIN is an
+# allowlist with no wildcard support and gates CORS, Better Auth CSRF and the
+# WebSocket upgrade, so a wrong value fails at runtime, not at install. Left
+# empty it falls back to the first ingress host; with neither, the render fails.
+webOrigin: ""
+# Advertised base URL for links the app generates. Defaults to webOrigin.
+publicWebUrl: ""
+
+auth:
+  # Must be >= 32 characters; the app refuses to boot below that. Empty
+  # auto-generates one and reuses the value already in the cluster on upgrade.
+  secret: ""
+
+# Bring your own Secret instead of letting the chart manage credentials, which
+# is what GitOps setups want since the lookup-based generation above cannot run
+# during a server-side diff. Must contain AUTH_SECRET, DATABASE_URL, REDIS_URL,
+# plus POSTGRES_PASSWORD / VALKEY_PASSWORD when the bundled datastores are on,
+# plus OTEL_EXPORTER_OTLP_HEADERS when otlp.headers is used without the bundled
+# collector: this Secret replaces the chart's own, so a key missing here is not
+# set anywhere, and a missing OTLP auth header silently drops every trace.
+existingSecret: ""
+
+# ──────────────────────────────── RUNTIME ─────────────────────────────────
+config:
+  nodeEnv: production
+  logLevel: info
+  # Upstream tunes these for local SSD. Network-replicated CSI makes the
+  # degraded persist path the steady state, so the defaults here are relaxed.
+  tickPersistTimeoutMs: 300
+  tickConcurrency: 8
+  klineConcurrency: 3
+
+# Extra literal env vars appended to every app container.
+extraEnv: []
+# - name: STUDY_CPU_SHARE
+#   value: "0.5"
+
+# ──────────────────────────────── MIGRATIONS ──────────────────────────────
+# The image entrypoint migrates on boot, and concurrent pods race on the
+# migrations table. The chart runs them once in a pre-install/pre-upgrade hook
+# Job and sets SKIP_MIGRATIONS=1 on every app workload instead.
+migrations:
+  enabled: true
+  # How long the init container waits for the database to accept connections
+  # before failing with a readable message. Covers the bundled StatefulSet's
+  # first start; raise it if an external database is slow to come up.
+  #
+  # Both numbers here live inside a budget Helm sets, not just each other:
+  # `helm install --timeout` defaults to 5m0s and applies to each hook Job, so
+  # the whole pre-install chain (image pull, PVC bind, initdb, this wait, then
+  # the migration) has to finish inside 300s or Helm abandons a Job that may
+  # still be running. Raise these only together with a larger --timeout.
+  databaseWaitSeconds: 120
+  # Hard ceiling on the whole Job. backoffLimit only counts pod failures, and a
+  # pod waiting on an unreachable database never produces one, so without this
+  # a bad DSN hangs the release until Helm's own timeout. Kept above
+  # databaseWaitSeconds plus the migration runtime so the wait loop can report
+  # why, and below Helm's 300s default so the Job fails with a diagnosable
+  # DeadlineExceeded rather than Helm walking away from it.
+  activeDeadlineSeconds: 240
   resources:
     limits:
-      cpu: 200m
+      memory: 1Gi
+    requests:
+      cpu: 100m
       memory: 256Mi
+
+# ──────────────────────────────── DATASTORES ──────────────────────────────
+# TimescaleDB is the schema's persistence layer, not an optional extension, so
+# an external Postgres must have it installed.
+#
+# The bundled Postgres is rendered as a Helm pre-install/pre-upgrade hook so it
+# exists before the migration Job runs. Three consequences of that: `helm upgrade`
+# recreates the StatefulSet, which restarts the database (the PVC is retained,
+# so data survives); `helm uninstall` leaves the StatefulSet, Service and PVC
+# behind for you to delete; and persistence.size below is fixed at install time,
+# because recreating the StatefulSet reattaches the existing PVC at its original
+# size instead of raising the usual validation error. Set postgres.enabled=false
+# and point externalDatabase.url at a managed instance to avoid all three.
+postgres:
+  enabled: true
+  # Also the image for the migration Job's wait-for-database init container,
+  # which runs pg_isready against DATABASE_URL. That container renders whether
+  # or not the bundled database is enabled, so this stanza still has to point
+  # at a pullable image when postgres.enabled is false.
+  image:
+    repository: timescale/timescaledb
+    tag: 2.27.1-pg17
+    pullPolicy: IfNotPresent
+  auth:
+    username: binance_trading_bot
+    database: binance_trading_bot
+    password: ""                                # Empty auto-generates and persists.
+  service:
+    port: 5432
+  persistence:
+    storageClass: ""                            # Empty uses the cluster default.
+    accessModes: [ReadWriteOnce]
+    # Fixed at install time. Raising it on an existing release renders cleanly
+    # and does nothing; resize the PVC directly instead.
+    size: 20Gi
+  # synchronous_commit=off trades a few hundred ms of durability for tick
+  # persist latency, which is the app's hot path.
+  args:
+    - -c
+    - max_connections=50
+    - -c
+    - synchronous_commit=off
+  resources:
+    limits:
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Used when postgres.enabled is false. Full DSN so no credential ever has to be
+# reassembled from parts, including sslmode and any driver options.
+#
+# Worth contrasting: the bundled StatefulSet above ships no server certificate,
+# so the DSN the chart builds for it uses sslmode=disable and the password and
+# every row cross the pod network in plaintext. That is inside the cluster and
+# is the same posture as the bundled Valkey, but if your threat model includes
+# the pod network, run a database with TLS and point this at it with
+# sslmode=require.
+externalDatabase:
+  url: ""
+
+valkey:
+  enabled: true
+  image:
+    repository: valkey/valkey
+    tag: 8-alpine
+    pullPolicy: IfNotPresent
+  auth:
+    password: ""                                # Empty auto-generates and persists.
+  service:
+    port: 6379
+  persistence:
+    storageClass: ""
+    accessModes: [ReadWriteOnce]
+    size: 2Gi
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 192Mi
+
+externalRedis:
+  url: ""
+
+# ──────────────────────────────── STORAGE ─────────────────────────────────
+# BACKUP_DIR. The worker writes database dumps here and the api lists them, so
+# in split topology both mount the same claim and the access mode must allow
+# multi-node writes (ReadWriteMany).
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  size: 10Gi
+  mountPath: /backups
+
+# ──────────────────────────────── NETWORK ─────────────────────────────────
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  # Enabling the ingress with an empty tls list fails the render. Set this only
+  # when TLS terminates in front of the ingress controller, and set webOrigin to
+  # the https:// origin yourself, because the fallback derives the scheme from
+  # ingress.tls and would give you http://.
+  allowInsecure: false
+  annotations:
+    # The event stream is a long-lived WebSocket; the nginx default 60s read
+    # timeout tears it down every minute.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Database dump restores are uploaded through this path. The annotation is
+    # per-Ingress, not per-path, so this raises the limit on every URL on the
+    # host, and nginx buffers the body before the app sees it. Lower it if you
+    # do not use restore; the controller default is 1m.
+    nginx.ingress.kubernetes.io/proxy-body-size: 512m
+  hosts:
+    - host: chart-example.local                 # Replace with your real host.
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: binance-trading-bot-tls
+  #    hosts:
+  #      - chart-example.local
+
+# Ports 9100/9101 serve /metrics and /readyz with no authentication, and a
+# Service is not a firewall. This policy is the only thing keeping them off the
+# pod network. Port 3000 stays reachable from everywhere.
+#
+# Covers the app pods only. The bundled Collector carries its own policy keyed
+# on otelCollector.enabled, independent of this flag, because its OTLP
+# receivers are unauthenticated and it forwards using your vendor token.
+networkPolicy:
+  enabled: false
+  # Raw NetworkPolicyPeer entries, passed through untouched.
+  adminFrom: []
+  # - namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: monitoring
+
+# ──────────────────────────────── OBSERVABILITY ───────────────────────────
+metrics:
+  serviceMonitor:
+    enabled: false                              # Needs the Prometheus Operator CRDs.
+    interval: 30s
+    scrapeTimeout: ""
+    labels: {}
+  prometheusRule:
+    enabled: false
+    labels: {}
+    # Only metrics the v1.0.0 image actually exports. See the README for the
+    # failure modes that have no alert coverage.
+    #
+    # `for` is how long the expression must already hold before the alert
+    # fires. It is not the same as the counter lookback: droppedSpans and
+    # droppedLogs use increase(...[15m]), and that 15m window is fixed in the
+    # template. Disabling all four with additionalRules empty is rejected at
+    # render time, because an empty rule list is invalid to the CRD.
+    rules:
+      workerMembersNotReady:
+        enabled: true
+        for: 10m
+        severity: warning
+      binanceApiWeightHigh:
+        enabled: true
+        threshold: 1000
+        for: 5m
+        severity: warning
+      droppedSpans:
+        enabled: true
+        threshold: 0
+        for: 15m
+        severity: warning
+      droppedLogs:
+        enabled: true
+        threshold: 0
+        for: 15m
+        severity: warning
+    # Operator-owned rules appended verbatim to the same group.
+    additionalRules: []
+
+# Bundled OpenTelemetry Collector. Tail sampling needs a collector because the
+# in-process head sampler cannot see whether a trace ended in an error.
+otelCollector:
+  enabled: false
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: 0.158.0
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  tailSampling:
+    # Traces slower than this are always kept.
+    latencyThresholdMs: 1000
+    # Sampling rate for everything that is neither slow nor failed.
+    baselinePercentage: 10
+  resources:
+    limits:
+      memory: 512Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  persistentVolume:
-    enabled: true
-    accessModes:
-      - ReadWriteOnce
-    annotations: {}
-    existingClaim: ""
-    mountPath: /data
-    size: 32Gi
-    # storageClass: "-"
-    # volumeBindingMode: ""
-    subPath: ""
-  podSecurityContext: {}
-  securityContext: {}
-  config: |
-    # Redis configuration content
-    # Add your redis.conf content here
-  secrets:
-    # If existingSecret is not set, password will be used
-    password: ""
-    existingSecret: "binance-trading-bot-redis-secrets"
-    secretKey: "redis-password"
-  livenessProbe:
-    tcpSocket:
-      port: redis
-    initialDelaySeconds: 15
-    periodSeconds: 20
-  readinessProbe:
-    tcpSocket:
-      port: redis
-    initialDelaySeconds: 5
-    periodSeconds: 10
 
-mongo:
-  image:
-    repository: mongo
-    tag: 3.2.20-jessie
-  args:
-    - "--noIndexBuildRetry"
-  podAnnotations: {}
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 200m
-      memory: 256Mi
-  persistentVolume:
-    enabled: true
-    accessModes:
-      - ReadWriteOnce
-    annotations: {}
-    existingClaim: ""
-    mountPath: /data
-    size: 32Gi
-    # storageClass: "-"
-    # volumeBindingMode: ""
-    subPath: ""
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 999
-    fsGroup: 999
-  securityContext: {}
-  livenessProbe:
-    tcpSocket:
-      port: mongodb
-    initialDelaySeconds: 30
-    periodSeconds: 20
-  readinessProbe:
-    tcpSocket:
-      port: mongodb
-    initialDelaySeconds: 10
-    periodSeconds: 10
+# External OTLP backend. With otelCollector.enabled the collector forwards here;
+# without it the app exports directly. Both empty disables tracing export, which
+# is how upstream treats an unset endpoint.
+otlp:
+  endpoint: ""
+  headers: ""                                   # "key=value,key2=value2".
 
-binanceBot:
-  image:
-    repository: chrisleekr/binance-trading-bot
-    tag: latest
-  podAnnotations: {}
-  livenessProbe:
-    httpGet:
-      path: /status
-      port: http
-    initialDelaySeconds: 30
-    periodSeconds: 30
-    timeoutSeconds: 5
-  readinessProbe:
-    httpGet:
-      path: /status
-      port: http
-    initialDelaySeconds: 10
-    periodSeconds: 30
-  # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
-  service:
-    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
-    type: ClusterIP
-    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-    port: 80
-  # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-  ingress:
-    enabled: false
-    className: ""
-    annotations:
-      {}
-      # kubernetes.io/ingress.class: nginx
-      # kubernetes.io/tls-acme: "true"
-    hosts:
-      - host: binance.chart-example.local
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-    tls: []
-    #  - secretName: chart-example-tls
-    #    hosts:
-    #      - chart-example.local
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 200m
-      memory: 256Mi
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-  podSecurityContext: {}
-  securityContext:
-    privileged: true
+# ──────────────────────────────── WORKLOAD ────────────────────────────────
+serviceAccount:
+  create: true
+  # No template in this chart calls the Kubernetes API, so the pods have no use
+  # for a projected token. Handing one to an internet-facing process that parses
+  # untrusted HTTP and WebSocket input buys an attacker API-server reachability
+  # and an identity to probe RBAC with, for no functional gain.
+  automount: false
+  annotations: {}
+  name: ""
 
-  # Additional environment variables to add to the container
-  env: {}
-  # Application configuration
-  secrets:
-    existingSecret: "binance-trading-bot-secrets" # Make it empty if wants to create from config.binance.live.apiKey and config.binance.live.secretKey
+podAnnotations: {}
+podLabels: {}
 
-  config:
-    mode: "test" # or "live"
-    timezone: "Australia/Melbourne"
-    demoMode: false
+# The image runs as 1000:1000. fsGroup is what makes the backups volume
+# writable when the CSI driver formats it root-owned.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  # Required for admission into a namespace enforcing the "restricted" Pod
+  # Security Standard, which otherwise rejects every pod this chart creates.
+  seccompProfile:
+    type: RuntimeDefault
 
-    logLevel: "INFO"
+securityContext:
+  allowPrivilegeEscalation: false
+  seccompProfile:
+    type: RuntimeDefault
+  # HOME=/tmp in the image, so the only writable paths needed are the emptyDir
+  # at /tmp and the backups volume.
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 
-    binance:
-      live:
-        apiKey: ""
-        secretKey: ""
-      test:
-        apiKey: ""
-        secretKey: ""
+resources:
+  limits:
+    memory: 2Gi
+  requests:
+    cpu: 600m
+    memory: 512Mi
 
-    redis:
-      host: "binance-trading-bot-redis" # Service name
-      port: 6379
-      db: 0
+# The admin server binds ADMIN_HOST, which the chart forces to 0.0.0.0 so the
+# kubelet can reach it. Probes hit the admin port, never port 3000, because
+# 3000 only answers /healthz.
+startupProbe:
+  periodSeconds: 5
+  failureThreshold: 24
+readinessProbe:
+  periodSeconds: 10
+livenessProbe:
+  periodSeconds: 30
 
-    mongo:
-      host: "binance-trading-bot-mongodb" # Service name
-      port: 27017
-      database: "binance-bot"
+terminationGracePeriodSeconds: 60
 
-    tradingview:
-      host: "binance-trading-bot-tradingview" # Service name
-      port: 8080
+nodeSelector: {}
+tolerations: []
+affinity: {}
 
-    slack:
-      enabled: false
-      webhookUrl: ""
-      channel: "binance-bot"
-      username: "Binance Bot"
-
-    localTunnel:
-      enabled: false
-      subdomain: ""
-
-    featureToggle:
-      notifyOrderConfirm: false
-      notifyDebug: false
-      notifyOrderExecute: false
-
-    authentication:
-      enabled: false
-      password:
-        existingSecret: ""
-        secretKey: "auth-password"
-      loginLimiter:
-        maxConsecutiveFails: 5
-        duration: 300
-        blockDuration: 900
-
-    jobs:
-      alive:
-        enabled: true
-        cronTime: "0 * * * * *"
-        priceSymbol: "BTCUSDT"
-        balanceSymbols: "BTC,USDT"
-
-      trailingTrade:
-        enabled: true
-        cronTime: "* * * * * *"
-        symbols: [] # Will be filled as JSON array
-        botOptions:
-          authentication:
-            lockList: false
-            lockAfter: 120
-          autoTriggerBuy:
-            enabled: false
-            triggerAfter: 20
-            conditions:
-              whenLessThanATHRestriction: true
-              afterDisabledPeriod: true
-          orderLimit:
-            enabled: false
-            maxBuyOpenOrders: 3
-            maxOpenTrades: 5
-        candles:
-          interval: "1m"
-          limit: 100
-        buy:
-          enabled: true
-          triggerPercentage: 1.0
-          stopPercentage: 1.02
-          limitPercentage: 1.021
-          athRestriction:
-            enabled: true
-            candles:
-              interval: "1d"
-              limit: 30
-            restrictionPercentage: 0.9
-        sell:
-          enabled: true
-          triggerPercentage: 1.06
-          stopPercentage: 0.98
-          limitPercentage: 0.979
-          stopLoss:
-            enabled: false
-            maxLossPercentage: 0.8
-            disableBuyMinutes: 360
-            orderType: "market"
-          conservativeMode:
-            enabled: false
-            factor: 0.5
-
-tradingview:
-  image:
-    repository: chrisleekr/binance-trading-bot
-    tag: tradingview
-  podAnnotations: {}
-  livenessProbe:
-    httpGet:
-      path: /status
-      port: http
-    initialDelaySeconds: 30
-    periodSeconds: 30
-    timeoutSeconds: 5
-  readinessProbe:
-    httpGet:
-      path: /status
-      port: http
-    initialDelaySeconds: 30
-    periodSeconds: 30
-  # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
-  service:
-    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
-    type: ClusterIP
-    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-    port: 8080
-  resources:
-    limits:
-      cpu: 300m
-      memory: 384Mi
-    requests:
-      cpu: 150m
-      memory: 192Mi
-  podSecurityContext:
-    fsGroup: 2000
-  securityContext:
-    capabilities:
-      drop:
-        - ALL
-    readOnlyRootFilesystem: true
-    runAsNonRoot: true
-    runAsUser: 1000
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
+extraVolumes: []
+extraVolumeMounts: []

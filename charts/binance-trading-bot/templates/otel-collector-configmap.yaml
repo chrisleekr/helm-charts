@@ -1,0 +1,75 @@
+{{- if .Values.otelCollector.enabled }}
+{{/*
+Tail sampling is the reason this collector exists: the in-process head sampler
+decides before a trace finishes, so it cannot preferentially keep the traces
+that ended in an error or ran slow. Only a collector sees the completed trace.
+
+$exporter is resolved once because the exporters block and the pipeline's
+exporter list have to name the same thing or the collector rejects the config.
+*/}}
+{{- $exporter := ternary "otlphttp" "debug" (ne .Values.otlp.endpoint "") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "otel-collector") }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      tail_sampling:
+        decision_wait: 10s
+        policies:
+          - name: errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: slow
+            type: latency
+            latency:
+              threshold_ms: {{ .Values.otelCollector.tailSampling.latencyThresholdMs }}
+          - name: baseline
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: {{ .Values.otelCollector.tailSampling.baselinePercentage }}
+      batch:
+        timeout: 5s
+    exporters:
+    {{- if eq $exporter "otlphttp" }}
+      otlphttp:
+        endpoint: {{ .Values.otlp.endpoint | quote }}
+        {{- with .Values.otlp.headers }}
+        # Values come from the collector's Secret via env substitution. A
+        # ConfigMap is world-readable to anyone with namespace get/list, which
+        # is a far wider set than Secret readers, and these are bearer tokens.
+        headers:
+          {{- range $pair := splitList "," . }}
+          {{ (splitn "=" 2 $pair)._0 | trim }}: "${env:{{ include "binance-trading-bot.otlpHeaderEnv" (splitn "=" 2 $pair)._0 }}}"
+          {{- end }}
+        {{- end }}
+    {{- else }}
+      # No backend configured yet. Sampled traces are logged and discarded
+      # rather than leaving the pipeline without an exporter, which the
+      # collector rejects at startup.
+      debug:
+        verbosity: basic
+    {{- end }}
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, tail_sampling, batch]
+          exporters: [{{ $exporter }}]
+{{- end }}

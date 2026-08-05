@@ -1,0 +1,36 @@
+name: Lint github-app
+
+# Called by lint.yml, never triggered directly. See lint-omniroute.yml for why
+# the paths filter lives in the caller rather than here.
+on:
+  workflow_call:
+
+jobs:
+  gate:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Render feature matrix
+        # Renders all eight combinations of provider, datastore and RBAC so a
+        # template error in any mode surfaces on the PR, not after publish.
+        run: bash scripts/check-github-app-render.sh
+
+      - name: Env-parity self-test
+        # Exercises the gate's comparison logic against a synthetic contract
+        # derived from the chart, so the logic has coverage even while the live
+        # contract at v<appVersion> 404s (bootstrap window) and the gate SKIPs.
+        run: bash scripts/check-env-parity.test.sh
+
+      - name: Env-parity gate
+        # Fails when the chart's ConfigMap/Secret env surface drifts from
+        # github-app's env-contract.json (published at v<appVersion>). Catches the
+        # case helm template cannot: a config.ts var the chart never mirrored.
+        # Skips (does not fail) for appVersions predating the contract. helm, yq,
+        # jq and curl are all preinstalled on the ubuntu-24.04 runner image.
+        run: bash scripts/check-env-parity.sh

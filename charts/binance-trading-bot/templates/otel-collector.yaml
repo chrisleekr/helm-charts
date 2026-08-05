@@ -1,0 +1,105 @@
+{{- if .Values.otelCollector.enabled }}
+{{- $name := include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "otel-collector") }}
+{{- with .Values.otlp.headers }}
+{{/*
+Deliberately separate from the app Secret: the collector needs the header
+credentials and nothing else, and mounting the app Secret here would hand it
+DATABASE_URL and AUTH_SECRET as well. Being its own resource also keeps it
+working when the operator supplies existingSecret for the app.
+*/}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-headers
+  labels:
+    {{- include "binance-trading-bot.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+type: Opaque
+data:
+  {{- range $pair := splitList "," . }}
+  {{ include "binance-trading-bot.otlpHeaderEnv" (splitn "=" 2 $pair)._0 }}: {{ (splitn "=" 2 $pair)._1 | trim | b64enc | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  type: ClusterIP
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  replicas: {{ .Values.otelCollector.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: otel-collector
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/otel-collector-configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "binance-trading-bot.labels" . | nindent 8 }}
+        app.kubernetes.io/component: otel-collector
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Nothing here talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.otelCollector.image.repository }}:{{ .Values.otelCollector.image.tag }}"
+          imagePullPolicy: {{ .Values.otelCollector.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args: ["--config=/conf/config.yaml"]
+          {{- with .Values.otlp.headers }}
+          envFrom:
+            - secretRef:
+                name: {{ $name }}-headers
+          {{- end }}
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+      {{- include "binance-trading-bot.nodePlacement" . }}
+{{- end }}

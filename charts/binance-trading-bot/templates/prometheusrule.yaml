@@ -1,0 +1,91 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+{{- $rules := .Values.metrics.prometheusRule.rules }}
+{{/*
+Every entry under `rules:` below is conditional, so disabling all four with an
+empty additionalRules would emit a bare `rules:` key, which YAML reads as null.
+The PrometheusRule CRD types that field as an array and does not mark it
+nullable, so the API server rejects an explicit null even though the field is
+optional, and the operator gets a schema error instead of an empty rule group.
+Fail here with the reason, the same way the chart handles the other
+"you asked for something that cannot work" cases.
+*/}}
+{{- $ruleCount := len .Values.metrics.prometheusRule.additionalRules }}
+{{- range $rule := $rules }}
+{{- if and $rule $rule.enabled }}
+{{- $ruleCount = add1 $ruleCount }}
+{{- end }}
+{{- end }}
+{{- if eq $ruleCount 0 }}
+{{- fail "metrics.prometheusRule.enabled is set, but every built-in rule is disabled and additionalRules is empty. That renders a PrometheusRule with a null rules list, which the CRD rejects. Enable at least one rule, add one under additionalRules, or set metrics.prometheusRule.enabled=false." }}
+{{- end }}
+{{/*
+Every expression below names a metric the v1.0.0 image actually exports. The
+alert set upstream ships references several metrics no code path emits, so those
+alerts can never fire, which reads as "no problem" on a dashboard. See the
+README for the failure modes that are consequently uncovered.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ include "binance-trading-bot.fullname" . }}
+      rules:
+        {{- with $rules.workerMembersNotReady }}
+        {{- if .enabled }}
+        - alert: BinanceTradingBotWorkerMembersNotReady
+          # Registered workers that never reached ready: trading is degraded
+          # while the pod still passes its own probes.
+          expr: worker_members_ready < worker_members_total
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: Worker members registered but not ready
+        {{- end }}
+        {{- end }}
+        {{- with $rules.binanceApiWeightHigh }}
+        {{- if .enabled }}
+        - alert: BinanceTradingBotApiWeightHigh
+          # Binance bans the account's IP once the 1m request weight budget is
+          # exhausted, which stops trading outright.
+          expr: max(binance_api_weight) > {{ .threshold }}
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: Binance API request weight approaching the ban threshold
+        {{- end }}
+        {{- end }}
+        {{- with $rules.droppedSpans }}
+        {{- if .enabled }}
+        - alert: BinanceTradingBotDroppedSpans
+          expr: increase(otel_dropped_spans_total[15m]) > {{ .threshold }}
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: Traces are being dropped before export
+        {{- end }}
+        {{- end }}
+        {{- with $rules.droppedLogs }}
+        {{- if .enabled }}
+        - alert: BinanceTradingBotDroppedLogs
+          expr: increase(pino_dropped_logs_total[15m]) > {{ .threshold }}
+          for: {{ .for }}
+          labels:
+            severity: {{ .severity }}
+          annotations:
+            summary: Log lines are being dropped by the transport
+        {{- end }}
+        {{- end }}
+        {{- with .Values.metrics.prometheusRule.additionalRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}
