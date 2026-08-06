@@ -1,0 +1,23 @@
+# Split-topology branch for CI renders and `ct` installs.
+#
+# Each file under ci/ is installed independently by chart-testing, so every
+# fixture repeats the required webOrigin rather than layering on ct-values.yaml.
+#
+# Not for production use.
+webOrigin: "http://binance-trading-bot.ci.example.com"
+
+# One image, three roles: api (public HTTP + SPA), worker (live trading loop),
+# study (backtest/advisor consumer).
+topology: split
+
+persistence:
+  # api and worker mount the same BACKUP_DIR, so split topology needs a volume
+  # that supports multi-node write access.
+  accessModes:
+    - ReadWriteMany
+
+roles:
+  api:
+    # Proves the per-role override surface. The worker is deliberately left
+    # alone: it has no distributed lock upstream and must stay single-replica.
+    replicaCount: 2

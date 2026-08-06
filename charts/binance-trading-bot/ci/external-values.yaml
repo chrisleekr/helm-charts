@@ -1,0 +1,25 @@
+# External-datastore branch for CI renders and `ct` installs.
+#
+# Bundled Postgres and Valkey are switched off and the connection strings are
+# supplied verbatim. Also pins an explicit auth.secret so the "explicit value
+# beats the generated/persisted one" path is exercised.
+#
+# Not for production use. The credentials below are fixtures.
+webOrigin: "http://binance-trading-bot.ci.example.com"
+
+auth:
+  # >= 32 characters; upstream's zod schema rejects anything shorter.
+  secret: "ci-external-auth-secret-0123456789abcdef"
+
+postgres:
+  enabled: false
+
+valkey:
+  enabled: false
+
+externalDatabase:
+  # TimescaleDB is not optional upstream; an external Postgres must have it.
+  url: "postgres://btb:ci-external-pg-password@pg.ci.example.com:5432/btb?sslmode=require"
+
+externalRedis:
+  url: "redis://:ci-external-redis-password@redis.ci.example.com:6379/0"

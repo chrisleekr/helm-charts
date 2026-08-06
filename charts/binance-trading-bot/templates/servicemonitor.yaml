@@ -1,0 +1,44 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: admin
+  endpoints:
+    # One entry per admin port. A pod only appears in the subset for a port it
+    # declares, so this does not produce dead targets for roles that bind one
+    # admin server and not the other.
+    {{- range $port := list "admin" "worker-admin" }}
+    - port: {{ $port }}
+      path: /metrics
+      interval: {{ $.Values.metrics.serviceMonitor.interval }}
+      {{- with $.Values.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+      # Stamps a constant label on every series this release produces, which is
+      # what the PrometheusRule expressions match on. Without it those
+      # expressions are unscoped and any other target exporting the same metric
+      # names drives this release's alerts. A constant is set by writing the
+      # replacement with no sourceLabels: the empty concatenation matches the
+      # default (.*) regex.
+      #
+      # Not the `job` label: the operator derives that from the Service name by
+      # default but hands it to jobLabel when the Service carries one, so it is
+      # not under this chart's control.
+      relabelings:
+        - targetLabel: btb_release
+          replacement: {{ include "binance-trading-bot.fullname" $ | quote }}
+    {{- end }}
+{{- end }}

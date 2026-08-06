@@ -1,0 +1,150 @@
+{{- if .Values.postgres.enabled }}
+{{- $name := include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "postgres") }}
+{{/*
+The bundled datastore is a hook for the same reason the ConfigMap and Secret
+are: Helm runs every pre-install hook to completion before it applies plain
+resources, so a plain StatefulSet here would not exist yet when the migration
+Job (weight 0) starts, and the Job would block until the install timed out.
+Weight -5 puts it after the Secret it reads POSTGRES_PASSWORD from and before
+the Job. Helm does not block on non-Job hooks, so the Job's wait-for-database
+init container is what actually covers the startup gap.
+
+Three consequences, all documented in values.yaml under postgres.enabled:
+`helm upgrade` deletes and recreates the StatefulSet (the pod restarts; the PVC
+is retained by volumeClaimTemplates, so data survives), `helm uninstall` leaves
+it behind, and because the StatefulSet is recreated rather than updated, a
+changed persistence.size is accepted without the usual validation error and then
+ignored, since the existing PVC is reattached at its original size. Operators who
+want none of that should run an external database with postgres.enabled=false.
+
+pre-rollback matches the ConfigMap and the Secret. Without it `helm rollback`
+would leave the datastore on the spec the failed upgrade installed.
+*/}}
+{{- $hookAnnotations := dict "helm.sh/hook" "pre-install,pre-upgrade,pre-rollback" "helm.sh/hook-weight" "-5" "helm.sh/hook-delete-policy" "before-hook-creation" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  annotations:
+    {{- toYaml $hookAnnotations | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+---
+{{/*
+TimescaleDB, not stock Postgres: the schema's hypertables are part of the
+application, not an optional extension.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  annotations:
+    {{- toYaml $hookAnnotations | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "binance-trading-bot.labels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Nothing here talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        # 70:70 is postgres in the image. timescale/timescaledb builds on
+        # postgres:17-alpine, where Alpine's standard postgres uid/gid is 70.
+        # Verified with `getent passwd postgres` in 2.27.1-pg17.
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          # No readOnlyRootFilesystem: initdb and the server write outside PGDATA.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+            {{- toYaml .Values.postgres.args | nindent 12 }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.auth.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "binance-trading-bot.secretName" . }}
+                  key: POSTGRES_PASSWORD
+            # A subdirectory, because the volume root holds lost+found on ext4
+            # and initdb refuses a non-empty data directory.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          # Without this the kubelet starts liveness probing immediately and
+          # kills the container after three failures. initdb plus the TimescaleDB
+          # extension setup can outlast that on slow storage, and the restart
+          # repeats the same work, so the pod crash-loops with no way out.
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}]
+            periodSeconds: 5
+            failureThreshold: {{ .Values.postgres.startupFailureThreshold }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}]
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      {{- include "binance-trading-bot.nodePlacement" . }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.postgres.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.persistence.size }}
+        {{- with .Values.postgres.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+{{- end }}

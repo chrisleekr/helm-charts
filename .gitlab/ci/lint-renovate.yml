@@ -1,0 +1,31 @@
+# Mirror of .github/workflows/lint-renovate.yml.
+#
+# Renovate fails silently on a bad config: it warns in its own logs and stops
+# opening PRs, so no MR ever turns red. Since renovate.json grants auto-merge,
+# catch the breakage here instead.
+renovate:
+  stage: lint
+  # renovate@44.2.3 declares engines.node ^24.11.0. npm's engine-strict is false
+  # by default, so a smaller node would install anyway and run on an unsupported
+  # runtime. Pin the major instead of relying on that working.
+  image: node:24-alpine
+  interruptible: true
+  rules:
+    - changes:
+        paths:
+          - renovate.json
+          - .gitlab/ci/lint-renovate.yml
+          - .gitlab-ci.yml
+        # Without compare_to, a branch pipeline diffs against the previous commit
+        # on the branch, so a file touched in an earlier commit of the same push
+        # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
+        compare_to: refs/heads/main
+  script:
+    # The filename is passed explicitly on purpose: with no argument the
+    # validator only scans default locations "if files exist" and exits 0 when it
+    # finds none (renovatebot/renovate#16025), so deleting or renaming
+    # renovate.json would silently pass. Version pinned rather than floating on
+    # latest since this executes third-party npm code; a schema change in a newer
+    # Renovate turns this red, which is the signal to bump the pin. Keep it equal
+    # to the pin in .github/workflows/lint-renovate.yml.
+    - npx --yes --package renovate@44.2.3 -- renovate-config-validator --strict renovate.json

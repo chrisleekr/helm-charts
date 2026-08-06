@@ -1,0 +1,28 @@
+# Mirror of the ct_lint job in .github/workflows/lint.yml.
+#
+# Deliberately has no `rules`: ct finds the changed charts itself by diffing
+# against target-branch, so a path filter here would only duplicate that and
+# risk disagreeing with it. This is the only gate covering ip-lookup, n8n,
+# woodle-map and mcp-server-playground, and the only place
+# check-version-increment in ct.yaml runs.
+#
+# Image pinned to the ct version chart-testing-action@v2.8.0 installs on the
+# GitHub side, so both hosts lint with the same binary.
+ct-lint:
+  stage: lint
+  image: quay.io/helmpack/chart-testing:v3.14.0
+  interruptible: true
+  variables:
+    # ct diffs against origin/main. The runner's default depth of 20 can cut the
+    # branch point out of the history, which makes that diff wrong rather than
+    # loud. 0 disables the shallow clone.
+    # https://docs.gitlab.com/ci/runners/configure_runners/#shallow-cloning
+    GIT_DEPTH: "0"
+  before_script:
+    # The runner only creates a remote-tracking ref for the pipeline's own
+    # branch, so origin/main does not exist until it is fetched. Keep the branch
+    # name in sync with target-branch in ct.yaml.
+    - git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
+  script:
+    # check-version-increment in ct.yaml enforces the Chart.yaml version bump.
+    - ct lint --config ct.yaml

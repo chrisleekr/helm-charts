@@ -1,0 +1,151 @@
+{{- if .Values.valkey.enabled }}
+{{- $name := include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "valkey") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  type: ClusterIP
+  ports:
+    - name: valkey
+      port: {{ .Values.valkey.service.port }}
+      targetPort: valkey
+      protocol: TCP
+  selector:
+    {{- include "binance-trading-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+---
+{{/*
+BullMQ queues live here, so the data is not purely a cache: --save keeps a
+snapshot across restarts rather than replaying every queued job from scratch.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "binance-trading-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: valkey
+  template:
+    metadata:
+      labels:
+        {{- include "binance-trading-bot.labels" . | nindent 8 }}
+        app.kubernetes.io/component: valkey
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Nothing here talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        # 999:1000 is valkey in the image. Alpine already occupies gid 999, so
+        # the group is 1000 while the user is 999. Verified with `id valkey` in
+        # valkey/valkey:8-alpine. fsGroup 1000 is what makes /data writable.
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: valkey
+          image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
+          imagePullPolicy: {{ .Values.valkey.image.pullPolicy }}
+          # No readOnlyRootFilesystem: the image entrypoint writes under / on
+          # start, and BGSAVE's temp file lands next to the snapshot.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+            # `dir` defaults to the working directory, which is /data in this
+            # image, so the snapshot already lands on the mounted volume. Stated
+            # anyway: nothing else here would notice if a future image changed
+            # WORKDIR, and the failure mode is a snapshot written to the
+            # container layer and lost on every restart.
+            - --dir
+            - /data
+            - --save
+            - "60"
+            - "1"
+            # The kubelet expands this before exec, so the password is visible
+            # in the valkey process cmdline to anything sharing the PID
+            # namespace. Keeping it out of the pod spec is the part that
+            # matters, and valkey has no file-based password option that does
+            # not also mean shipping a rendered config.
+            - --requirepass
+            - $(VALKEY_PASSWORD)
+            - --loglevel
+            - warning
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "binance-trading-bot.secretName" . }}
+                  key: VALKEY_PASSWORD
+            # Same value under the name valkey-cli reads on its own, so the
+            # probes below do not add a second argv copy of the password, one
+            # per probe interval for the pod's whole life. valkey 8 honours
+            # REDISCLI_AUTH, not VALKEYCLI_AUTH.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "binance-trading-bot.secretName" . }}
+                  key: VALKEY_PASSWORD
+          ports:
+            - name: valkey
+              containerPort: 6379
+              protocol: TCP
+          # Without this the kubelet starts liveness probing immediately and
+          # kills the container after three failures. While valkey loads an RDB
+          # it answers LOADING, so the probe fails for the whole load and the
+          # restart repeats it, leaving the pod crash-looping.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            periodSeconds: 5
+            failureThreshold: {{ .Values.valkey.startupFailureThreshold }}
+          readinessProbe:
+            exec:
+              # Matching on PONG, not on the exit code: valkey-cli exits 0 even
+              # for NOAUTH and LOADING, so the status alone only proves the port
+              # is open. Verified against valkey/valkey:8-alpine.
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              # Matching on PONG, not on the exit code: valkey-cli exits 0 even
+              # for NOAUTH and LOADING, so the status alone only proves the port
+              # is open. Verified against valkey/valkey:8-alpine.
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.valkey.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      {{- include "binance-trading-bot.nodePlacement" . }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.valkey.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.valkey.persistence.size }}
+        {{- with .Values.valkey.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+{{- end }}

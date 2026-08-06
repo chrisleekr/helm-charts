@@ -1,3 +1,35 @@
-Thank you for installing {{ .Chart.Name }}.
+{{ .Chart.Name }} {{ .Chart.AppVersion }} installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
 
-Your release is named {{ .Release.Name }}.
+Topology: {{ .Values.topology }} ({{ include "binance-trading-bot.roles" . }})
+Web origin: {{ include "binance-trading-bot.webOrigin" . }}
+
+Reach the dashboard:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "binance-trading-bot.fullname" . }} 3000:{{ .Values.service.port }}
+  Then open http://127.0.0.1:3000 and set webOrigin to that exact origin, or the
+  browser session will fail CSRF and the event stream will not connect.
+{{- end }}
+
+Binance API keys are not chart configuration. Add them per account in the
+dashboard after logging in.
+
+{{- if and (eq .Values.topology "split") .Values.persistence.enabled (not .Values.persistence.existingClaim) (not (has "ReadWriteMany" .Values.persistence.accessModes)) }}
+
+Warning: the api and the worker both mount the {{ include "binance-trading-bot.componentName" (dict "ctx" . "suffix" "backups") }} claim, and
+persistence.accessModes is {{ .Values.persistence.accessModes | join "," }}. ReadWriteOnce attaches to one node
+at a time, so on a multi-node cluster the second pod stays Pending with a
+Multi-Attach error while the release still reports success. Check both pods are
+Running; if not, use a ReadWriteMany class or set persistence.enabled=false.
+{{- end }}
+
+{{- if not .Values.networkPolicy.enabled }}
+
+Warning: the admin ports serve /metrics and /readyz without authentication.
+Which pod binds which depends on the role: 9100 and 9101 on "all", 9100 on api,
+9101 on worker and study. Set networkPolicy.enabled=true with
+networkPolicy.adminFrom to keep them off the rest of the pod network.
+{{- end }}

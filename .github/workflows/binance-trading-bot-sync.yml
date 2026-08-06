@@ -1,0 +1,242 @@
+# Keeps charts/binance-trading-bot aligned with binance-trading-bot releases.
+#
+# Design: version-only and fully deterministic. Every run resolves the target
+# version, bumps Chart.yaml appVersion + version with yq, prepends an Artifact
+# Hub changelog entry built from the upstream release notes, and opens a PR.
+# No LLM runs, because there is nothing to reconcile against: unlike github-app,
+# binance-trading-bot publishes no env-contract.json, and its env surface is
+# spread across apps/api/src/env.ts, apps/worker/src/env.ts and
+# packages/core/src/env/load-env.ts. Until upstream publishes a contract, values
+# and template changes stay a human job -- see the "review needed" callout the
+# PR body prints on a major bump.
+#
+# Triggers:
+#   - repository_dispatch (binance-trading-bot-released): the upstream
+#     release-please pipeline fires this after the image push succeeds, passing
+#     the version in client_payload. This is the normal, automatic path.
+#   - workflow_dispatch: manual re-run / backfill (blank input = latest release).
+# It reads binance-trading-bot's public releases API, so no cross-repo read
+# token is needed. The only token used is this repo's RELEASE_TOKEN, to open a
+# PR here so lint.yml triggers (a PR opened by the default GITHUB_TOKEN would
+# not).
+name: Sync binance-trading-bot release
+
+on:
+  repository_dispatch:
+    types: [binance-trading-bot-released]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "binance-trading-bot version to sync, without the leading v (e.g. 1.1.0). Blank = latest release."
+        required: false
+
+concurrency:
+  group: sync-binance-trading-bot
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Owner-pinned for both triggers: the automated repository_dispatch runs as
+    # the dispatching token's owner (chrisleekr), and workflow_dispatch requires
+    # the owner. A repository_dispatch also needs a token with write access to
+    # this repo, so outsiders can trigger neither path.
+    if: github.actor == 'chrisleekr'
+    # Least privilege: every write in this job goes through RELEASE_TOKEN (the
+    # explicit-token push and gh pr create), so GITHUB_TOKEN needs no write
+    # scopes. No id-token:write, because no LLM action runs here.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout helm-charts
+        # RELEASE_TOKEN (PAT) so the PR this job opens triggers lint.yml; a PR
+        # authored by the default GITHUB_TOKEN would not fire pull_request.
+        # persist-credentials:false keeps the PAT out of the local git config;
+        # the dedicated push step below supplies it explicitly instead.
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          persist-credentials: false
+
+      - name: Resolve target version (deterministic)
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }} # reading a public repo needs no PAT
+          # repository_dispatch carries the version in client_payload; manual
+          # runs use the input. Either is untrusted until the regex check below,
+          # which gates it before it reaches any branch name or git command.
+          FORCE_V: ${{ github.event.inputs.version || github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          new="${FORCE_V:-$(gh api repos/chrisleekr/binance-trading-bot/releases/latest --jq .tag_name | sed 's/^v//')}"
+          # Validate strictly: `new` flows into a branch name and git/gh commands.
+          # Plain x.y.z only, which also excludes the beta channel's
+          # vX.Y.Z-beta.N tags -- the chart tracks stable releases.
+          if ! [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::resolved version '$new' is not a plain x.y.z release" ; exit 1
+          fi
+          # Upstream tags with a leading v and the chart stores appVersion the
+          # same way ("v1.0.0"), so strip it here and re-add it on write. Every
+          # comparison below is on the bare x.y.z form.
+          old=$(yq '.appVersion' charts/binance-trading-bot/Chart.yaml | tr -d '"' | sed 's/^v//')
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+
+          if [ "$new" = "$old" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "chart appVersion already at v$new; nothing to do"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          # Idempotency: if a sync branch for this version already exists on the
+          # remote, a PR is already open. Skip so a re-run does not churn.
+          if git ls-remote --exit-code --heads origin "chore/binance-trading-bot-$new" >/dev/null 2>&1; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "branch chore/binance-trading-bot-$new already exists; skipping"
+            exit 0
+          fi
+
+          # A major bump is the one case where a version-only sync is very
+          # likely wrong: upstream v1.0.0 replaced the application the 0.x chart
+          # deployed and required a full chart rewrite. Still open the PR (the
+          # bump is a useful starting point) but flag it so nobody merges it as
+          # routine.
+          if [ "${new%%.*}" != "${old%%.*}" ]; then
+            echo "major=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "major=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump chart + changelog (deterministic)
+        if: steps.plan.outputs.changed == 'true'
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }} # reading a public release needs no PAT
+          NEW: ${{ steps.plan.outputs.new }}
+        run: |
+          set -euo pipefail
+          chart=charts/binance-trading-bot/Chart.yaml
+          cur=$(yq '.version' "$chart" | tr -d '"')
+          IFS=. read -r MA MI PA <<<"$cur"
+          # Always a patch bump: the chart version tracks changes to the chart,
+          # and a version-only sync touches nothing but Chart.yaml. A major
+          # upstream release that needs real chart work gets that work, and its
+          # own version decision, from a human on top of this PR.
+          NEWCHART="$MA.$MI.$((PA + 1))"
+          echo "oldchart=$cur" >> "$GITHUB_OUTPUT"
+          echo "newchart=$NEWCHART" >> "$GITHUB_OUTPUT"
+          # appVersion keeps the upstream leading v; the image tag is derived
+          # from it (default .Chart.AppVersion in _helpers.tpl) and Docker Hub
+          # publishes chrisleekr/binance-trading-bot:vX.Y.Z.
+          APPV="v$NEW"
+          APPV="$APPV" NEWCHART="$NEWCHART" yq -i \
+            '.appVersion = strenv(APPV) | .version = strenv(NEWCHART)' "$chart"
+
+          # Deterministic Artifact Hub changelog from the upstream release-please
+          # notes. Scratch files go in $RUNNER_TEMP, never the work tree, so they
+          # cannot be swept into the PR by the later `git add -A`.
+          rel="$RUNNER_TEMP/app-release.md"
+          # On the automatic path this is the first releases-API hit for $NEW, so
+          # a freshly published tag can briefly 404. Retry, and fail hard on a
+          # definitive failure rather than publish an empty changelog.
+          # `.body // ""` collapses a null body to empty so the fallback applies.
+          for attempt in 1 2 3 4 5; do
+            gh api "repos/chrisleekr/binance-trading-bot/releases/tags/v$NEW" --jq '.body // ""' > "$rel" && break
+            [ "$attempt" = 5 ] && { echo "::error::could not fetch binance-trading-bot v$NEW release notes"; exit 1; }
+            sleep 3
+          done
+          # Security bump only on an explicit CVE reference. Matching the bare
+          # word "security" over-flags: it appears in routine feature/hardening
+          # notes, which would desensitise the Artifact Hub signal.
+          if grep -qE '\bCVE' "$rel"; then SEC=true; else SEC=false; fi
+          echo "sec=$SEC" >> "$GITHUB_OUTPUT"
+          # Compact one-line highlights: bullet titles with the markdown issue
+          # link reduced to (#NNN) and the commit link dropped.
+          highlights=$(grep -E '^\* ' "$rel" \
+            | sed -E 's/\(\[#([0-9]+)\]\([^)]*\)\)/(#\1)/g; s/ *\(\[[0-9a-f]{7,}\]\([^)]*\)\)//g; s/^\* //' \
+            | awk 'NR>1{printf "; "}{printf "%s", $0}' || true)
+          [ -z "$highlights" ] && highlights="see release notes"
+          desc="Sync to binance-trading-bot v$NEW: ${highlights}. Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v$NEW"
+          [ "$SEC" = true ] && kind=security || kind=changed
+          # Force single line, then escape for a YAML double-quoted scalar
+          # (backslash first, then quote). The single-line invariant is what
+          # makes the two-char escape complete, so strip CR/LF explicitly rather
+          # than rely on the pipeline.
+          esc=$(printf '%s' "$desc" | tr -d '\r\n' | sed -E 's/\\/\\\\/g; s/"/\\"/g')
+          ENTRY=$(printf -- '- kind: %s\n  description: "%s"' "$kind" "$esc")
+          # The annotation is a block-scalar string holding a YAML list; prepend
+          # the new entry as text and let yq re-render.
+          ENTRY="$ENTRY" yq -i \
+            '.annotations."artifacthub.io/changes" = strenv(ENTRY) + "\n" + .annotations."artifacthub.io/changes"' "$chart"
+          # Per-version flag: set on security bumps, cleared otherwise so a later
+          # non-security version does not inherit a stale "true".
+          if [ "$SEC" = true ]; then
+            yq -i '.annotations."artifacthub.io/containsSecurityUpdates" = "true"' "$chart"
+          else
+            yq -i 'del(.annotations."artifacthub.io/containsSecurityUpdates")' "$chart"
+          fi
+          # Fail fast on malformed YAML. Both the outer document AND the embedded
+          # artifacthub.io/changes list (the part Artifact Hub actually parses)
+          # must be valid; the outer check alone would miss a broken inner list.
+          yq '.' "$chart" > /dev/null
+          # from_yaml re-parses the annotation's string value as a list, so a
+          # broken embedded entry fails here in CI instead of at Artifact Hub
+          # ingestion.
+          if ! yq -e \
+            '.annotations."artifacthub.io/changes" | from_yaml | .[0] | has("kind") and has("description")' \
+            "$chart" > /dev/null 2>&1; then
+            echo "::error::artifacthub.io/changes did not parse as a valid change list"; exit 1
+          fi
+
+          git config user.name "chrisleekr-bot"
+          git config user.email "chrisleekr-bot@users.noreply.github.com"
+          git checkout -b "chore/binance-trading-bot-$NEW"
+          git commit -am "chore(binance-trading-bot): sync chart to v$NEW"
+
+      - name: Open PR (deterministic)
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          NEW: ${{ steps.plan.outputs.new }}
+          OLD: ${{ steps.plan.outputs.old }}
+          MAJOR: ${{ steps.plan.outputs.major }}
+          NEWCHART: ${{ steps.bump.outputs.newchart }}
+          OLDCHART: ${{ steps.bump.outputs.oldchart }}
+          SEC: ${{ steps.bump.outputs.sec }}
+        run: |
+          set -euo pipefail
+          # Credentials are not persisted (see checkout); supply the PAT
+          # explicitly for this one push. Avoid printing the token.
+          git push "https://x-access-token:${RELEASE_TOKEN}@github.com/chrisleekr/helm-charts.git" \
+            "HEAD:refs/heads/chore/binance-trading-bot-$NEW"
+
+          # Build the PR body from the release notes written by the bump step.
+          # printf owns the templated parts; the release notes are inserted with
+          # cat (not a heredoc) so backticks in the notes are not shell-evaluated.
+          rel="$RUNNER_TEMP/app-release.md"
+          bodyfile="$RUNNER_TEMP/pr-body.md"
+          {
+            printf '## Chart sync: binance-trading-bot v%s to v%s\n\n' "$OLD" "$NEW"
+            printf '**Chart version:** %s to %s\n' "$OLDCHART" "$NEWCHART"
+            printf '**Image tag (appVersion):** `v%s`\n\n' "$NEW"
+            if [ "$SEC" = "true" ]; then
+              printf '> **Contains security updates.** `artifacthub.io/containsSecurityUpdates` is set on this chart version.\n\n'
+            fi
+            if [ "$MAJOR" = "true" ]; then
+              printf '> [!WARNING]\n'
+              printf '> **Major upstream bump (v%s to v%s) -- do not merge as routine.**\n' "$OLD" "$NEW"
+              printf '> This sync only bumps versions. A major release usually changes the env surface,\n'
+              printf '> the topology, or both, and needs values.yaml + template work on top of this branch.\n\n'
+            fi
+            printf 'This is a **version-only sync**: `appVersion`, chart `version` and the Artifact Hub changelog. No values or template changes -- binance-trading-bot publishes no env contract, so env drift is not detected automatically.\n\n'
+            printf '### Upstream release notes (binance-trading-bot v%s)\n\n' "$NEW"
+            cat "$rel"
+            printf '\n\n---\nValidated by `lint.yml`: ct lint (version-increment), plus the `binance-trading-bot` render gate in `lint-binance-trading-bot.yml`.\n'
+          } > "$bodyfile"
+          gh pr create --base main --head "chore/binance-trading-bot-$NEW" \
+            --title "chore(binance-trading-bot): sync chart to v$NEW" --body-file "$bodyfile"

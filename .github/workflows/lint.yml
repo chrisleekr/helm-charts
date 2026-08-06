@@ -1,157 +1,206 @@
 name: Lint Charts
 
+# The `lint` job at the bottom is the required status check: the "main" ruleset
+# pins required_status_checks to context "lint" from the GitHub Actions app
+# (integration_id 15368). The context is the JOB id, not the workflow name.
+#
+# Consequence: this workflow must never carry a paths filter. A workflow skipped
+# by path filtering leaves its checks Pending forever and blocks the merge, while
+# a JOB skipped by a conditional reports Success. Per-chart gates are therefore
+# jobs here, gated on the `changes` job, so a chart the PR did not touch reports
+# green instead of hanging. Their bodies live in .github/workflows/lint-<chart>.yml.
+# https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks
+
 on:
   pull_request:
     branches:
       - main
 
+# Keyed on the PR, so a rapid second push cancels the first run's whole fan-out
+# rather than holding two complete pipelines. Safe for the required check: the
+# cancelled run belongs to a superseded head SHA, and the ruleset evaluates the
+# `lint` context on the current one.
+concurrency:
+  group: lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  lint:
+  changes:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      # Underscored names on purpose: `-` is an operator in GitHub expressions,
+      # so needs.changes.outputs.github-app would parse as a subtraction.
+      omniroute: ${{ steps.filter.outputs.omniroute }}
+      github_app: ${{ steps.filter.outputs.github_app }}
+      binance_trading_bot: ${{ steps.filter.outputs.binance_trading_bot }}
+      renovate: ${{ steps.filter.outputs.renovate }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed charts
+        id: filter
+        env:
+          # A SHA, not attacker-controlled text, but routed through env rather
+          # than interpolated into the script body as a matter of course.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          # Two-dot diff against the PR base: HEAD is the merge commit, whose
+          # content is base + the PR's changes, so this is exactly the PR diff.
+          changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "changed files:"
+          printf '%s\n' "$changed" | sed 's/^/  /'
+
+          # A chart's gate also reruns when its own script or workflow changes,
+          # otherwise a broken gate could merge without ever executing. Every
+          # list ends with this file for the same reason: a PR that only edits
+          # the dispatcher would otherwise emit false everywhere, skip every
+          # gate, and merge green with the rewiring unverified -- including the
+          # C20/C21 assertions that exist to check this file's own wiring.
+          emit() {
+            name=$1
+            shift
+            hit=false
+            while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              for pattern in "$@"; do
+                # shellcheck disable=SC2254  # unquoted on purpose: these are globs
+                case "$line" in $pattern) hit=true; break 2 ;; esac
+              done
+            done <<< "$changed"
+            echo "$name=$hit" >> "$GITHUB_OUTPUT"
+            echo "$name=$hit"
+          }
+
+          emit omniroute \
+            'charts/omniroute/*' \
+            'scripts/check-omniroute-render.sh' \
+            'scripts/check-omniroute-memory.sh' \
+            '.github/workflows/lint-omniroute.yml' \
+            '.github/workflows/lint.yml'
+          emit github_app \
+            'charts/github-app/*' \
+            'scripts/check-github-app-render.sh' \
+            'scripts/check-env-parity.sh' \
+            'scripts/check-env-parity.test.sh' \
+            '.github/workflows/lint-github-app.yml' \
+            '.github/workflows/lint.yml'
+          # renovate.json and lint-renovate.yml are here because C20 inside this
+          # chart's gate asserts their contents. Without them a renovate.json-only
+          # PR runs the schema validator but never the assertions that the bundled
+          # image trackers still exist.
+          emit binance_trading_bot \
+            'charts/binance-trading-bot/*' \
+            'scripts/check-binance-trading-bot-render.sh' \
+            '.github/workflows/lint-binance-trading-bot.yml' \
+            '.github/workflows/lint-renovate.yml' \
+            '.gitlab/ci/lint-binance-trading-bot.yml' \
+            '.gitlab-ci.yml' \
+            'renovate.json' \
+            '.github/workflows/lint.yml'
+          emit renovate \
+            'renovate.json' \
+            '.github/workflows/lint-renovate.yml' \
+            '.github/workflows/lint.yml'
+
+  ct_lint:
+    name: ct lint
     permissions:
       contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        # persist-credentials:false keeps GITHUB_TOKEN out of .git/config, because
-        # the renovate-config-validator step below executes third-party npm code in
-        # this workspace. ct lint needs fetch-depth:0 to diff against the target
-        # branch, but that is a local history read and needs no credentials.
-        # Mirrors the same setting and rationale in github-app-sync.yml.
+        # ct lint needs fetch-depth:0 to diff against the target branch. That is
+        # a local history read and needs no credentials.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.8.0
+        # SHA-pinned like every other action here: a tag is a movable pointer,
+        # and this action decides whether `ct lint` exits 0 for the four charts
+        # that have no dedicated gate. renovate.json does not enable the
+        # github-actions manager, so bump this by hand.
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
+        with:
+          # Stated rather than left to the action default, which is a separate
+          # moving part from the SHA pin above. Keep equal to the image tag in
+          # .gitlab/ci/lint-ct.yml so both hosts lint with the same binary.
+          version: v3.14.0
 
       - name: Run chart-testing (lint)
-        # check-version-increment in ct.yaml enforces Chart.yaml version bump
-        # for any chart whose files have changed since the target branch
+        # Lints every chart whose files changed since the target branch, so the
+        # four charts without a dedicated gate below are covered here.
+        # check-version-increment in ct.yaml enforces the Chart.yaml version bump.
         run: ct lint --config ct.yaml
 
-      - name: Set up Node for the Renovate validator
-        # renovate@44.2.3 declares engines.node ^24.11.0; the ubuntu-24.04 runner
-        # defaults to Node 22.x. npm's engine-strict is false by default, so npx
-        # would install anyway and run on an unsupported runtime. Pin it instead of
-        # relying on that working.
-        # SHA-pinned per the convention in github-app-sync.yml. Note these pins are
-        # not Renovate-monitored while enabledManagers excludes github-actions, so
-        # they need a manual bump.
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
+  renovate:
+    name: renovate config
+    needs: changes
+    if: needs.changes.outputs.renovate == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-renovate.yml
 
-      - name: Validate renovate.json
-        # Renovate fails silently on a bad config: it warns in its own logs and
-        # stops opening PRs, so no PR ever turns red. Since renovate.json grants
-        # auto-merge, catch the breakage here instead. Verified to reject unknown
-        # keys, malformed JSON, wrong value types, the deprecated fileMatch name,
-        # and invalid regex. It does NOT check enum values (a bogus bumpType
-        # passes), so this is a schema gate, not a semantic one.
-        #
-        # The filename is passed explicitly on purpose: with no argument the
-        # validator only scans default locations "if files exist" and exits 0 when
-        # it finds none (renovatebot/renovate#16025), so deleting or renaming
-        # renovate.json would silently pass. Version is pinned rather than
-        # floating on latest since this step executes third-party npm code; a
-        # schema change in a newer Renovate turns this red, which is the signal
-        # to bump the pin.
-        run: npx --yes --package renovate@44.2.3 -- renovate-config-validator --strict renovate.json
+  omniroute:
+    name: omniroute
+    needs: changes
+    if: needs.changes.outputs.omniroute == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-omniroute.yml
 
-      - name: omniroute memory invariant
-        # values.yaml requires limits.memory to clear the V8 heap ceiling by the
-        # >=250Mi that lives outside the heap. Breaking it fails quietly: V8
-        # aborts and the container ends up exiting 0 ("Completed"), which never
-        # reaches CrashLoopBackOff and so fires no crash-loop alert. See issue #53.
-        # Enforced here because appVersion patch bumps auto-merge with no human
-        # reading the values.yaml comment.
+  github_app:
+    name: github-app
+    needs: changes
+    if: needs.changes.outputs.github_app == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-github-app.yml
+
+  binance_trading_bot:
+    name: binance-trading-bot
+    needs: changes
+    if: needs.changes.outputs.binance_trading_bot == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-binance-trading-bot.yml
+
+  lint:
+    # THE required status check. Keep this job id as "lint" — the ruleset pins
+    # that exact context, so renaming it silently unblocks every merge.
+    #
+    # if: always() is load-bearing. Without it this job is skipped whenever a
+    # dependency fails, and a skipped required check does not block the merge,
+    # which turns the whole gate into a rubber stamp.
+    needs: [changes, ct_lint, renovate, omniroute, github_app, binance_trading_bot]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify every gate passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          chart=charts/omniroute
-          rendered="${RUNNER_TEMP:-/tmp}/omniroute.yaml"
-          helm template "$chart" -f "$chart/ci/ct-values.yaml" > "$rendered"
-          cap=$(yq e 'select(.kind == "ConfigMap") | .data.OMNIROUTE_MEMORY_MB' "$rendered")
-          limit=$(yq e 'select(.kind == "Deployment") | .spec.template.spec.containers[0].resources.limits.memory' "$rendered")
-          # yq prints "null" for a missing key and bash arithmetic reads that as 0,
-          # which would pass this check. Reject non-numeric up front so a renamed or
-          # deleted key fails closed. Also catches multi-line (duplicate resource).
-          require_int() {
-            case "$2" in ''|*[!0-9]*)
-              echo "::error file=$chart/values.yaml::$1 is not a plain integer: '$2'"; exit 1 ;;
-            esac
-          }
-          require_int OMNIROUTE_MEMORY_MB "$cap"
-          case "$limit" in
-            *Gi) mib=${limit%Gi}; require_int limits.memory "$mib"; limit_mi=$(( mib * 1024 )) ;;
-            *Mi) mib=${limit%Mi}; require_int limits.memory "$mib"; limit_mi=$mib ;;
-            *) echo "::error file=$chart/values.yaml::unhandled limits.memory unit: '$limit'"; exit 1 ;;
-          esac
-          headroom=$(( limit_mi - cap ))
-          echo "heap ceiling ${cap}Mi, limit ${limit_mi}Mi, headroom ${headroom}Mi"
-          if [ "$headroom" -lt 250 ]; then
-            echo "::error file=$chart/values.yaml::limits.memory ($limit) must exceed OMNIROUTE_MEMORY_MB ($cap) by >=250Mi, got ${headroom}Mi"
+          echo "$RESULTS"
+          # "skipped" is a pass: it means the PR did not touch that chart. A
+          # failing `changes` job cannot hide behind it, because `changes` itself
+          # then reports "failure" and is checked here too.
+          bad=$(echo "$RESULTS" | jq -r '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | "  \(.key): \(.value.result)"')
+          if [ -n "$bad" ]; then
+            echo "::error::one or more lint gates did not pass"
+            echo "$bad"
             exit 1
           fi
-
-      - name: Render github-app feature matrix
-        # Exercises every conditional branch in the chart so a template error
-        # in any mode surfaces on the PR, not after publish. Uses only static,
-        # literal --set flags — no untrusted input from github.* contexts.
-        run: |
-          chart=charts/github-app
-          set -euo pipefail
-          # 1. Defaults — daemon-only dispatch, no ephemeral spawn knobs overridden.
-          helm template "$chart" > /dev/null
-          # 2. Bedrock provider path.
-          helm template "$chart" \
-            --set config.provider=bedrock \
-            --set config.awsRegion=us-east-1 \
-            --set config.model=us.anthropic.claude-sonnet-4-5-v1:0 > /dev/null
-          # 3. In-chart Postgres + Valkey + RBAC (rbac.create=true now provisions
-          #    a Role for ephemeral daemon Pod spawning — see upstream PR #35).
-          helm template "$chart" \
-            --set postgres.enabled=true --set valkey.enabled=true \
-            --set rbac.create=true > /dev/null
-          # 4. External Postgres + Valkey (literal password path).
-          helm template "$chart" \
-            --set postgres.external.enabled=true \
-            --set postgres.external.host=pg \
-            --set postgres.external.username=u \
-            --set postgres.external.database=d \
-            --set postgres.external.password=p \
-            --set valkey.external.enabled=true \
-            --set valkey.external.host=r \
-            --set valkey.external.auth.password=p > /dev/null
-          # 5. User-supplied URLs (neither in-chart nor external enabled).
-          helm template "$chart" \
-            --set config.databaseUrl=postgres://u:p@h/d \
-            --set config.valkeyUrl=redis://h:6379 > /dev/null
-          # 6. Daemon pools: default (no DinD) + docker-heavy (rootless DinD).
-          helm template "$chart" \
-            --values "$chart/ci/daemon-pools-values.yaml" > /dev/null
-          # 7. Ephemeral daemon scale-up (chart-managed RBAC): namespace stays at
-          #    the release namespace so role.yaml's cross-namespace guard is happy.
-          helm template "$chart" \
-            --set rbac.create=true \
-            --set config.ephemeralDaemon.orchestratorPublicUrl=ws://orchestrator.example:3002/ws \
-            --set config.ephemeralDaemon.spawnQueueThreshold=5 > /dev/null
-          # 8. Ephemeral daemon scale-up (operator-managed RBAC): rbac.create=false
-          #    releases the namespace lock, so cross-namespace spawn is allowed.
-          helm template "$chart" \
-            --set rbac.create=false \
-            --set config.ephemeralDaemon.namespace=agents > /dev/null
-
-      - name: github-app env-parity self-test
-        # Exercises the gate's comparison logic against a synthetic contract
-        # derived from the chart, so the logic has coverage even while the live
-        # contract at v<appVersion> 404s (bootstrap window) and the gate SKIPs.
-        run: bash scripts/check-env-parity.test.sh
-
-      - name: github-app env-parity gate
-        # Fails when the chart's ConfigMap/Secret env surface drifts from
-        # github-app's env-contract.json (published at v<appVersion>). Catches the
-        # case helm template cannot: a config.ts var the chart never mirrored.
-        # Skips (does not fail) for appVersions predating the contract. jq + yq are
-        # preinstalled on GitHub-hosted ubuntu runners.
-        run: bash scripts/check-env-parity.sh
+          echo "all lint gates passed"

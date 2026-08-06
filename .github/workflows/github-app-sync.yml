@@ -4,8 +4,9 @@
 # the LLM is contained. Every run resolves the target version, bumps Chart.yaml
 # appVersion + version with yq, and opens a PR. The LLM (claude-code-action) runs
 # ONLY when the env-var surface changed between releases, scoped to the exact
-# added/removed keys; its output is verified by the env-parity gate in lint.yml
-# before merge. If nothing in the env surface changed, no LLM runs at all.
+# added/removed keys; its output is verified by the env-parity gate in
+# .github/workflows/lint-github-app.yml, which lint.yml calls as the github-app
+# job, before merge. If nothing in the env surface changed, no LLM runs at all.
 #
 # Triggers:
 #   - repository_dispatch (github-app-released): github-app's release-please
@@ -324,7 +325,7 @@ jobs:
             fi
             printf '### Upstream release notes (github-app v%s)\n\n' "$NEW"
             cat "$rel"
-            printf '\n\n---\nValidated by `lint.yml`: ct lint (version-increment), the helm template matrix, and the env-parity gate against the v%s contract.\n' "$NEW"
+            printf '\n\n---\nValidated by `lint.yml`: ct lint (version-increment), plus the `github-app` gate in `lint-github-app.yml` -- the helm template matrix and the env-parity gate against the v%s contract.\n' "$NEW"
           } > "$bodyfile"
           gh pr create --base main --head "chore/github-app-$NEW" \
             --title "chore(github-app): sync chart to v$NEW" --body-file "$bodyfile"

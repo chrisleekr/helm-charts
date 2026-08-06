@@ -1,8 +1,24 @@
+# Mirror of .github/workflows/lint.yml. The two CIs run the same gates against
+# the same scripts/check-*.sh, so a chart cannot pass on one host and fail on
+# the other. Each gate's body lives in .gitlab/ci/lint-<name>.yml, one file per
+# unit, matching .github/workflows/lint-<name>.yml.
+#
+# No rollup job here, unlike lint.yml's `lint`. That job exists only because a
+# GitHub required status check pins one context name; GitLab's "Pipelines must
+# succeed" evaluates the whole pipeline, and a job skipped by `rules` does not
+# hold it open.
+#
+# Stable releases are GitHub-only. This pipeline ships prereleases to the devel
+# channel of this project's package registry, never to stable.
+#
+# Every gate below compares against refs/heads/main, so a pipeline for main
+# itself diffs main against main and skips them all. That matches GitHub, where
+# lint.yml triggers on pull_request only and a direct push to main runs no lint
+# either. Both hosts gate at the merge request, not after it.
+
 stages:
-  - testing
-  - build development
-  - bump production
-  - build production
+  - lint
+  - publish
 
 workflow:
   rules:
@@ -15,10 +31,9 @@ workflow:
     - if: $CI_COMMIT_BRANCH
 
 include:
-  - local: .gitlab/ci/helm-binance-trading-bot.yml
-  - local: .gitlab/ci/helm-ip-lookup.yml
-  - local: .gitlab/ci/helm-woodle-map.yml
-  - local: .gitlab/ci/helm-mcp-server-playground.yml
-  - local: .gitlab/ci/helm-n8n.yml
-  - local: .gitlab/ci/helm-github-app.yml
-  - local: .gitlab/ci/helm-omniroute.yml
+  - local: .gitlab/ci/lint-ct.yml
+  - local: .gitlab/ci/lint-renovate.yml
+  - local: .gitlab/ci/lint-omniroute.yml
+  - local: .gitlab/ci/lint-github-app.yml
+  - local: .gitlab/ci/lint-binance-trading-bot.yml
+  - local: .gitlab/ci/publish-devel.yml

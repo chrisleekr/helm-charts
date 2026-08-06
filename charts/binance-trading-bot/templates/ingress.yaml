@@ -1,43 +1,50 @@
-{{- if .Values.binanceBot.ingress.enabled -}}
+{{- if .Values.ingress.enabled }}
+{{/*
+No TLS block means no certificate on the rule, so ingress-nginx serves port 80
+and never issues its 301. The dashboard takes a password and Binance API keys,
+and webOrigin then derives an http:// origin that puts the session cookie on the
+wire in clear. Fail rather than ship that quietly; allowInsecure is the escape
+hatch for TLS terminating somewhere in front of this ingress.
+*/}}
+{{- if and (not .Values.ingress.tls) (not .Values.ingress.allowInsecure) }}
+{{- fail "ingress.tls is empty, so the dashboard and its session cookie would be served over cleartext HTTP. Set ingress.tls, or set ingress.allowInsecure=true when TLS terminates in front of this ingress -- in that case also set webOrigin to the https:// origin, since the chart would otherwise derive http://." }}
+{{- end }}
+{{- $fullname := include "binance-trading-bot.fullname" . }}
+{{- $port := .Values.service.port }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "binance-trading-bot.fullname" . }}
+  name: {{ $fullname }}
   labels:
     {{- include "binance-trading-bot.labels" . | nindent 4 }}
-  {{- with .Values.binanceBot.ingress.annotations }}
+  {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- with .Values.binanceBot.ingress.className }}
+  {{- with .Values.ingress.className }}
   ingressClassName: {{ . }}
   {{- end }}
-  {{- if .Values.binanceBot.ingress.tls }}
+  {{- with .Values.ingress.tls }}
   tls:
-    {{- range .Values.binanceBot.ingress.tls }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-    {{- range .Values.binanceBot.ingress.hosts }}
+    {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
       http:
         paths:
           {{- range .paths }}
-          - path: {{ .path }}
-            {{- with .pathType }}
-            pathType: {{ . }}
-            {{- end }}
+          - path: {{ .path | quote }}
+            # Required by networking.k8s.io/v1, so a hosts list written
+            # without it would be rejected on apply. Defaulted to Prefix,
+            # which is what a dashboard route wants, rather than left to fail.
+            pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ include "binance-trading-bot.fullname" $ }}
+                name: {{ $fullname }}
                 port:
-                  number: {{ $.Values.binanceBot.service.port }}
+                  number: {{ $port }}
           {{- end }}
     {{- end }}
 {{- end }}
