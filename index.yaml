@@ -7,6 +7,36 @@ entries:
           description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
     apiVersion: v2
     appVersion: v1.0.0
+    created: "2026-08-10T08:54:16.002869343Z"
+    description: A Helm chart for Binance Trading Bot - a self-hosted automated crypto
+      trading bot
+    digest: a6f21fdedb0dd835c5ab328e9af7400f2262217c8c1f47f1da69509eeb74dad0
+    keywords:
+    - bot
+    - trading-bot
+    - cryptocurrency
+    - binance
+    - binance-api
+    - crypto-trading
+    - grid-trading
+    - binance-trading-bot
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: binance-trading-bot
+    sources:
+    - https://github.com/chrisleekr/binance-trading-bot
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-1.1.0/binance-trading-bot-1.1.0.tgz
+    version: 1.1.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
+    apiVersion: v2
+    appVersion: v1.0.0
     created: "2026-08-06T09:18:12.116289578Z"
     description: A Helm chart for Binance Trading Bot - a self-hosted automated crypto
       trading bot
@@ -1977,4 +2007,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-08-10T08:47:43.598312069Z"
+generated: "2026-08-10T08:54:16.002998595Z"
