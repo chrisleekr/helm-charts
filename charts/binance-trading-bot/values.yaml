@@ -174,7 +174,7 @@ valkey:
   startupFailureThreshold: 60
   image:
     repository: valkey/valkey
-    tag: 8-alpine
+    tag: 9-alpine
     pullPolicy: IfNotPresent
   auth:
     password: ""                                # Empty auto-generates and persists.
