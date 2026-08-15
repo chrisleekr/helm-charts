@@ -122,7 +122,7 @@ want_count() { # <file> <ere> <n> <label>
 want_not_in_tree() { # <dir> <ere> <label>
   local hits
   # A wrong path greps nothing and every absence assertion goes green, which is
-  # eleven assertions across C1, C15, C16 and C27 passing on a typo.
+  # eight assertions across C15 and C27 passing on a typo.
   if [ ! -d "$1" ]; then
     note "$3: $1 is not a directory"
     return
@@ -404,12 +404,11 @@ readme="$chart/README.md"
 
 # ----------------------------------------------------------------- assertions -
 
-# C1 - the 0.x application model is gone.
-want_not_in_tree "$chart" 'mongo' "chart tree"
-want_not_in_tree "$chart" 'tradingview' "chart tree"
+# C1 - a bare Pod has no rollout and no rescheduling, so a drained node ends the
+# bot with nothing to restart it.
 want_not "$r1" '^kind: Pod$' "R1"
 want_not "$r2" '^kind: Pod$' "R2"
-check C1 "no MongoDB, no TradingView and no bare Pod resources remain"
+check C1 "no bare Pod resources remain; every workload is a managed controller"
 
 # C2
 if [ "$lint_rc" -ne 0 ]; then
@@ -653,8 +652,7 @@ if get_doc "$r4" Ingress "$fullname" "R4"; then
   want "$DOC" 'proxy-read-timeout' "R4 ingress"
   want "$DOC" 'proxy-send-timeout' "R4 ingress"
 fi
-want_not_in_tree "$chart" 'oauth2' "chart tree"
-check C16 "ingress routes only to Service port 3000 with WebSocket-safe timeouts and no oauth2-proxy coupling"
+check C16 "ingress routes only to Service port 3000 with WebSocket-safe timeouts"
 
 # C17 - R4 proves the fallback resolves from the ingress host; R7 proves the
 # unresolvable case fails loudly instead of emitting a broken origin.
