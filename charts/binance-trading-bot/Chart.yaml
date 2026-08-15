@@ -17,14 +17,14 @@ keywords:
 #
 # 1.0.0 is a full rewrite of the chart for upstream v1.0.0, which replaced the
 # application the 0.x chart deployed. There is no in-place upgrade path from 0.x.
-version: 1.2.0
+version: 1.2.1
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 #
 # Upstream tags with a leading "v", so the tag string is "v1.0.0", not "1.0.0".
-appVersion: "v1.0.0"
+appVersion: "v1.1.0"
 kubeVersion: ">= 1.31.0"
 sources:
   - https://github.com/chrisleekr/binance-trading-bot
@@ -36,5 +36,7 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to binance-trading-bot v1.1.0: archive cost-basis integrity, symbol permissions, dust cancel, discovery admission (#735); **binance:** add a per-account ORDERS rate governor and deferrable order intents (#734); **db:** store open conditions in condition_states and harden scoped repo binding (#731); **profile:** add on-demand profile diagnosis and discovery funnel (#736); **retention:** move log retention into a config table and add the log surfaces (#733); **strategy:** add the price-outside-exchange-band protective-stop blocker (#737); **strategy:** clamp or natively trail a protective stop Binance's price band refuses (#741); **ci:** resolve audit and release formatting drift (#745); **technicals:** align the rating window and vote rules with TradingView (#739); **web:** hold scroll position while loading and polling, and gate phantom alert metrics (#716); **web:** reserve height for every loading branch, gate regressions in CI (#718); **worker,contracts,web:** harden diagnosis ladder, discovery funnel, and signal panel (#744); **worker,contracts:** alert when a protective stop never reaches the exchange (#740); **worker:** break the retry loop on an order Binance keeps refusing (#742). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.1.0"
     - kind: added
       description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
