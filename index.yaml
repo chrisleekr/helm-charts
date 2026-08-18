@@ -4,6 +4,40 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: "Sync to binance-trading-bot v1.2.0: **discovery:** exclude stablecoins and fiat using Binance's own classification (#750); **api,db,web:** bound pool checkouts and statements, scope archive sums by quote (#749). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.2.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.1.0: archive cost-basis integrity, symbol permissions, dust cancel, discovery admission (#735); **binance:** add a per-account ORDERS rate governor and deferrable order intents (#734); **db:** store open conditions in condition_states and harden scoped repo binding (#731); **profile:** add on-demand profile diagnosis and discovery funnel (#736); **retention:** move log retention into a config table and add the log surfaces (#733); **strategy:** add the price-outside-exchange-band protective-stop blocker (#737); **strategy:** clamp or natively trail a protective stop Binance's price band refuses (#741); **ci:** resolve audit and release formatting drift (#745); **technicals:** align the rating window and vote rules with TradingView (#739); **web:** hold scroll position while loading and polling, and gate phantom alert metrics (#716); **web:** reserve height for every loading branch, gate regressions in CI (#718); **worker,contracts,web:** harden diagnosis ladder, discovery funnel, and signal panel (#744); **worker,contracts:** alert when a protective stop never reaches the exchange (#740); **worker:** break the retry loop on an order Binance keeps refusing (#742). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.1.0"
+        - kind: added
+          description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
+    apiVersion: v2
+    appVersion: v1.2.0
+    created: "2026-08-18T15:06:44.920580772Z"
+    description: A Helm chart for Binance Trading Bot - a self-hosted automated crypto
+      trading bot
+    digest: e82cd58a949b3b4a845792b85894981b2f3a6ac76a3b02574bc18ec52e3711d5
+    keywords:
+    - bot
+    - trading-bot
+    - cryptocurrency
+    - binance
+    - binance-api
+    - crypto-trading
+    - grid-trading
+    - binance-trading-bot
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: binance-trading-bot
+    sources:
+    - https://github.com/chrisleekr/binance-trading-bot
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-1.2.2/binance-trading-bot-1.2.2.tgz
+    version: 1.2.2
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: "Sync to binance-trading-bot v1.1.0: archive cost-basis integrity, symbol permissions, dust cancel, discovery admission (#735); **binance:** add a per-account ORDERS rate governor and deferrable order intents (#734); **db:** store open conditions in condition_states and harden scoped repo binding (#731); **profile:** add on-demand profile diagnosis and discovery funnel (#736); **retention:** move log retention into a config table and add the log surfaces (#733); **strategy:** add the price-outside-exchange-band protective-stop blocker (#737); **strategy:** clamp or natively trail a protective stop Binance's price band refuses (#741); **ci:** resolve audit and release formatting drift (#745); **technicals:** align the rating window and vote rules with TradingView (#739); **web:** hold scroll position while loading and polling, and gate phantom alert metrics (#716); **web:** reserve height for every loading branch, gate regressions in CI (#718); **worker,contracts,web:** harden diagnosis ladder, discovery funnel, and signal panel (#744); **worker,contracts:** alert when a protective stop never reaches the exchange (#740); **worker:** break the retry loop on an order Binance keeps refusing (#742). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.1.0"
         - kind: added
           description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
@@ -2069,4 +2103,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-08-15T08:50:21.24632075Z"
+generated: "2026-08-18T15:06:44.920703228Z"
