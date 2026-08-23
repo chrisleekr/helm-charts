@@ -17,14 +17,14 @@ keywords:
 #
 # 1.0.0 is a full rewrite of the chart for upstream v1.0.0, which replaced the
 # application the 0.x chart deployed. There is no in-place upgrade path from 0.x.
-version: 1.2.2
+version: 1.2.3
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 #
 # Upstream tags with a leading "v", so the tag string is "v1.0.0", not "1.0.0".
-appVersion: "v1.2.0"
+appVersion: "v1.3.0"
 kubeVersion: ">= 1.31.0"
 sources:
   - https://github.com/chrisleekr/binance-trading-bot
@@ -36,6 +36,8 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to binance-trading-bot v1.3.0: **discovery:** surface asset-policy aborts to the operator (#755); **observability:** alert on the new counters and unit-test the rules (#757); **archive:** recover the real exit reason on backfilled cycles (#756); clear position-scoped state fields on every position close (#761); **worker:** flatten sub-notional dust instead of stranding the position (#754). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.3.0"
     - kind: changed
       description: "Sync to binance-trading-bot v1.2.0: **discovery:** exclude stablecoins and fiat using Binance's own classification (#750); **api,db,web:** bound pool checkouts and statements, scope archive sums by quote (#749). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.2.0"
     - kind: changed
