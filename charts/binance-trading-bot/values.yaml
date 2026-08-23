@@ -138,9 +138,23 @@ postgres:
   # without the startup probe covering it the liveness probe kills the container
   # mid-initdb and the pod crash-loops. 120 = 10 minutes.
   startupFailureThreshold: 120
+  # Helm replaces this list wholesale, so an override must restate every entry it
+  # still wants. shared_preload_libraries likewise overrides postgresql.conf
+  # rather than appending, so timescaledb has to be named here: the app creates
+  # hypertables against it and will not start without it.
   args:
     - -c
     - max_connections=50
+    # A migration creates the pg_stat_statements extension, but the module only
+    # records once preloaded, so without this the view errors on every read.
+    # compute_query_id defaults to `auto` and activates it on load.
+    - -c
+    - shared_preload_libraries=timescaledb,pg_stat_statements
+  # Uncomment to split planning time from execution time. Useful when a server
+  # burns CPU that execution time alone does not account for. Off by default:
+  # the PostgreSQL docs warn it may cost noticeably at high statement rates.
+  #  - -c
+  #  - pg_stat_statements.track_planning=on
   # Uncomment to trade durability for tick-persist latency, which is the app's
   # hot path. Off means Postgres acknowledges a commit before its WAL reaches
   # disk, so a node or database crash silently loses trades the app already
