@@ -17,14 +17,14 @@ keywords:
 #
 # 1.0.0 is a full rewrite of the chart for upstream v1.0.0, which replaced the
 # application the 0.x chart deployed. There is no in-place upgrade path from 0.x.
-version: 1.3.0
+version: 1.3.1
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 #
 # Upstream tags with a leading "v", so the tag string is "v1.0.0", not "1.0.0".
-appVersion: "v1.3.0"
+appVersion: "v1.4.0"
 kubeVersion: ">= 1.31.0"
 sources:
   - https://github.com/chrisleekr/binance-trading-bot
@@ -36,6 +36,8 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to binance-trading-bot v1.4.0: **trading:** pin bindings, drop the always-hold reserve, and record fee basis (#765). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.4.0"
     - kind: added
       description: "Preload pg_stat_statements in the bundled Postgres. The app's migration creates the extension, but the module only records once preloaded, so the view errored on every read. shared_preload_libraries replaces postgresql.conf rather than appending, so timescaledb is now named explicitly alongside it. Adds a commented pg_stat_statements.track_planning toggle."
     - kind: changed
