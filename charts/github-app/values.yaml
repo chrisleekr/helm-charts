@@ -292,6 +292,8 @@ secrets:
   # --- 8. Daemon / Orchestrator WebSocket (auto-generated, persisted across upgrades) ---
   daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
   daemonAuthTokenPrevious: ""                   # Optional rotation-window predecessor of daemonAuthToken. When set, the orchestrator accepts daemons whose Bearer header matches EITHER the primary or this previous value (constant-time). Set to the old token during a rolling rotation, then unset once every daemon has restarted on the new primary. Daemon-side ignored — daemons always send the primary daemonAuthToken.
+  workflowRunnerCapabilitySecret: ""            # Controller-only HMAC root for deadline-bound, per-attempt isolated-workflow-runner capabilities. Min 32 chars. Setting it enables the isolated workflow runner feature (see config.workflowRunner). Must differ from daemonAuthToken and daemonAuthTokenPrevious. Rejected at boot if set on a daemon/worker.
+  workflowRunnerCapabilitySecretPrevious: ""    # Optional controller-only rotation predecessor of workflowRunnerCapabilitySecret. Accepted only for capabilities whose signed expiry has not elapsed. Must also differ from both daemon-auth slots.
 
 # ─────────────────────────── APPLICATION CONFIG ───────────────────────
 # `config:` is a 1:1 mirror of the non-secret fields of the Zod schema in
@@ -325,6 +327,7 @@ config:
   agentMaxTurns: ""                             # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; overrides defaultMaxTurns when both are set.
   claudeCodePath: ""                            # Required only when claude-code is installed globally (e.g. Docker).
   allowedOwners: ""                             # Comma-separated. Required when secrets.claudeCodeOauthToken is set.
+  autoReviewUsers: ""                           # Comma-separated GitHub logins whose pushes to an open PR (pull_request.synchronize) auto-trigger the review workflow, matched case-insensitively. Empty disables the feature. Requires config.allowedOwners set and workflows.review.auto=true on the repo. Under a PAT, do NOT list the PAT owner (self-pushes are skipped).
 
   # --- 6. Orchestrator ---
   wsPort: 3002                                  # Must differ from config.port.
@@ -336,6 +339,7 @@ config:
   staleExecutionThresholdMs: 3660000            # Must exceed agentTimeoutMs (3600000); 60s margin.
   daemonDrainTimeoutMs: 3600000                 # Set >= agentTimeoutMs to avoid mid-run kills on SIGTERM. Inflates daemon Pod terminationGracePeriodSeconds (drain/1000 + 30s) — confirm cluster tolerates ~60min graceful shutdown.
   jobMaxRetries: 3
+  workflowDispatchTimeoutMs: 4200000            # Maximum age of an unclaimed structured-workflow dispatch. On retry-budget or age expiry the workflow fails, releases its in-flight lock, fails its execution receipt, and queues a public failure projection.
   offerTimeoutMs: 5000
   queueWorkerBackoffMaxMs: 5000                 # Caps doubling backoff when a leased job has no locally-capable daemon and is re-pushed for another instance to claim.
   livenessReaperIntervalMs: 30000               # Cadence of the heartbeat-based liveness reaper. Min 20000 (orchestrator heartbeat refresh interval) to avoid false reaps.
@@ -354,8 +358,22 @@ config:
     spawnCooldownMs: 30000                      # Minimum interval between spawns. Prevents burst storms.
     spawnQueueThreshold: 3                      # Queue depth that triggers overflow spawn when persistent pool is saturated.
     namespace: ""                               # Leave empty to use the release namespace. Sets EPHEMERAL_DAEMON_NAMESPACE.
+    secretName: ""                              # Existing Secret in the ephemeral-daemon namespace that spawned Pods mount via envFrom. Leave empty to use the app default (daemon-secrets). Every key in it becomes an env var on Pods that run agent-authored code. Sets EPHEMERAL_DAEMON_SECRET_NAME.
     image: ""                                   # Leave empty to use the daemon image helper. Sets DAEMON_IMAGE.
     orchestratorPublicUrl: ""                   # Optional ws:// or wss:// URL ephemeral daemons dial back. Unset OK when spawned Pods can reach the in-cluster orchestrator Service.
+
+  # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
+  # Structured `workflow-run` jobs each run in one bare Pod per attempt, in a
+  # dedicated namespace, gated by secrets.workflowRunnerCapabilitySecret (unset
+  # → feature off). Requires rbac.create=true so the orchestrator can manage
+  # runner Pods. Every knob has an app default; leave empty to inherit it. The
+  # internal WORKFLOW_RUNNER flag is spawner-injected and never set here. See
+  # upstream src/k8s/workflow-runner-spawner.ts.
+  workflowRunner:
+    namespace: ""                               # Dedicated namespace for runner Pods, per-attempt Secrets, PSA, and the runner ValidatingAdmissionPolicy. Must differ from ephemeralDaemon.namespace. Empty → app default (github-app-runners). Sets WORKFLOW_RUNNER_NAMESPACE.
+    nodeLabel: ""                               # Node label key the runner Pod's nodeSelector and NoSchedule toleration are both built from. Empty → app default (github-app.node-restriction.kubernetes.io/workflow-runner). Sets WORKFLOW_RUNNER_NODE_LABEL.
+    nodeValue: ""                               # Value paired with nodeLabel. Empty → app default (true). Sets WORKFLOW_RUNNER_NODE_VALUE.
+    imagePullSecret: ""                         # Name of an existing kubernetes.io/dockerconfigjson Secret in the runner namespace that runner Pods may reference. Empty emits no imagePullSecrets (anonymous-pull registries only). Sets WORKFLOW_RUNNER_IMAGE_PULL_SECRET.
 
   # --- 9. Triage (binary heavy classifier) ---
   triageEnabled: true                           # Kill-switch for the triage LLM call.
@@ -426,7 +444,8 @@ config:
   schedulerEnabled: true                        # Chart default ON (upstream defaults OFF). Master kill-switch for the scheduler. When false the scheduler never starts.
   schedulerScanIntervalMs: 300000               # Tick cadence (5m). Zod range [60000, 3600000]. Below 60s the per-tick GitHub API cost is not worth it; above 1h cron precision degrades.
   schedulerAllowAutoMerge: false                # Privilege gate for the `merge_readiness` MCP tool. When true (and an action sets `auto_merge: true`), the tool can merge PRs. Does NOT sandbox the agent from merging by other means: `allowed_tools` is owner-trusted config. Default OFF — opt-in per deployment.
-  schedulerConfigFile: ".github-app.yaml"       # Filename the scheduler reads from each installed repo's default-branch root.
+  repoConfigFile: ".github-app.yaml"            # Filename read from each installed repo's default-branch root, carrying the repo-wide per-repo policy (workflow toggles, agent knobs, scheduled actions, review-learnings). Trimmed at load — a stray space 404s on every repo and silently disables the surface. Sets REPO_CONFIG_FILE.
+  schedulerConfigFile: ".github-app.yaml"       # DEPRECATED former name for repoConfigFile; still honoured as a fallback (logs a one-shot boot warning) so upgrades don't silently change which file is read. Sets SCHEDULER_CONFIG_FILE.
   reviewLearningsEnabled: true                  # Master kill-switch for review-learnings. When false the orchestrator never loads learnings into job:payload, the prompt block stays empty, and save/delete MCP calls are dropped. Additive feature — safe to leave ON.
   reviewLearningsRagEnabled: true               # Chart default ON (upstream defaults OFF). Stage 2 pgvector RAG path: orchestrator embeds each directive at save time + each PR's changed-file paths at handleAccept, then runs pgvector top-K against `review_learnings.embedding`. REQUIRES Postgres migration 015 (pgvector extension); if missing or migration not applied, falls back to legacy file-glob filter.
 
