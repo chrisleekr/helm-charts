@@ -13,12 +13,12 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.18.0
+version: 0.19.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.16.1"
+appVersion: "1.17.0"
 kubeVersion: ">= 1.31.0"
 maintainers:
   - name: Chris Lee
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to github-app v1.17.0: **core:** extract HTTP router and add output-safety primitives (#285); **repo-config:** add per-repo .github-app.yaml control surface (#286); **runner:** add the config surface and process boundary (#290); **runner:** isolate structured workflows in one-attempt Kubernetes Pods (#292); **runner:** move structured workflows onto a leased, durable run rail (#291). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.0"
     - kind: security
       description: "Sync to github-app v1.16.1: **deps:** pin transitive adm-zip to 0.6.0 for CVE-2026-39244 (#268). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.16.1"
     - kind: security
@@ -98,4 +100,3 @@ annotations:
       description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
     - kind: changed
       description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
-  artifacthub.io/containsSecurityUpdates: "true"
