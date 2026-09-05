@@ -55,6 +55,8 @@ spec:
                 name: {{ include "github-app.fullname" . }}-config
             - secretRef:
                 name: {{ include "github-app.secretName" . }}
+            - secretRef:
+                name: {{ include "github-app.controllerSecretName" . }}
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}

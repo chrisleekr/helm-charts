@@ -117,9 +117,16 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
    ephemeral daemon Pods directly (see config.ephemeralDaemon.*).
    Requires DATABASE_URL, VALKEY_URL, DAEMON_AUTH_TOKEN (auto-wired when
    postgres.enabled / valkey.enabled, or auto-generated for the token).
-   Ephemeral spawning additionally requires rbac.create=true so the
-   orchestrator ServiceAccount can create/get/delete Pods in
-   config.ephemeralDaemon.namespace (defaults to the release namespace).
+   Ephemeral spawning additionally requires, in
+   config.ephemeralDaemon.namespace (defaults to the release namespace):
+     - rbac.create=true, so the orchestrator ServiceAccount can
+       create/get/delete Pods there;
+     - a Secret named by config.ephemeralDaemon.secretName, default
+       `daemon-secrets`, that YOU create. The chart does not render it and
+       the spawner mounts it non-optionally, so spawned Pods stall in
+       CreateContainerConfigError while it is missing. It carries
+       DAEMON_AUTH_TOKEN (the value in {{ include "github-app.secretName" . }})
+       plus the provider credential, never DATABASE_URL or VALKEY_URL.
 
 4. Verify the bot is healthy:
    kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "github-app.name" . }}"

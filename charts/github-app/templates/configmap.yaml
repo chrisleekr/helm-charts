@@ -80,22 +80,38 @@ data:
   # The orchestrator itself is never ephemeral; only orchestrator-spawned Pods
   # set DAEMON_EPHEMERAL=true on their own container spec.
   DAEMON_EPHEMERAL: "false"
-  # Spawner-injected on isolated runner Pods; the orchestrator itself is never a runner.
-  WORKFLOW_RUNNER: "false"
   EPHEMERAL_DAEMON_IDLE_TIMEOUT_MS: {{ $c.ephemeralDaemon.idleTimeoutMs | quote }}
   EPHEMERAL_DAEMON_SPAWN_COOLDOWN_MS: {{ $c.ephemeralDaemon.spawnCooldownMs | quote }}
   EPHEMERAL_DAEMON_SPAWN_QUEUE_THRESHOLD: {{ $c.ephemeralDaemon.spawnQueueThreshold | quote }}
   EPHEMERAL_DAEMON_NAMESPACE: {{ default .Release.Namespace $c.ephemeralDaemon.namespace | quote }}
+  {{- if $c.ephemeralDaemon.secretName }}
   EPHEMERAL_DAEMON_SECRET_NAME: {{ $c.ephemeralDaemon.secretName | quote }}
+  {{- end }}
   DAEMON_IMAGE: {{ default (include "github-app.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image | quote }}
   {{- if $c.ephemeralDaemon.orchestratorPublicUrl }}
   ORCHESTRATOR_PUBLIC_URL: {{ $c.ephemeralDaemon.orchestratorPublicUrl | quote }}
   {{- end }}
 
-  # --- 8a. Isolated workflow runners (one bare Pod per structured workflow-run attempt) ---
+  # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
+  # config.ts validateWorkerNamespaces rejects controller boot when the runner
+  # and ephemeral-daemon namespaces match; both are known here, so fail early.
+  {{- $runnerNs := $c.workflowRunner.namespace | default "github-app-runners" }}
+  {{- $daemonNs := $c.ephemeralDaemon.namespace | default .Release.Namespace }}
+  {{- if eq $runnerNs $daemonNs }}
+  {{- fail (printf "config.workflowRunner.namespace resolves to %q, the same as the ephemeral-daemon namespace. Upstream refuses to boot when WORKFLOW_RUNNER_NAMESPACE equals EPHEMERAL_DAEMON_NAMESPACE. Set config.workflowRunner.namespace to a dedicated namespace, or install the release into a different namespace." $runnerNs) }}
+  {{- end }}
+  # Operator half of the isolated workflow-runner feature (gated by
+  # secrets.workflowRunnerCapabilitySecret). Each key is gated so empty → app
+  # default. The internal WORKFLOW_RUNNER flag is spawner-injected, never set here.
+  {{- if $c.workflowRunner.namespace }}
   WORKFLOW_RUNNER_NAMESPACE: {{ $c.workflowRunner.namespace | quote }}
+  {{- end }}
+  {{- if $c.workflowRunner.nodeLabel }}
   WORKFLOW_RUNNER_NODE_LABEL: {{ $c.workflowRunner.nodeLabel | quote }}
+  {{- end }}
+  {{- if $c.workflowRunner.nodeValue }}
   WORKFLOW_RUNNER_NODE_VALUE: {{ $c.workflowRunner.nodeValue | quote }}
+  {{- end }}
   {{- if $c.workflowRunner.imagePullSecret }}
   WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $c.workflowRunner.imagePullSecret | quote }}
   {{- end }}
@@ -149,7 +165,14 @@ data:
   SCHEDULER_ENABLED: {{ $c.schedulerEnabled | quote }}
   SCHEDULER_SCAN_INTERVAL_MS: {{ int $c.schedulerScanIntervalMs | quote }}
   SCHEDULER_ALLOW_AUTO_MERGE: {{ $c.schedulerAllowAutoMerge | quote }}
+  # Both gated: the app reads REPO_CONFIG_FILE first and falls back to the
+  # deprecated SCHEDULER_CONFIG_FILE, so rendering REPO_CONFIG_FILE with a chart
+  # default would silently override a pre-1.17 schedulerConfigFile override.
+  {{- if $c.repoConfigFile }}
   REPO_CONFIG_FILE: {{ $c.repoConfigFile | quote }}
+  {{- end }}
+  {{- if $c.schedulerConfigFile }}
   SCHEDULER_CONFIG_FILE: {{ $c.schedulerConfigFile | quote }}
+  {{- end }}
   REVIEW_LEARNINGS_ENABLED: {{ $c.reviewLearningsEnabled | quote }}
   REVIEW_LEARNINGS_RAG_ENABLED: {{ $c.reviewLearningsRagEnabled | quote }}

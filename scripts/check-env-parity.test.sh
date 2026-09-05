@@ -22,6 +22,7 @@ unmirrored="$tmp/unmirrored.json"
 keys=$(grep -rhoE '(^[[:space:]]*[A-Z][A-Z0-9_]{2,}:)|(name: [A-Z][A-Z0-9_]{2,})' \
   "$chart/templates/configmap.yaml" \
   "$chart/templates/secret.yaml" \
+  "$chart/templates/controller-secret.yaml" \
   "$chart/templates/daemon-deployment.yaml" \
   | sed -E 's/name: //; s/[[:space:]:]//g' | sort -u | grep -vx DOCKER_HOST)
 printf '%s\n' "$keys" | jq -R 'select(length > 0) | {env: ., group: "test", kind: "config"}' | jq -s . > "$contract"

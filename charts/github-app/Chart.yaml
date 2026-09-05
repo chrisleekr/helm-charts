@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.19.0
+version: 0.20.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -37,7 +37,13 @@ annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
     - kind: security
-      description: "Sync to github-app v1.17.1: **ci:** retry bun audit, close the signal fail-open, and skip on outage (#296); **deps:** clear the orchestrator image's HIGH CVE findings (#295). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.1"
+      description: "Sync to github-app v1.17.1: **deps:** clear the orchestrator image's HIGH CVE findings (#295); **ci:** retry bun audit, close the signal fail-open, and skip on outage (#296). No env-surface change: the v1.17.1 contract is identical to v1.17.0. Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.1"
+    - kind: changed
+      description: "Sync to github-app v1.17.0: **core:** extract HTTP router and add output-safety primitives (#285); **repo-config:** add per-repo .github-app.yaml control surface (#286); **runner:** add the config surface and process boundary (#290); **runner:** isolate structured workflows in one-attempt Kubernetes Pods (#292); **runner:** move structured workflows onto a leased, durable run rail (#291). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.0"
+    - kind: security
+      description: "Move `secrets.workflowRunnerCapabilitySecret[Previous]` out of the shared app Secret (envFrom-mounted on every daemon pool) into a new `<fullname>-controller-secret` mounted on the orchestrator only, per upstream's K8s Secret split. The capability root is required on the v1.17.0 controller, so it is auto-generated and persisted across upgrades (same `lookup` treatment as `DAEMON_AUTH_TOKEN`) when `secrets.workflowRunnerCapabilitySecret` is empty. Adds `secrets.existingControllerSecret` for externally managed Secrets, rejected at render time when it names the app Secret. Render fails when the runner and ephemeral-daemon namespaces collide, which upstream refuses at boot."
+    - kind: fixed
+      description: "`config.repoConfigFile` and the deprecated `config.schedulerConfigFile` now default to empty and render only when set, so a pre-1.17 `schedulerConfigFile` override keeps reading the same file after upgrade instead of being shadowed by a chart-default `REPO_CONFIG_FILE`."
     - kind: security
       description: "Sync to github-app v1.16.1: **deps:** pin transitive adm-zip to 0.6.0 for CVE-2026-39244 (#268). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.16.1"
     - kind: security
