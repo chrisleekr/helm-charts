@@ -38,6 +38,11 @@
 #   R15 paused       split + roles.worker.replicaCount=0 (0 is honoured, not defaulted)
 #   R16 byo secret   ct-values + existingSecret (chart Secret suppressed)
 #   R17 no migrate   ct-values + migrations.enabled=false
+#   R18 NEGATIVE     split topology on an RWO backup claim -> must FAIL
+#   R19 NEGATIVE     databaseWaitSeconds > activeDeadlineSeconds -> must FAIL
+#   R20 NEGATIVE     prometheusRule on, serviceMonitor off -> must FAIL
+#   R21 long release  50-character release name, exhausts the 63-char budget
+#   R22 override     observability-values + fullnameOverride=ci-bot
 #
 # Resource-name contract asserted below (release "btb", fullname
 # "btb-binance-trading-bot"). Workloads are always role-suffixed so the range
@@ -60,6 +65,7 @@ repo_root=$(cd "$(dirname "$0")/.." && pwd)
 chart="$repo_root/charts/binance-trading-bot"
 release="btb"
 fullname="btb-binance-trading-bot"
+override_fullname="ci-bot"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -115,6 +121,49 @@ want_count() { # <file> <ere> <n> <label>
   got=$(grep -cE "$2" "$1" 2>/dev/null || true)
   if [ "${got:-0}" != "$3" ]; then
     note "$4: expected $3 lines matching /$2/, found ${got:-0}"
+  fi
+}
+
+# Counts occurrences of a reference key and how many carry a matching name:.
+#
+# The name: is found by scanning forward inside the reference block rather than
+# by taking the literal next line. helm renders template comments into the
+# stream (templates/ingress.yaml puts three between path: and pathType:), and a
+# sibling field can sort ahead of name: in a secretKeyRef, both of which would
+# otherwise report a naming regression on a correct chart. Indentation bounds the
+# scan, so a block with no name: at all cannot borrow the next block's.
+#
+# The comparison is on the parsed field, not a substring of the line: every
+# derived component name here has the fullname as a strict prefix, so
+# index($0, "name: ci-bot") is also true of "name: ci-bot-otel-collector".
+ref_names() { # <doc> <reference-key> <name>  -> prints "<matched> <total>"
+  awk -v ref="$2:" -v want="$3" '
+    function indent(line) { match(line, /[^ ]/); return RSTART - 1 }
+    $NF == ref {
+      total++
+      ri = indent($0)
+      while ((getline) > 0) {
+        if ($0 ~ /^[[:space:]]*$/) { continue }
+        if (indent($0) <= ri) { break }
+        if ($1 == "name:") {
+          v = $2
+          gsub(/^["'"'"']|["'"'"']$/, "", v)
+          if (v == want) { matched++ }
+          break
+        }
+      }
+    }
+    END { print matched + 0, total + 0 }
+  ' "$1"
+}
+
+want_named_refs() { # <doc> <reference-key> <name> <count> <label>
+  local matched total
+  read -r matched total <<<"$(ref_names "$1" "$2" "$3")"
+  if [ "$total" != "$4" ]; then
+    note "$5: expected $4 $2 references, found $total"
+  elif [ "$matched" != "$4" ]; then
+    note "$5: $matched of $total $2 references name $3"
   fi
 }
 
@@ -176,13 +225,14 @@ want_no_doc() { # <render> <kind> <name> <label>
 # Credentials render base64-encoded into the chart Secret, so string assertions
 # on them have to decode first.
 
-secret_value() { # <render> <key>  -> prints decoded value, empty when absent
-  local raw
+secret_value() { # <render> <key> [secret-name]  -> decoded value, empty when absent
+  local raw secret_name
+  secret_name=${3:-$fullname}
   # Scoped to the Secret document for the reason the header above gives: a key
   # such as DATABASE_URL appearing as a plain `value:` anywhere else in the
   # stream would win the head -1, base64 -d would fail on it, and the value
   # would read as missing.
-  find_doc "$1" Secret "$fullname" || return 0
+  find_doc "$1" Secret "$secret_name" || return 0
   # BRE and no -E, because busybox sed in the alpine/helm image predates it.
   raw=$(grep -E "^[[:space:]]+$2: " "$DOC" 2>/dev/null | head -1 |
     sed -e "s/^[[:space:]]*$2:[[:space:]]*//" -e 's/"//g' || true)
@@ -192,9 +242,10 @@ secret_value() { # <render> <key>  -> prints decoded value, empty when absent
   printf '%s' "$raw" | base64 -d 2>/dev/null || true
 }
 
-want_secret() { # <render> <key> <ere> <label>
-  local v
-  v=$(secret_value "$1" "$2")
+want_secret() { # <render> <key> <ere> <label> [secret-name]
+  local v secret_name
+  secret_name=${5:-$fullname}
+  v=$(secret_value "$1" "$2" "$secret_name")
   if [ -z "$v" ]; then
     note "$4: Secret key $2 missing or empty in $(basename "$1")"
   elif ! printf '%s' "$v" | grep -qE "$3"; then
@@ -244,6 +295,15 @@ render r10 -f "$ci/ct-values.yaml" \
 # R5 carries a backend and two headers so the collector's otlphttp exporter, the
 # header env-substitution and the headers Secret are all actually rendered.
 render r5 -f "$ci/observability-values.yaml" \
+  --set otlp.endpoint=https://otlp.vendor.example:4318 \
+  --set 'otlp.headers=authorization=Bearer ci-token\,x-tenant=acme'
+# R22 exercises the fullnameOverride branch with the broadest positive fixture,
+# so direct names, suffixed components and their internal references are all
+# checked from one render.
+render r22 -f "$ci/observability-values.yaml" \
+  --set fullnameOverride="$override_fullname" \
+  --set ingress.enabled=true \
+  --set ingress.allowInsecure=true \
   --set otlp.endpoint=https://otlp.vendor.example:4318 \
   --set 'otlp.headers=authorization=Bearer ci-token\,x-tenant=acme'
 # R11 renders the explicit-password branch of the DSN, which no fixture reaches.
@@ -359,14 +419,21 @@ fi
 # would pass on a Deployment carrying `- configMapRef:` with the wrong name plus
 # an unrelated `name: <fullname>` line elsewhere in the pod spec, which is the
 # same coupling gap this script closes for the ServiceMonitor port names.
-want_envfrom() { # <render> <deployment-name> <label>
+#
+# Shares ref_names with want_named_refs so both agree on strictness. They did not
+# before: this matched the name as a substring of the line, so the app
+# Deployment's envFrom passed while naming <fullname>-otel-collector.
+want_envfrom() { # <render> <deployment-name> <label> [ref-name]
+  local ref_name matched total
+  ref_name=${4:-$fullname}
   if get_doc "$1" Deployment "$2" "$3"; then
     for ref in configMapRef secretRef; do
-      awk -v ref="- $ref:" -v want="name: $fullname" '
-        index($0, ref) { seen = 1; next }
-        seen { if (index($0, want)) { ok = 1 } ; seen = 0 }
-        END { exit (ok ? 0 : 1) }
-      ' "$DOC" || note "$3 envFrom: no $ref naming $fullname"
+      read -r matched total <<<"$(ref_names "$DOC" "$ref" "$ref_name")"
+      if [ "$total" -eq 0 ]; then
+        note "$3 envFrom: no $ref at all"
+      elif [ "$matched" -eq 0 ]; then
+        note "$3 envFrom: $total $ref reference(s), none naming $ref_name"
+      fi
     done
   fi
 }
@@ -400,6 +467,7 @@ r11="$tmp/r11.yaml"
 r15="$tmp/r15.yaml"
 r16="$tmp/r16.yaml"
 r17="$tmp/r17.yaml"
+r22="$tmp/r22.yaml"
 readme="$chart/README.md"
 
 # ----------------------------------------------------------------- assertions -
@@ -991,14 +1059,88 @@ elif ! grep -q 'serviceMonitor' "$tmp/r20.err"; then
 fi
 check C29 "render-time guards reject a split-topology RWO claim, a wait longer than the Job deadline, and unmatchable scoped alerts"
 
+# C30 - fullnameOverride replaces the release-derived fullname, but it must not
+# replace the Helm release identity carried by app.kubernetes.io/instance. The
+# observability fixture covers every naming shape and the references between
+# app, datastore, persistence and Collector resources.
+while read -r kind name; do
+  get_doc "$r22" "$kind" "$name" "R22" || true
+  want "$DOC" "^[[:space:]]*app\.kubernetes\.io/instance: $release\$" "R22 $kind/$name"
+done <<EOF
+ServiceAccount $override_fullname
+ConfigMap $override_fullname
+Secret $override_fullname
+Service $override_fullname
+Deployment $override_fullname-all
+Job $override_fullname-migrate
+PersistentVolumeClaim $override_fullname-backups
+StatefulSet $override_fullname-postgres
+StatefulSet $override_fullname-valkey
+Service $override_fullname-postgres
+Service $override_fullname-valkey
+Service $override_fullname-admin
+Deployment $override_fullname-otel-collector
+Service $override_fullname-otel-collector
+ConfigMap $override_fullname-otel-collector
+Secret $override_fullname-otel-collector-headers
+NetworkPolicy $override_fullname
+NetworkPolicy $override_fullname-otel-collector
+ServiceMonitor $override_fullname
+PrometheusRule $override_fullname
+Ingress $override_fullname
+EOF
+want_not "$r22" "$fullname" "R22 override"
+want_envfrom "$r22" "$override_fullname-all" "R22 all" "$override_fullname"
+if get_doc "$r22" Deployment "$override_fullname-all" "R22"; then
+  want "$DOC" "^[[:space:]]*serviceAccountName: $override_fullname\$" "R22 all"
+  want "$DOC" "^[[:space:]]*claimName: $override_fullname-backups\$" "R22 all"
+fi
+if get_doc "$r22" Ingress "$override_fullname" "R22"; then
+  want_named_refs "$DOC" service "$override_fullname" 1 "R22 ingress"
+fi
+if get_doc "$r22" Job "$override_fullname-migrate" "R22"; then
+  want_named_refs "$DOC" secretRef "$override_fullname" 2 "R22 migrate"
+  want_named_refs "$DOC" configMapRef "$override_fullname" 1 "R22 migrate"
+fi
+if get_doc "$r22" Deployment "$override_fullname-otel-collector" "R22"; then
+  want_named_refs "$DOC" secretRef "$override_fullname-otel-collector-headers" 1 "R22 collector"
+  want_named_refs "$DOC" configMap "$override_fullname-otel-collector" 1 "R22 collector"
+fi
+if get_doc "$r22" StatefulSet "$override_fullname-postgres" "R22"; then
+  want "$DOC" "^[[:space:]]*serviceName: $override_fullname-postgres\$" "R22 postgres"
+  want_named_refs "$DOC" secretKeyRef "$override_fullname" 1 "R22 postgres"
+fi
+if get_doc "$r22" StatefulSet "$override_fullname-valkey" "R22"; then
+  want "$DOC" "^[[:space:]]*serviceName: $override_fullname-valkey\$" "R22 valkey"
+  want_named_refs "$DOC" secretKeyRef "$override_fullname" 2 "R22 valkey"
+fi
+if get_doc "$r22" ServiceMonitor "$override_fullname" "R22"; then
+  want "$DOC" "^[[:space:]]*replacement: \"$override_fullname\"\$" "R22 servicemonitor"
+fi
+if get_doc "$r22" PrometheusRule "$override_fullname" "R22"; then
+  want "$DOC" "^[[:space:]]*- name: $override_fullname\$" "R22 prometheusrule group"
+  want_count "$DOC" "expr: .*btb_release=\"$override_fullname\"" 4 "R22 prometheusrule scope"
+fi
+want_secret "$r22" DATABASE_URL "@$override_fullname-postgres[.:]" "R22" "$override_fullname"
+want_secret "$r22" REDIS_URL "$override_fullname-valkey[.:]" "R22" "$override_fullname"
+want "$r22" "OTEL_EXPORTER_OTLP_ENDPOINT: \"?http://$override_fullname-otel-collector:4318\"?" "R22"
+instance_total=$(grep -cE '^[[:space:]]*app\.kubernetes\.io/instance:' "$r22" || true)
+instance_correct=$(grep -cE "^[[:space:]]*app\.kubernetes\.io/instance: $release\$" "$r22" || true)
+if [ "$instance_total" -eq 0 ]; then
+  note "R22: no app.kubernetes.io/instance labels rendered"
+elif [ "$instance_correct" -ne "$instance_total" ]; then
+  note "R22: $instance_correct of $instance_total app.kubernetes.io/instance labels retain release $release"
+fi
+check C30 "fullnameOverride consistently names resources and internal references while instance labels retain the Helm release"
+
 # -------------------------------------------------------------------- summary -
 
 total=$((passed + failed))
 printf '\n%s/%s assertions failed\n' "$failed" "$total"
 # A criterion deleted rather than fixed still leaves "0 failed" behind, so pin
-# the count: the acceptance list is exactly 29 and the gate covers all of them.
-if [ "$total" -ne 29 ]; then
-  printf 'FAIL gate: expected 29 criteria, ran %s\n' "$total" >&2
+# the count: the acceptance list is exactly 30 and the gate covers all of them.
+if [ "$total" -ne 30 ]; then
+  printf 'FAIL gate: expected 30 criteria, ran %s\n' "$total" >&2
   exit 1
 fi
 [ "$failed" -eq 0 ]
