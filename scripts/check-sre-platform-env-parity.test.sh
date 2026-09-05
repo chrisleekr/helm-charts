@@ -24,6 +24,13 @@ chart_env_keys "$tmp/render.yaml" | jq -Rn '[inputs | {env: .}]' >"$tmp/matching
 ENV_CONTRACT_FILE="$tmp/matching.json" bash "$gate" >/dev/null
 echo "PASS matching contract"
 
+# The gate skips ignored chart keys before the orphan check, so adding
+# DATABASE_URL to .env-contract-ignore would make the case below pass without
+# ever reaching that branch. Assert the premise rather than assume it.
+if grep -qxF DATABASE_URL "$chart/.env-contract-ignore"; then
+  echo "FAIL DATABASE_URL is ignored, so the orphan case proves nothing" >&2
+  exit 1
+fi
 jq 'map(select(.env != "DATABASE_URL"))' "$tmp/matching.json" >"$tmp/missing.json"
 if ENV_CONTRACT_FILE="$tmp/missing.json" bash "$gate" >/dev/null 2>&1; then
   echo "FAIL missing chart key passed" >&2

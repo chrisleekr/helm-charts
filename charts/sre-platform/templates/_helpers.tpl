@@ -335,9 +335,14 @@ the invitation side already does. */ -}}
 {{- if .Values.ingress.api.enabled -}}
 {{- required "ingress.api.host is required when the API ingress is enabled." .Values.ingress.api.host -}}
 {{- $apiUrl := include "sre-platform.apiUrl" . -}}
-{{- $apiHost := regexReplaceAll "^https?://" $apiUrl "" -}}
+{{- /* Port stripped before comparing: public.apiUrl may carry one, while an
+Ingress rules[].host is a DNS name the API server rejects with a port attached.
+Comparing the authority instead refused a valid non-default-port deployment, and
+"fixing" that by putting the port in ingress.api.host rendered an Ingress the
+API server will not admit. */ -}}
+{{- $apiHost := regexReplaceAll "^https?://" $apiUrl "" | splitList ":" | first -}}
 {{- if ne $apiHost .Values.ingress.api.host -}}
-{{- fail "ingress.api.host must match the host in public.apiUrl." -}}
+{{- fail (printf "ingress.api.host must match the host in public.apiUrl (%q). A port in public.apiUrl is ignored for this comparison, because an Ingress host cannot carry one." $apiHost) -}}
 {{- end -}}
 {{- if not (hasPrefix "https://" $apiUrl) -}}
 {{- fail "public.apiUrl must use https:// when ingress.api is enabled." -}}
@@ -346,9 +351,9 @@ the invitation side already does. */ -}}
 {{- if .Values.ingress.dashboard.enabled -}}
 {{- required "ingress.dashboard.host is required when the dashboard ingress is enabled." .Values.ingress.dashboard.host -}}
 {{- $dashboardUrl := include "sre-platform.dashboardUrl" . -}}
-{{- $dashboardHost := regexReplaceAll "^https?://" $dashboardUrl "" -}}
+{{- $dashboardHost := regexReplaceAll "^https?://" $dashboardUrl "" | splitList ":" | first -}}
 {{- if ne $dashboardHost .Values.ingress.dashboard.host -}}
-{{- fail "ingress.dashboard.host must match the host in public.dashboardUrl." -}}
+{{- fail (printf "ingress.dashboard.host must match the host in public.dashboardUrl (%q). A port in public.dashboardUrl is ignored for this comparison, because an Ingress host cannot carry one." $dashboardHost) -}}
 {{- end -}}
 {{- if not (hasPrefix "https://" $dashboardUrl) -}}
 {{- fail "public.dashboardUrl must use https:// when ingress.dashboard is enabled." -}}

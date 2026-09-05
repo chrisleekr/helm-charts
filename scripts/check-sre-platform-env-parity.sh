@@ -63,7 +63,11 @@ if [ -n "${ENV_CONTRACT_FILE:-}" ]; then
   cp "$ENV_CONTRACT_FILE" "$contract_file"
 else
   url="https://raw.githubusercontent.com/chrisleekr/sre-platform/v${appver}/env-contract.json"
-  code=$(curl -sSL -o "$contract_file" -w '%{http_code}' "$url" || echo 000)
+  # Bounded and retried: an unbounded fetch hangs the job to the runner-level
+  # timeout instead of failing, and the comparison below is what validates the body.
+  code=$(curl -sSL --connect-timeout 10 --max-time 60 \
+    --retry 3 --retry-delay 2 --retry-all-errors \
+    -o "$contract_file" -w '%{http_code}' "$url" || echo 000)
   if [ "$code" = 404 ] && missing_contract_is_bootstrap "$appver"; then
     echo "SKIP: no public SRE Platform env-contract.json at v${appver}"
     exit 0
@@ -80,7 +84,10 @@ render_chart_env "$chart" "$tmp/render.yaml"
 # keys, so this also sees credentials that are not string literals in templates.
 chart_keys=$(chart_env_keys "$tmp/render.yaml")
 contract_keys=$(jq -r '.[].env' "$contract_file" | sort -u)
-ignore=$(grep -vE '^[[:space:]]*(#|$)' "$chart/.env-contract-ignore" | tr -d ' ' | sort -u)
+# `|| true` because grep exits 1 when the file holds only comments and blank
+# lines. Under pipefail that killed the assignment and set -e ended the run before
+# any comparison, so the job failed with no output at all.
+ignore=$(grep -vE '^[[:space:]]*(#|$)' "$chart/.env-contract-ignore" | tr -d ' ' | sort -u || true)
 
 fail=0
 for key in $chart_keys; do

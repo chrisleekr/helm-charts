@@ -5,6 +5,13 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 chart="$repo_root/charts/sre-platform"
 ci="$chart/ci"
+# Read, never pinned. Three image assertions below used to spell the version as a
+# literal, so the first sre-platform-sync.yml PR — which bumps appVersion and
+# populates image.releaseDigest, and which nobody hand-edits — failed them,
+# including the only assertion proving every workload is digest-pinned.
+appver=$(yq '.appVersion' "$chart/Chart.yaml" | tr -d '"')
+appver_re=${appver//./\\.}
+release_digest=$(yq '.image.releaseDigest // ""' "$chart/values.yaml" | tr -d '"')
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -104,7 +111,11 @@ want_count "$tmp/base.yaml" '^kind: NetworkPolicy$' 1 "one default egress policy
 want_count "$tmp/base.yaml" '^[[:space:]]+value: (api|dashboard|triage-worker|surface-worker)$' 4 "every workload has its fixed role"
 want "$tmp/base.yaml" 'value: "3000"' "API binds port 3000"
 want "$tmp/base.yaml" 'value: "8080"' "dashboard binds port 8080"
-want "$tmp/base.yaml" 'image: "chrisleekr/sre-platform:0\.0\.0"' "unpublished appVersion image remains human-readable"
+if [ -z "$release_digest" ]; then
+  want "$tmp/base.yaml" "image: \"chrisleekr/sre-platform:${appver_re}\"" "unpublished appVersion image remains human-readable"
+else
+  want "$tmp/base.yaml" "image: \"chrisleekr/sre-platform:${appver_re}@sha256:[0-9a-f]{64}\"" "published appVersion image is digest pinned"
+fi
 want "$tmp/base.yaml" 'path: /readyz' "API readiness is rendered"
 want "$tmp/base.yaml" 'DASHBOARD_WS_BASE_URL: "wss://api\.sre\.example\.com"' "WebSocket origin derives from HTTPS API"
 want "$tmp/base.yaml" 'AUTH0_JWKS_URI: "https://tenant\.example\.auth0\.com/\.well-known/jwks\.json"' "optional JWKS override renders"
@@ -113,6 +124,12 @@ want_count "$tmp/base.yaml" '^      automountServiceAccountToken: false$' 5 "all
 want_not "$tmp/base.yaml" '^      automountServiceAccountToken: true$' "no workload enables Kubernetes credential automounting"
 want "$tmp/base.yaml" '- 169\.254\.0\.0/16' "metadata address space is excluded"
 want "$tmp/base.yaml" '- fc00::/7' "IPv6 private address space is excluded"
+# NAT64, 6to4 and Teredo all carry IPv6 traffic to an IPv4 endpoint the IPv4
+# except list denies, so dropping any one silently reopens the boundary the rest
+# of the list closes. Asserted individually because that failure is invisible.
+want "$tmp/base.yaml" '- 64:ff9b::/96' "IPv6 NAT64 translation range is excluded"
+want "$tmp/base.yaml" '- 2002::/16' "IPv6 6to4 tunnel range is excluded"
+want "$tmp/base.yaml" '- 2001::/32' "IPv6 Teredo tunnel range is excluded"
 # The API server rejects an IPv4-mapped IPv6 address in ipBlock (KEP-4858), so
 # naming that range here would make the policy unadmittable and leave the
 # workloads with no egress restriction at all.
@@ -200,6 +217,21 @@ if [ "$bootstrap_revision" != "$changed_revision" ]; then
 else
   bad "bootstrap declaration must change the sync trigger"
 fi
+# The bootstrap-revision annotation lives on the same ConfigMap the four
+# Deployments checksum. Hashing the whole document made a seed-only edit rotate
+# checksum/config on all of them, so adding one administrator silently rolled the
+# API, dashboard and both workers -- the triage worker mid-flight, which is why it
+# carries a 120s termination grace. README.md states this does not restart a
+# workload, so pin both halves: the annotation must move, the checksum must not.
+stable_sums=$(grep -h 'checksum/config' "$tmp/bootstrap.yaml" | sort -u | wc -l | tr -d ' ')
+changed_sums=$(cat <(grep -h 'checksum/config' "$tmp/bootstrap.yaml") \
+  <(grep -h 'checksum/config' "$tmp/bootstrap-changed.yaml") | sort -u | wc -l | tr -d ' ')
+if [ "$stable_sums" = 1 ] && [ "$changed_sums" = 1 ]; then
+  pass "a bootstrap-only change leaves checksum/config untouched"
+else
+  bad "a bootstrap-only change rotated checksum/config and would restart every workload"
+fi
+
 # The application rejects an unrecognised key, so the chart composes this value
 # from known keys rather than passing values through. Pinning the exact string
 # keeps a silent shape change from reaching a release.
@@ -350,8 +382,8 @@ fi
 # unpinned image would matter most there.
 helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
   --set-string image.releaseDigest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb >"$tmp/release-digest.yaml"
-want_count "$tmp/release-digest.yaml" 'image: "chrisleekr/sre-platform:0\.0\.0@sha256:b{64}"' 6 "every chart release image is digest pinned, bootstrap included"
-want_not "$tmp/release-digest.yaml" 'image: "chrisleekr/sre-platform:0\.0\.0"$' "release render contains no unpinned image"
+want_count "$tmp/release-digest.yaml" "image: \"chrisleekr/sre-platform:${appver_re}@sha256:b{64}\"" 6 "every chart release image is digest pinned, bootstrap included"
+want_not "$tmp/release-digest.yaml" "image: \"chrisleekr/sre-platform:${appver_re}\"\$" "release render contains no unpinned image"
 if helm template sre "$chart" -f "$ci/ct-values.yaml" \
   --set-string image.releaseDigest=sha256:not-a-digest >/dev/null 2>"$tmp/release-digest-invalid.err"; then
   bad "invalid release digest must fail"
