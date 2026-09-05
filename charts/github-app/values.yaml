@@ -269,6 +269,8 @@ secrets:
   existingSecret: ""
   # Same escape hatch for the controller-only Secret (see controller-secret.yaml):
   # WORKFLOW_RUNNER_CAPABILITY_SECRET[_PREVIOUS]. Mounted on the orchestrator only.
+  # Must name a Secret other than the app Secret; the named Secret must carry
+  # WORKFLOW_RUNNER_CAPABILITY_SECRET (required on the controller since v1.17.0).
   existingControllerSecret: ""
 
   # --- 1. GitHub App credentials (server mode) ---
@@ -299,7 +301,7 @@ secrets:
   daemonAuthTokenPrevious: ""                   # Optional rotation-window predecessor of daemonAuthToken. When set, the orchestrator accepts daemons whose Bearer header matches EITHER the primary or this previous value (constant-time). Set to the old token during a rolling rotation, then unset once every daemon has restarted on the new primary. Daemon-side ignored — daemons always send the primary daemonAuthToken.
   # Both keys below render into a separate <fullname>-controller-secret mounted
   # on the orchestrator only, never on daemon pools (upstream K8s Secret split).
-  workflowRunnerCapabilitySecret: ""            # Controller-only HMAC root for deadline-bound, per-attempt isolated-workflow-runner capabilities. Min 32 chars. Setting it enables the isolated workflow runner feature (see config.workflowRunner). Must differ from daemonAuthToken and daemonAuthTokenPrevious. A shared daemon that sees it logs a leak warning; an isolated runner refuses to start.
+  workflowRunnerCapabilitySecret: ""            # Controller-only HMAC root for deadline-bound, per-attempt isolated-workflow-runner capabilities. Required on the controller since v1.17.0 (boot fails without it). Leave empty to auto-generate and persist across upgrades, like daemonAuthToken. Min 32 chars when set. Must differ from daemonAuthToken and daemonAuthTokenPrevious. A shared daemon that sees it logs a leak warning; an isolated runner refuses to start.
   workflowRunnerCapabilitySecretPrevious: ""    # Optional controller-only rotation predecessor of workflowRunnerCapabilitySecret. Accepted only for capabilities whose signed expiry has not elapsed. Must also differ from both daemon-auth slots.
 
 # ─────────────────────────── APPLICATION CONFIG ───────────────────────
@@ -370,12 +372,23 @@ config:
     orchestratorPublicUrl: ""                   # Optional ws:// or wss:// URL ephemeral daemons dial back. Unset OK when spawned Pods can reach the in-cluster orchestrator Service.
 
   # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
-  # Structured `workflow-run` jobs each run in one bare Pod per attempt, in a
-  # dedicated namespace, gated by secrets.workflowRunnerCapabilitySecret (unset
-  # → feature off). Requires rbac.create=true so the orchestrator can manage
-  # runner Pods. Every knob has an app default; leave empty to inherit it. The
-  # internal WORKFLOW_RUNNER flag is spawner-injected and never set here. See
-  # upstream src/k8s/workflow-runner-spawner.ts.
+  # Since v1.17.0 every structured `workflow-run` job runs in one bare Pod per
+  # attempt in a dedicated namespace; there is no daemon fallback. The chart
+  # only supplies the controller side (capability root, these knobs). The
+  # runner namespace itself is NOT provisioned here and needs, per upstream
+  # docs/operate/deployment.md "Kubernetes worker requirements":
+  #   - a Role+RoleBinding for the orchestrator ServiceAccount in that
+  #     namespace: pods create/get/delete, secrets create/get/update/delete.
+  #     rbac.create=true does NOT cover this; it grants Pod verbs in the
+  #     release namespace for ephemeral daemons only, and the runner namespace
+  #     must differ from the ephemeral-daemon namespace.
+  #   - the `workflow-runner-secrets` provider-only Secret,
+  #   - the runner admission boundary (ValidatingAdmissionPolicy + ConfigMap),
+  #   - labelled and tainted dedicated runner nodes.
+  # Until those exist, structured workflow attempts fail at dispatch with a
+  # notification; the rest of the app is unaffected. Every knob has an app
+  # default; leave empty to inherit it. The internal WORKFLOW_RUNNER flag is
+  # spawner-injected and never set here.
   workflowRunner:
     namespace: ""                               # Dedicated namespace for runner Pods, per-attempt Secrets, PSA, and the runner ValidatingAdmissionPolicy. Must differ from ephemeralDaemon.namespace. Empty → app default (github-app-runners). Sets WORKFLOW_RUNNER_NAMESPACE.
     nodeLabel: ""                               # Node label key the runner Pod's nodeSelector and NoSchedule toleration are both built from. Empty → app default (github-app.node-restriction.kubernetes.io/workflow-runner). Sets WORKFLOW_RUNNER_NODE_LABEL.

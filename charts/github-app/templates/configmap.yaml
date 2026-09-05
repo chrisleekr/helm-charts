@@ -93,6 +93,13 @@ data:
   {{- end }}
 
   # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
+  # config.ts validateWorkerNamespaces rejects controller boot when the runner
+  # and ephemeral-daemon namespaces match; both are known here, so fail early.
+  {{- $runnerNs := $c.workflowRunner.namespace | default "github-app-runners" }}
+  {{- $daemonNs := $c.ephemeralDaemon.namespace | default .Release.Namespace }}
+  {{- if eq $runnerNs $daemonNs }}
+  {{- fail (printf "config.workflowRunner.namespace resolves to %q, the same as the ephemeral-daemon namespace. Upstream refuses to boot when WORKFLOW_RUNNER_NAMESPACE equals EPHEMERAL_DAEMON_NAMESPACE. Set config.workflowRunner.namespace to a dedicated namespace, or install the release into a different namespace." $runnerNs) }}
+  {{- end }}
   # Operator half of the isolated workflow-runner feature (gated by
   # secrets.workflowRunnerCapabilitySecret). Each key is gated so empty → app
   # default. The internal WORKFLOW_RUNNER flag is spawner-injected, never set here.

@@ -69,13 +69,12 @@ if helm template "$chart" \
   exit 1
 fi
 
-# 10. Isolated workflow runners on: the capability root must land in the
-#     controller-only Secret (mounted on the orchestrator alone) and never in
-#     the shared app Secret, which every daemon pool envFrom-mounts.
-out=$(helm template "$chart" \
-  --set rbac.create=true \
-  --set secrets.workflowRunnerCapabilitySecret=0123456789abcdef0123456789abcdef \
-  --values "$chart/ci/daemon-pools-values.yaml")
+# 10. Controller-only Secret split, on a DEFAULT render (no capability value
+#     supplied): v1.17.0 refuses controller boot without the capability root,
+#     so the chart must generate it, and it must land in the controller-only
+#     Secret (mounted on the orchestrator alone), never in the shared app
+#     Secret that every daemon pool envFrom-mounts.
+out=$(helm template "$chart" --values "$chart/ci/daemon-pools-values.yaml")
 # Secret document that carries the key vs. the Secret documents that must not.
 if ! printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/controller-secret.yaml/,/^---/' \
   | grep -q '^  WORKFLOW_RUNNER_CAPABILITY_SECRET:'; then
@@ -111,14 +110,27 @@ if printf '%s\n' "$out" | grep -q '^  REPO_CONFIG_FILE:'; then
   exit 1
 fi
 
-# 12. Negative: the two external Secret names must differ, otherwise the
-#     controller-only keys ride the Secret every daemon pool mounts and the
-#     split in case 10 is undone by configuration.
+# 12. Negative: existingControllerSecret must not alias the app Secret by
+#     either route (an operator-supplied existingSecret, or the chart-managed
+#     name), otherwise the controller-only keys ride the Secret every daemon
+#     pool mounts and the split in case 10 is undone by configuration.
 if helm template "$chart" \
   --set secrets.existingSecret=shared \
   --set secrets.existingControllerSecret=shared > /dev/null 2>&1; then
   echo "::error file=charts/github-app/templates/_helpers.tpl::secrets.existingControllerSecret equal to secrets.existingSecret rendered instead of failing; the same-name guard is gone" >&2
   exit 1
 fi
+if helm template rel "$chart" \
+  --set secrets.existingControllerSecret=rel-github-app-secret > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/_helpers.tpl::secrets.existingControllerSecret pointing at the chart-managed app Secret rendered instead of failing; the guard compares the raw existingSecret value, not the resolved name" >&2
+  exit 1
+fi
+# 13. Negative: upstream refuses to boot when the runner namespace equals the
+#     ephemeral-daemon namespace. Installing into the runner default namespace
+#     is the easiest way to hit it, so the chart must fail at render time.
+if helm template "$chart" --namespace github-app-runners > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/configmap.yaml::release namespace equal to the default runner namespace rendered instead of failing; the namespace-collision guard is gone" >&2
+  exit 1
+fi
 
-echo "github-app render matrix: 12/12 cases rendered"
+echo "github-app render matrix: 13/13 cases rendered"
