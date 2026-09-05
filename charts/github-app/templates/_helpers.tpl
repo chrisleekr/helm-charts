@@ -74,6 +74,19 @@ otherwise the chart-managed name <fullname>-secret.
 {{- end }}
 
 {{/*
+Name of the controller-only Secret (workflow-runner capability roots), or empty
+when the feature is off. Empty means the orchestrator mounts nothing extra, so
+enabling the feature changes the pod template and triggers a rollout.
+*/}}
+{{- define "github-app.controllerSecretName" -}}
+{{- if .Values.secrets.existingControllerSecret }}
+{{- .Values.secrets.existingControllerSecret }}
+{{- else if or .Values.secrets.workflowRunnerCapabilitySecret .Values.secrets.workflowRunnerCapabilitySecretPrevious }}
+{{- printf "%s-controller-secret" (include "github-app.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
 Workspace PVC name. Uses existingClaim when set, otherwise <fullname>-workspace.
 */}}
 {{- define "github-app.workspacePVCName" -}}

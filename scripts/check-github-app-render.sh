@@ -69,4 +69,46 @@ if helm template "$chart" \
   exit 1
 fi
 
-echo "github-app render matrix: 9/9 cases rendered"
+# 10. Isolated workflow runners on: the capability root must land in the
+#     controller-only Secret (mounted on the orchestrator alone) and never in
+#     the shared app Secret, which every daemon pool envFrom-mounts.
+out=$(helm template "$chart" \
+  --set rbac.create=true \
+  --set secrets.workflowRunnerCapabilitySecret=0123456789abcdef0123456789abcdef \
+  --values "$chart/ci/daemon-pools-values.yaml")
+# Secret document that carries the key vs. the Secret documents that must not.
+if ! printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/controller-secret.yaml/,/^---/' \
+  | grep -q '^  WORKFLOW_RUNNER_CAPABILITY_SECRET:'; then
+  echo "::error file=charts/github-app/templates/controller-secret.yaml::WORKFLOW_RUNNER_CAPABILITY_SECRET missing from the controller-only Secret" >&2
+  exit 1
+fi
+if printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/secret.yaml/,/^---/' \
+  | grep -q '^  WORKFLOW_RUNNER_CAPABILITY_SECRET'; then
+  echo "::error file=charts/github-app/templates/secret.yaml::WORKFLOW_RUNNER_CAPABILITY_SECRET leaked into the shared app Secret that daemon pools mount" >&2
+  exit 1
+fi
+if printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/daemon-deployment.yaml/,/^---/' \
+  | grep -q 'controller-secret'; then
+  echo "::error file=charts/github-app/templates/daemon-deployment.yaml::daemon Deployment references the controller-only Secret" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/deployment.yaml/,/^---/' \
+  | grep -q 'controller-secret'; then
+  echo "::error file=charts/github-app/templates/deployment.yaml::orchestrator Deployment does not mount the controller-only Secret" >&2
+  exit 1
+fi
+# 11. Legacy-only repo-config override: a pre-1.17 `config.schedulerConfigFile`
+#     override must still reach the app. The app prefers REPO_CONFIG_FILE, so
+#     the chart must not render that key with a default alongside it.
+out=$(helm template "$chart" --set config.schedulerConfigFile=legacy.yaml \
+  | awk '/^# Source: github-app\/templates\/configmap.yaml/,/^---/')
+if ! printf '%s\n' "$out" | grep -q '^  SCHEDULER_CONFIG_FILE: "legacy.yaml"$'; then
+  echo "::error file=charts/github-app/templates/configmap.yaml::config.schedulerConfigFile=legacy.yaml did not render SCHEDULER_CONFIG_FILE" >&2
+  exit 1
+fi
+if printf '%s\n' "$out" | grep -q '^  REPO_CONFIG_FILE:'; then
+  echo "::error file=charts/github-app/templates/configmap.yaml::REPO_CONFIG_FILE rendered alongside a legacy-only schedulerConfigFile override; the app would ignore the override" >&2
+  exit 1
+fi
+
+echo "github-app render matrix: 11/11 cases rendered"

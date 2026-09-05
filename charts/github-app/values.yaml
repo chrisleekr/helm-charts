@@ -264,7 +264,12 @@ secrets:
   # Chart escape hatch. When set, the chart-managed Secret is NOT rendered
   # and the Deployment consumes the named Secret directly. All-or-nothing:
   # the named Secret must contain every key the app expects (see secret.yaml).
+  # It is mounted on the orchestrator AND every daemon pool, so keep
+  # controller-only keys out of it and use existingControllerSecret instead.
   existingSecret: ""
+  # Same escape hatch for the controller-only Secret (see controller-secret.yaml):
+  # WORKFLOW_RUNNER_CAPABILITY_SECRET[_PREVIOUS]. Mounted on the orchestrator only.
+  existingControllerSecret: ""
 
   # --- 1. GitHub App credentials (server mode) ---
   appId: ""                                     # Required in server mode (orchestratorUrl unset).
@@ -292,7 +297,9 @@ secrets:
   # --- 8. Daemon / Orchestrator WebSocket (auto-generated, persisted across upgrades) ---
   daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
   daemonAuthTokenPrevious: ""                   # Optional rotation-window predecessor of daemonAuthToken. When set, the orchestrator accepts daemons whose Bearer header matches EITHER the primary or this previous value (constant-time). Set to the old token during a rolling rotation, then unset once every daemon has restarted on the new primary. Daemon-side ignored — daemons always send the primary daemonAuthToken.
-  workflowRunnerCapabilitySecret: ""            # Controller-only HMAC root for deadline-bound, per-attempt isolated-workflow-runner capabilities. Min 32 chars. Setting it enables the isolated workflow runner feature (see config.workflowRunner). Must differ from daemonAuthToken and daemonAuthTokenPrevious. Rejected at boot if set on a daemon/worker.
+  # Both keys below render into a separate <fullname>-controller-secret mounted
+  # on the orchestrator only, never on daemon pools (upstream K8s Secret split).
+  workflowRunnerCapabilitySecret: ""            # Controller-only HMAC root for deadline-bound, per-attempt isolated-workflow-runner capabilities. Min 32 chars. Setting it enables the isolated workflow runner feature (see config.workflowRunner). Must differ from daemonAuthToken and daemonAuthTokenPrevious. A shared daemon that sees it logs a leak warning; an isolated runner refuses to start.
   workflowRunnerCapabilitySecretPrevious: ""    # Optional controller-only rotation predecessor of workflowRunnerCapabilitySecret. Accepted only for capabilities whose signed expiry has not elapsed. Must also differ from both daemon-auth slots.
 
 # ─────────────────────────── APPLICATION CONFIG ───────────────────────
@@ -444,8 +451,8 @@ config:
   schedulerEnabled: true                        # Chart default ON (upstream defaults OFF). Master kill-switch for the scheduler. When false the scheduler never starts.
   schedulerScanIntervalMs: 300000               # Tick cadence (5m). Zod range [60000, 3600000]. Below 60s the per-tick GitHub API cost is not worth it; above 1h cron precision degrades.
   schedulerAllowAutoMerge: false                # Privilege gate for the `merge_readiness` MCP tool. When true (and an action sets `auto_merge: true`), the tool can merge PRs. Does NOT sandbox the agent from merging by other means: `allowed_tools` is owner-trusted config. Default OFF — opt-in per deployment.
-  repoConfigFile: ".github-app.yaml"            # Filename read from each installed repo's default-branch root, carrying the repo-wide per-repo policy (workflow toggles, agent knobs, scheduled actions, review-learnings). Trimmed at load — a stray space 404s on every repo and silently disables the surface. Sets REPO_CONFIG_FILE.
-  schedulerConfigFile: ".github-app.yaml"       # DEPRECATED former name for repoConfigFile; still honoured as a fallback (logs a one-shot boot warning) so upgrades don't silently change which file is read. Sets SCHEDULER_CONFIG_FILE.
+  repoConfigFile: ""                            # Empty → app default (.github-app.yaml). Filename read from each installed repo's default-branch root, carrying the repo-wide per-repo policy (workflow toggles, agent knobs, scheduled actions, review-learnings). Trimmed at load — a stray space 404s on every repo and silently disables the surface. Sets REPO_CONFIG_FILE.
+  schedulerConfigFile: ""                       # DEPRECATED former name for repoConfigFile; rename to repoConfigFile. Rendered only when set. The app honours it while repoConfigFile is empty (one-shot boot warning), so a pre-1.17 override keeps reading the same file after upgrade. Sets SCHEDULER_CONFIG_FILE.
   reviewLearningsEnabled: true                  # Master kill-switch for review-learnings. When false the orchestrator never loads learnings into job:payload, the prompt block stays empty, and save/delete MCP calls are dropped. Additive feature — safe to leave ON.
   reviewLearningsRagEnabled: true               # Chart default ON (upstream defaults OFF). Stage 2 pgvector RAG path: orchestrator embeds each directive at save time + each PR's changed-file paths at handleAccept, then runs pgvector top-K against `review_learnings.embedding`. REQUIRES Postgres migration 015 (pgvector extension); if missing or migration not applied, falls back to legacy file-glob filter.
 

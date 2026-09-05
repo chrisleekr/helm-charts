@@ -51,6 +51,7 @@ contract=$(jq -r '.[].env' "$contract_json" | sort -u)
 chart_keys=$(grep -rhoE '(^[[:space:]]*[A-Z][A-Z0-9_]{2,}:)|(name: [A-Z][A-Z0-9_]{2,})' \
   "$chart/templates/configmap.yaml" \
   "$chart/templates/secret.yaml" \
+  "$chart/templates/controller-secret.yaml" \
   "$chart/templates/daemon-deployment.yaml" \
   | sed -E 's/name: //; s/[[:space:]:]//g' | sort -u)
 ignore=""

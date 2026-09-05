@@ -158,7 +158,14 @@ data:
   SCHEDULER_ENABLED: {{ $c.schedulerEnabled | quote }}
   SCHEDULER_SCAN_INTERVAL_MS: {{ int $c.schedulerScanIntervalMs | quote }}
   SCHEDULER_ALLOW_AUTO_MERGE: {{ $c.schedulerAllowAutoMerge | quote }}
+  # Both gated: the app reads REPO_CONFIG_FILE first and falls back to the
+  # deprecated SCHEDULER_CONFIG_FILE, so rendering REPO_CONFIG_FILE with a chart
+  # default would silently override a pre-1.17 schedulerConfigFile override.
+  {{- if $c.repoConfigFile }}
   REPO_CONFIG_FILE: {{ $c.repoConfigFile | quote }}
+  {{- end }}
+  {{- if $c.schedulerConfigFile }}
   SCHEDULER_CONFIG_FILE: {{ $c.schedulerConfigFile | quote }}
+  {{- end }}
   REVIEW_LEARNINGS_ENABLED: {{ $c.reviewLearningsEnabled | quote }}
   REVIEW_LEARNINGS_RAG_ENABLED: {{ $c.reviewLearningsRagEnabled | quote }}
