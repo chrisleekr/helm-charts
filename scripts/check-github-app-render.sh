@@ -471,6 +471,36 @@ refuses workflow-runner-ingress.yaml "covered by no ingress.tls entry" \
   --set config.ephemeralDaemon.orchestratorPublicUrl=wss://a.b.example.com/ws \
   --set 'ingress.hosts[0].host=a.b.example.com' \
   --set 'ingress.tls[0].hosts[0]=*.example.com'
+# A port is a 16-bit field. The URL patterns bound it to five digits, so 65536
+# rendered here and then failed new URL(publicUrl) in the runner at startup.
+refuses _helpers.tpl "is above 65535" \
+  --set-string config.ephemeralDaemon.orchestratorPublicUrl=wss://github.example.com:65536/ws
+# Route- and certificate-scoped annotations must NOT be inherited onto the ws
+# Ingress, while the allowlist/WAF ones this inheritance exists for must be.
+ann=$(helm template contract "$chart" "${runner_on[@]}" \
+  --set 'ingress.annotations.kubernetes\.io/tls-acme=true' \
+  --set 'ingress.annotations.nginx\.ingress\.kubernetes\.io/rewrite-target=/' \
+  --set 'ingress.annotations.nginx\.ingress\.kubernetes\.io/whitelist-source-range=10.0.0.0/8' |
+  yq ea 'select(.kind == "Ingress" and (.metadata.name | test("-ws$"))) | .metadata.annotations | keys | .[]')
+for key in kubernetes.io/tls-acme nginx.ingress.kubernetes.io/rewrite-target; do
+  if printf '%s\n' "$ann" | grep -qx "$key"; then
+    echo "::error file=charts/github-app/templates/workflow-runner-ingress.yaml::ws Ingress inherited route/cert-scoped annotation $key" >&2
+    exit 1
+  fi
+done
+if ! printf '%s\n' "$ann" | grep -qx nginx.ingress.kubernetes.io/whitelist-source-range; then
+  echo "::error file=charts/github-app/templates/workflow-runner-ingress.yaml::ws Ingress dropped the allowlist annotation inheritance exists for" >&2
+  exit 1
+fi
+# A chart-managed daemon identity must not depend on the controller SA also being
+# chart-managed: workflow-runner-rbac.yaml pushes operators onto exactly that path.
+sa=$(helm template contract "$chart" "${runner_on[@]}" --values "$chart/ci/daemon-pools-values.yaml" \
+  --set daemon.serviceAccount.create=true --set serviceAccount.create=false --set serviceAccount.name=byo-controller |
+  yq ea 'select(.kind == "ServiceAccount") | .metadata.name')
+if [ "$sa" != "github-app-daemon" ]; then
+  echo "::error file=charts/github-app/templates/serviceaccount.yaml::daemon ServiceAccount not rendered with a BYO controller SA (got: ${sa:-none})" >&2
+  exit 1
+fi
 
 # 14. Admission off leaves the namespace and egress boundary, drops policy + params.
 helm template contract "$chart" "${runner_on[@]}" --set workflowRunner.admission.enabled=false --set workflowRunner.admission.acknowledgeUnprotected=true > "$tmp/no-admission.yaml"

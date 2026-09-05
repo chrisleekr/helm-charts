@@ -43,7 +43,7 @@ annotations:
     - kind: fixed
       description: "Resolve the runner namespace through one `github-app.runnerNamespace` helper. The collision guard in `workflow-runner-namespace.yaml` hardcoded the app default when the rail was off, so it ignored `config.workflowRunner.namespace`: it refused valid installs with a message naming a namespace the controller never sees, and missed real collisions reached through the passthrough."
     - kind: added
-      description: "Provision the isolated workflow-runner rail behind the new top-level `workflowRunner.enabled`: dedicated namespace, controller RBAC, egress NetworkPolicy, boundary ConfigMap, a fail-closed ValidatingAdmissionPolicy and an optional TLS ingress for the WS listener. Requires Kubernetes 1.30+ and cluster-admin, since the policy and its binding are cluster-scoped. Off by default."
+      description: "Provision the isolated workflow-runner rail behind the new top-level `workflowRunner.enabled`: dedicated namespace, controller RBAC, egress NetworkPolicy, boundary ConfigMap, a fail-closed ValidatingAdmissionPolicy and an optional TLS ingress for the WS listener. Requires Kubernetes 1.31+, the chart's own `kubeVersion` floor, and cluster-admin, since the policy and its binding are cluster-scoped. Off by default."
     - kind: added
       description: "Optional `workflowRunner.imageWarmer` DaemonSet that holds the daemon image warm on each runner node. An attempt claims its startup lease before its Pod exists, so a cold pull is charged to a lease nothing can renew; the warmer removes the multi-minute first-attempt stall after a daemon image bump. Runs in the release namespace, not the runner namespace, whose admission policy admits only exact attempt Pods."
     - kind: fixed

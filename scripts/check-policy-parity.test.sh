@@ -12,7 +12,11 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/.." && pwd)
-chart="charts/github-app"
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+chart="$repo_root/charts/github-app"
+# Same reason as check-policy-parity.sh: the chart's namespace guards read
+# .Release.Namespace, so an unpinned local namespace fails this for the wrong reason.
+export HELM_NAMESPACE=github-app
 
 cd "$root"
 tmp=$(mktemp -d)

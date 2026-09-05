@@ -100,7 +100,15 @@ workflowRunner:
   ingress:
     enabled: false                              # TLS front door for the WS listener. Not needed when runners dial the orchestrator Service directly over a cluster-local ws:// origin.
     path: /ws                                   # Prefix match, covers /ws and /ws/workflow-runner/<run>/<attempt>.
-    annotations: {}                             # Set proxy read/send timeouts here if config.heartbeatIntervalMs exceeds the proxy's idle timeout.
+    # Set proxy read/send timeouts here if config.heartbeatIntervalMs exceeds the
+    # proxy's idle timeout. ingress.annotations are inherited so an IP allowlist or
+    # WAF on the release Ingress also guards this one, EXCEPT the route- and
+    # certificate-scoped keys (kubernetes.io/tls-acme, cert-manager.io/*,
+    # nginx rewrite-target and app-root): both Ingresses name the same tls
+    # secretName, so a second certificate claim fights over one Certificate, and a
+    # rewrite would collapse /ws/workflow-runner/<run>/<attempt> to /. Set any of
+    # those here to apply them to this Ingress deliberately. Keys set here win.
+    annotations: {}
 
 podAnnotations: {}
 podLabels: {}

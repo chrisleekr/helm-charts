@@ -24,7 +24,8 @@ ISOLATED WORKFLOW RUNNERS (workflowRunner.enabled):
   ConfigMap and a fail-closed ValidatingAdmissionPolicy.
 
   Requirements:
-    - Kubernetes 1.30+ (ValidatingAdmissionPolicy is GA there).
+    - Kubernetes 1.31+. ValidatingAdmissionPolicy is GA from 1.30, but the
+      chart's kubeVersion floor is 1.31.0, so Helm refuses anything below it.
     - Cluster-admin to install: the policy and its binding are cluster-scoped, so
       two releases in one cluster collide on those names. Run one.
     - A digest-pinned runner image. The controller rejects a tag alone on every

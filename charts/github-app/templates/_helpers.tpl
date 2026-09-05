@@ -388,6 +388,14 @@ installation token crosses that socket, so every other host must still be wss://
 {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl=%q is neither wss:// plus a plain DNS host and optional numeric port, nor ws://<service>.<namespace>.svc[.cluster.local][:port]. Userinfo, an IPv6 literal and percent-encoding all serialise differently in Go and WHATWG, so the rendered orchestratorOrigin would not match the URL the runner reports and admission would deny every Pod; the controller rejects embedded credentials outright. A live GitHub installation token crosses this socket, so plaintext is confined to names that cannot resolve outside the cluster." $url) -}}
 {{- end -}}
 {{- $host := lower (urlParse $url).host -}}
+{{- /* The patterns above bound the port to five digits, not to its range. A
+port over 65535 renders here but fails `new URL(publicUrl)` in the runner, which
+is a 16-bit field, so the attempt dies at startup instead of at render. */ -}}
+{{- $port := "" -}}
+{{- if contains ":" $host -}}{{- $port = $host | splitList ":" | last -}}{{- end -}}
+{{- if and $port (gt (atoi $port) 65535) -}}
+{{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl port %q is above 65535. A port is a 16-bit field, so the runner's new URL(publicUrl) rejects it and every attempt fails at startup." $port) -}}
+{{- end -}}
 {{- $defaultPort := ternary ":443" ":80" $secure -}}
 {{- if hasSuffix $defaultPort $host -}}
 {{- $host = trimSuffix $defaultPort $host -}}

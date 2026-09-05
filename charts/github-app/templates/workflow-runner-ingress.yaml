@@ -19,7 +19,20 @@ metadata:
   # allowlist or WAF among them, would not reach this path, so start from those
   # and let the runner-specific ones win. The socket is idle between heartbeats,
   # so it needs a proxy read timeout above config.heartbeatIntervalMs.
-  {{- with merge (deepCopy (.Values.workflowRunner.ingress.annotations | default dict)) (.Values.ingress.annotations | default dict) }}
+  # Route- and certificate-scoped keys are dropped from what is inherited. They
+  # are correct on the release Ingress and wrong here: this Ingress re-declares
+  # the same tls[].secretName, so a second tls-acme/cert-manager claim makes two
+  # Ingresses fight over one Certificate, and a rewrite-target that is harmless on
+  # the release's / route rewrites /ws/workflow-runner/<run>/<attempt> to /, which
+  # hangs the runner until its deadline. Set them under
+  # workflowRunner.ingress.annotations to put them back deliberately.
+  {{- $inherited := dict }}
+  {{- range $k, $v := (.Values.ingress.annotations | default dict) }}
+  {{- if not (or (eq $k "kubernetes.io/tls-acme") (hasPrefix "cert-manager.io/" $k) (eq $k "nginx.ingress.kubernetes.io/rewrite-target") (eq $k "nginx.ingress.kubernetes.io/app-root")) }}
+  {{- $_ := set $inherited $k $v }}
+  {{- end }}
+  {{- end }}
+  {{- with merge (deepCopy (.Values.workflowRunner.ingress.annotations | default dict)) $inherited }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}

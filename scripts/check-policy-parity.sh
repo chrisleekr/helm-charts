@@ -24,8 +24,14 @@
 # failure, so the gate does not block chart PRs during the bootstrap window.
 set -euo pipefail
 
-chart="charts/github-app"
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+chart="$repo_root/charts/github-app"
 values="$chart/ci/workflow-runner-values.yaml"
+# The chart guards compare workflowRunner.namespace against .Release.Namespace, so
+# a developer whose current kube context sits in github-app-runners would see this
+# gate fail for a reason that has nothing to do with policy drift. CI has no
+# kubeconfig and resolves to default, so this only matters locally.
+export HELM_NAMESPACE=github-app
 appver=$(yq '.appVersion' "$chart/Chart.yaml" | tr -d '"')
 
 upstream=$(mktemp)
@@ -36,7 +42,11 @@ if [ -n "${POLICY_SOURCE_FILE:-}" ]; then
   cp "$POLICY_SOURCE_FILE" "$upstream"
 else
   url="https://raw.githubusercontent.com/chrisleekr/github-app/v${appver}/examples/workflow-runner-admission.yaml"
-  code=$(curl -sSL -o "$upstream" -w '%{http_code}' "$url" || true)
+  # Bounded and retried: an unbounded fetch would hang this gate until the
+  # runner-level timeout, and the comparison below is what validates the body.
+  code=$(curl -sSL --connect-timeout 10 --max-time 60 \
+    --retry 3 --retry-delay 2 --retry-all-errors \
+    -o "$upstream" -w '%{http_code}' "$url" || true)
   if [ "$code" = "404" ]; then
     echo "SKIP: no examples/workflow-runner-admission.yaml at v${appver} (pre-example release); policy parity not enforced"
     exit 0
