@@ -69,4 +69,68 @@ if helm template "$chart" \
   exit 1
 fi
 
-echo "github-app render matrix: 9/9 cases rendered"
+# 10. Controller-only Secret split, on a DEFAULT render (no capability value
+#     supplied): v1.17.0 refuses controller boot without the capability root,
+#     so the chart must generate it, and it must land in the controller-only
+#     Secret (mounted on the orchestrator alone), never in the shared app
+#     Secret that every daemon pool envFrom-mounts.
+out=$(helm template "$chart" --values "$chart/ci/daemon-pools-values.yaml")
+# Secret document that carries the key vs. the Secret documents that must not.
+if ! printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/controller-secret.yaml/,/^---/' \
+  | grep -q '^  WORKFLOW_RUNNER_CAPABILITY_SECRET:'; then
+  echo "::error file=charts/github-app/templates/controller-secret.yaml::WORKFLOW_RUNNER_CAPABILITY_SECRET missing from the controller-only Secret" >&2
+  exit 1
+fi
+if printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/secret.yaml/,/^---/' \
+  | grep -q '^  WORKFLOW_RUNNER_CAPABILITY_SECRET'; then
+  echo "::error file=charts/github-app/templates/secret.yaml::WORKFLOW_RUNNER_CAPABILITY_SECRET leaked into the shared app Secret that daemon pools mount" >&2
+  exit 1
+fi
+if printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/daemon-deployment.yaml/,/^---/' \
+  | grep -q 'controller-secret'; then
+  echo "::error file=charts/github-app/templates/daemon-deployment.yaml::daemon Deployment references the controller-only Secret" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$out" | awk '/^# Source: github-app\/templates\/deployment.yaml/,/^---/' \
+  | grep -q 'controller-secret'; then
+  echo "::error file=charts/github-app/templates/deployment.yaml::orchestrator Deployment does not mount the controller-only Secret" >&2
+  exit 1
+fi
+# 11. Legacy-only repo-config override: a pre-1.17 `config.schedulerConfigFile`
+#     override must still reach the app. The app prefers REPO_CONFIG_FILE, so
+#     the chart must not render that key with a default alongside it.
+out=$(helm template "$chart" --set config.schedulerConfigFile=legacy.yaml \
+  | awk '/^# Source: github-app\/templates\/configmap.yaml/,/^---/')
+if ! printf '%s\n' "$out" | grep -q '^  SCHEDULER_CONFIG_FILE: "legacy.yaml"$'; then
+  echo "::error file=charts/github-app/templates/configmap.yaml::config.schedulerConfigFile=legacy.yaml did not render SCHEDULER_CONFIG_FILE" >&2
+  exit 1
+fi
+if printf '%s\n' "$out" | grep -q '^  REPO_CONFIG_FILE:'; then
+  echo "::error file=charts/github-app/templates/configmap.yaml::REPO_CONFIG_FILE rendered alongside a legacy-only schedulerConfigFile override; the app would ignore the override" >&2
+  exit 1
+fi
+
+# 12. Negative: existingControllerSecret must not alias the app Secret by
+#     either route (an operator-supplied existingSecret, or the chart-managed
+#     name), otherwise the controller-only keys ride the Secret every daemon
+#     pool mounts and the split in case 10 is undone by configuration.
+if helm template "$chart" \
+  --set secrets.existingSecret=shared \
+  --set secrets.existingControllerSecret=shared > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/_helpers.tpl::secrets.existingControllerSecret equal to secrets.existingSecret rendered instead of failing; the same-name guard is gone" >&2
+  exit 1
+fi
+if helm template rel "$chart" \
+  --set secrets.existingControllerSecret=rel-github-app-secret > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/_helpers.tpl::secrets.existingControllerSecret pointing at the chart-managed app Secret rendered instead of failing; the guard compares the raw existingSecret value, not the resolved name" >&2
+  exit 1
+fi
+# 13. Negative: upstream refuses to boot when the runner namespace equals the
+#     ephemeral-daemon namespace. Installing into the runner default namespace
+#     is the easiest way to hit it, so the chart must fail at render time.
+if helm template "$chart" --namespace github-app-runners > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/configmap.yaml::release namespace equal to the default runner namespace rendered instead of failing; the namespace-collision guard is gone" >&2
+  exit 1
+fi
+
+echo "github-app render matrix: 13/13 cases rendered"

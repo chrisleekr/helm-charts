@@ -74,6 +74,23 @@ otherwise the chart-managed name <fullname>-secret.
 {{- end }}
 
 {{/*
+Name of the controller-only Secret (workflow-runner capability roots). Uses
+secrets.existingControllerSecret when set, otherwise <fullname>-controller-secret.
+Compared against the resolved app Secret name, not the raw existingSecret value,
+so pointing it at the chart-managed app Secret is rejected too.
+*/}}
+{{- define "github-app.controllerSecretName" -}}
+{{- if .Values.secrets.existingControllerSecret }}
+{{- if eq .Values.secrets.existingControllerSecret (include "github-app.secretName" .) }}
+{{- fail (printf "secrets.existingControllerSecret=%q is the app Secret that every daemon pool mounts; it must name a separate Secret so the controller-only capability root never reaches workers" .Values.secrets.existingControllerSecret) }}
+{{- end }}
+{{- .Values.secrets.existingControllerSecret }}
+{{- else }}
+{{- printf "%s-controller-secret" (include "github-app.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
 Workspace PVC name. Uses existingClaim when set, otherwise <fullname>-workspace.
 */}}
 {{- define "github-app.workspacePVCName" -}}
