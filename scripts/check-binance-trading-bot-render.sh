@@ -38,6 +38,10 @@
 #   R15 paused       split + roles.worker.replicaCount=0 (0 is honoured, not defaulted)
 #   R16 byo secret   ct-values + existingSecret (chart Secret suppressed)
 #   R17 no migrate   ct-values + migrations.enabled=false
+#   R18 NEGATIVE     split topology on an RWO backup claim -> must FAIL
+#   R19 NEGATIVE     databaseWaitSeconds > activeDeadlineSeconds -> must FAIL
+#   R20 NEGATIVE     prometheusRule on, serviceMonitor off -> must FAIL
+#   R21 long release  50-character release name, exhausts the 63-char budget
 #   R22 override     observability-values + fullnameOverride=ci-bot
 #
 # Resource-name contract asserted below (release "btb", fullname
@@ -120,15 +124,42 @@ want_count() { # <file> <ere> <n> <label>
   fi
 }
 
-want_named_refs() { # <doc> <reference-key> <name> <count> <label>
-  local matched total
-  read -r matched total <<<"$(awk -v ref="$2:" -v want="$3" '
+# Counts occurrences of a reference key and how many carry a matching name:.
+#
+# The name: is found by scanning forward inside the reference block rather than
+# by taking the literal next line. helm renders template comments into the
+# stream (templates/ingress.yaml puts three between path: and pathType:), and a
+# sibling field can sort ahead of name: in a secretKeyRef, both of which would
+# otherwise report a naming regression on a correct chart. Indentation bounds the
+# scan, so a block with no name: at all cannot borrow the next block's.
+#
+# The comparison is on the parsed field, not a substring of the line: every
+# derived component name here has the fullname as a strict prefix, so
+# index($0, "name: ci-bot") is also true of "name: ci-bot-otel-collector".
+ref_names() { # <doc> <reference-key> <name>  -> prints "<matched> <total>"
+  awk -v ref="$2:" -v want="$3" '
+    function indent(line) { match(line, /[^ ]/); return RSTART - 1 }
     $NF == ref {
       total++
-      if (getline > 0 && $1 == "name:" && $2 == want) { matched++ }
+      ri = indent($0)
+      while ((getline) > 0) {
+        if ($0 ~ /^[[:space:]]*$/) { continue }
+        if (indent($0) <= ri) { break }
+        if ($1 == "name:") {
+          v = $2
+          gsub(/^["'"'"']|["'"'"']$/, "", v)
+          if (v == want) { matched++ }
+          break
+        }
+      }
     }
     END { print matched + 0, total + 0 }
-  ' "$1")"
+  ' "$1"
+}
+
+want_named_refs() { # <doc> <reference-key> <name> <count> <label>
+  local matched total
+  read -r matched total <<<"$(ref_names "$1" "$2" "$3")"
   if [ "$total" != "$4" ]; then
     note "$5: expected $4 $2 references, found $total"
   elif [ "$matched" != "$4" ]; then
@@ -388,16 +419,21 @@ fi
 # would pass on a Deployment carrying `- configMapRef:` with the wrong name plus
 # an unrelated `name: <fullname>` line elsewhere in the pod spec, which is the
 # same coupling gap this script closes for the ServiceMonitor port names.
+#
+# Shares ref_names with want_named_refs so both agree on strictness. They did not
+# before: this matched the name as a substring of the line, so the app
+# Deployment's envFrom passed while naming <fullname>-otel-collector.
 want_envfrom() { # <render> <deployment-name> <label> [ref-name]
-  local ref_name
+  local ref_name matched total
   ref_name=${4:-$fullname}
   if get_doc "$1" Deployment "$2" "$3"; then
     for ref in configMapRef secretRef; do
-      awk -v ref="- $ref:" -v want="name: $ref_name" '
-        index($0, ref) { seen = 1; next }
-        seen { if (index($0, want)) { ok = 1 } ; seen = 0 }
-        END { exit (ok ? 0 : 1) }
-      ' "$DOC" || note "$3 envFrom: no $ref naming $ref_name"
+      read -r matched total <<<"$(ref_names "$DOC" "$ref" "$ref_name")"
+      if [ "$total" -eq 0 ]; then
+        note "$3 envFrom: no $ref at all"
+      elif [ "$matched" -eq 0 ]; then
+        note "$3 envFrom: $total $ref reference(s), none naming $ref_name"
+      fi
     done
   fi
 }
