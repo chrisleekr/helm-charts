@@ -3,8 +3,9 @@
 # Deliberately has no `rules`: ct finds the changed charts itself by diffing
 # against target-branch, so a path filter here would only duplicate that and
 # risk disagreeing with it. This is the only gate covering ip-lookup, n8n,
-# woodle-map and mcp-server-playground, and the only place
-# check-version-increment in ct.yaml runs.
+# woodle-map and mcp-server-playground. Chart linting still runs here, but
+# stable version increments belong to the source repository rather than this
+# mirror, so --check-version-increment=false is passed below.
 #
 # Image pinned to the ct version chart-testing-action@v2.8.0 installs on the
 # GitHub side, so both hosts lint with the same binary.
@@ -24,5 +25,7 @@ ct-lint:
     # name in sync with target-branch in ct.yaml.
     - git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
   script:
-    # check-version-increment in ct.yaml enforces the Chart.yaml version bump.
-    - ct lint --config ct.yaml
+    # Keep the source repository's ct.yaml version gate intact. Only this
+    # mirror job skips it.
+    - ct lint --config ct.yaml --check-version-increment=false
+    - bash scripts/check-chart-schemas.sh
