@@ -3,9 +3,9 @@
 # Deliberately has no `rules`: ct finds the changed charts itself by diffing
 # against target-branch, so a path filter here would only duplicate that and
 # risk disagreeing with it. This is the only gate covering ip-lookup, n8n,
-# woodle-map and mcp-server-playground, and the only place
-# chart linting still runs here, but stable version increments belong to the
-# source repository rather than this mirror.
+# woodle-map and mcp-server-playground. Chart linting still runs here, but
+# stable version increments belong to the source repository rather than this
+# mirror, so --check-version-increment=false is passed below.
 #
 # Image pinned to the ct version chart-testing-action@v2.8.0 installs on the
 # GitHub side, so both hosts lint with the same binary.
