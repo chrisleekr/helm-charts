@@ -48,7 +48,14 @@ ISOLATED WORKFLOW RUNNERS (workflowRunner.enabled):
       populated, so workflowRunner.providerCredentials must name the keys or the
       render fails.
     - Daemon pools on their own ServiceAccount. The runner Role grants pods and
-      secrets write access in that namespace, and daemon Pods run agent-authored code.
+      secrets write access in that namespace, and daemon Pods run agent-authored
+      code, so the chart refuses to bind that Role while a pool still resolves to
+      the controller identity. Set daemon.serviceAccount.name (or a per-pool
+      name), and either set daemon.serviceAccount.create=true to have the chart
+      render it or create it yourself first. A named ServiceAccount that does not
+      exist is not a render error: the Deployment applies, every Pod is rejected
+      with `serviceaccounts "<name>" not found`, and replicas sit at 0 with only a
+      ReplicaSet event to say why.
 
   workflowRunner.ingress.enabled publishes workflowRunner.ingress.path as a Prefix, which
   covers both /ws/workflow-runner/<run>/<attempt> and the shared-daemon /ws
@@ -76,11 +83,16 @@ ISOLATED WORKFLOW RUNNERS (workflowRunner.enabled):
   and the node's metadata endpoint. Supply an equivalent policy out of band.
 {{- end }}
 
-  Only the namespace carries Prune=false and helm.sh/resource-policy: keep.
-  Turning the feature off leaves it standing but DELETES the egress NetworkPolicy,
-  boundary ConfigMap, RBAC and admission policy on the next upgrade, so any runner
-  Pod still executing loses its network boundary first. Drain in-flight attempts,
-  then disable, then remove the namespace by hand.
+  The namespace and the egress NetworkPolicy both carry Prune=false and
+  helm.sh/resource-policy: keep, so a running attempt never loses its network
+  boundary. Turning the feature off prunes the boundary ConfigMap, RBAC and
+  admission policy on the next upgrade: nothing validates a NEW runner Pod after
+  that, while Pods already admitted keep their egress rules. Drain in-flight
+  attempts, then disable.
+
+  Both retained objects also survive `helm uninstall`, so they outlive the release
+  that created them. Remove the NetworkPolicy and the namespace by hand once the
+  namespace is empty.
 
 UPGRADING to chart 0.17.0 (BREAKING: chart renamed github-app-playground to github-app):
   The chart and its Docker image were renamed to match the upstream repo rename

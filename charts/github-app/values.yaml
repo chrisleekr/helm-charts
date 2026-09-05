@@ -574,6 +574,13 @@ daemon:
 
   serviceAccount:
     name: ""                           # empty → inherits orchestrator SA
+    # Render the ServiceAccount named above (and any per-pool override). Off by
+    # default: this field predates the chart creating one, so an operator already
+    # provisioning it out of band would hit an ownership conflict on upgrade.
+    # Turning workflowRunner.enabled on with daemon pools requires a name here,
+    # and a name nothing creates leaves every daemon Pod rejected at admission
+    # with replicas stuck at 0. Set this true, or create it yourself.
+    create: false
 
   # Daemon-runtime defaults sourced from github-app/.env.example.
   # Each pool can override any key under its own `config:` block.

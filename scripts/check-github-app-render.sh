@@ -453,6 +453,24 @@ refuses workflow-runner-validate.yaml "admission.enabled=false" --set workflowRu
 refuses workflow-runner-validate.yaml "networkPolicy.enabled=false" --set workflowRunner.networkPolicy.enabled=false
 refuses workflow-runner-ingress.yaml "is not in ingress.hosts" \
   --set config.ephemeralDaemon.orchestratorPublicUrl=wss://elsewhere.example.com/ws
+# An empty node label or value renders runnerNodeLabel: "" into the boundary, which
+# the policy's own second validation asserts against, so every runner Pod is denied.
+# With the warmer on it instead surfaced as a raw YAML parse error from a bare
+# `: "true"` mapping, which names neither the value nor the fix.
+refuses workflow-runner-validate.yaml "workflowRunner.nodeLabel is empty" --set workflowRunner.nodeLabel=
+refuses workflow-runner-validate.yaml "workflowRunner.nodeValue is empty" --set workflowRunner.nodeValue=
+# A wildcard certificate is the common single-cert layout and DOES cover one label
+# under its parent, so refusing it would reject a working front door. The guard has
+# to keep refusing a name too deep for the wildcard.
+if ! helm template contract "$chart" "${runner_on[@]}" \
+  --set 'ingress.tls[0].hosts[0]=*.example.com' >/dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/workflow-runner-ingress.yaml::wildcard TLS host refused; *.example.com covers github.example.com" >&2
+  exit 1
+fi
+refuses workflow-runner-ingress.yaml "covered by no ingress.tls entry" \
+  --set config.ephemeralDaemon.orchestratorPublicUrl=wss://a.b.example.com/ws \
+  --set 'ingress.hosts[0].host=a.b.example.com' \
+  --set 'ingress.tls[0].hosts[0]=*.example.com'
 
 # 14. Admission off leaves the namespace and egress boundary, drops policy + params.
 helm template contract "$chart" "${runner_on[@]}" --set workflowRunner.admission.enabled=false --set workflowRunner.admission.acknowledgeUnprotected=true > "$tmp/no-admission.yaml"

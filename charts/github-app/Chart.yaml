@@ -49,6 +49,8 @@ annotations:
     - kind: fixed
       description: "Set `NODE_EXTRA_CA_CERTS` on the orchestrator to the projected service-account CA. Bun does not apply the CA that the Kubernetes client reads via loadFromCluster, so every API call failed with UNABLE_TO_VERIFY_LEAF_SIGNATURE and neither ephemeral daemons nor workflow runners could be spawned."
     - kind: changed
+      description: "Default `config.llmOutputScannerModel` flipped from `sonnet-4-6` to `haiku-4-5` and `config.llmOutputScannerTimeoutMs` from 3000 to 30000, matching upstream's own v1.17.1 defaults. The timeout is sized for the isolated-runner RPC path, which treats a slow scan as a rejection rather than failing open, so the old 3s cap discarded completed runs. Operators who want the stronger scanner on obfuscated or encoded secrets must now set `config.llmOutputScannerModel` explicitly."
+    - kind: changed
       description: "`config.workflowRunner.*` stays the published app-env passthrough for operators who provisioned the rail themselves. When `workflowRunner.enabled` is true the chart pins the admission boundary from `workflowRunner.*` instead, and a conflicting `config.workflowRunner.*` value is now rejected at render time rather than silently ignored, because a controller/policy disagreement denies every runner Pod at admission."
     - kind: security
       description: "Sync to github-app v1.17.1: **deps:** clear the orchestrator image's HIGH CVE findings (#295); **ci:** retry bun audit, close the signal fail-open, and skip on outage (#296). No env-surface change: the v1.17.1 contract is identical to v1.17.0. Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.1"

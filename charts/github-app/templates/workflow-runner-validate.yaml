@@ -21,6 +21,11 @@ enabled. */ -}}
 {{- if and (not .Values.workflowRunner.networkPolicy.enabled) (not .Values.workflowRunner.networkPolicy.acknowledgeUnprotected) }}
 {{- fail "workflowRunner.enabled=true with networkPolicy.enabled=false: runner Pods execute agent-authored code with no egress boundary, so they can reach cluster services and the node. Supply an equivalent policy out of band, then set workflowRunner.networkPolicy.acknowledgeUnprotected=true to record that decision in values." }}
 {{- end }}
+{{- range $k, $v := dict "nodeLabel" .Values.workflowRunner.nodeLabel "nodeValue" .Values.workflowRunner.nodeValue }}
+{{- if not $v }}
+{{- fail (printf "workflowRunner.%s is empty. config.ts rejects it at boot (.min(1)), and the admission policy asserts the rendered value is non-empty, so every runner Pod would be denied. With imageWarmer.enabled it also renders an invalid nodeSelector mapping and the chart fails to parse. Leave it at its default or give it a value." $k) }}
+{{- end }}
+{{- end }}
 {{- if and (eq $c.provider "bedrock") (not $c.awsRegion) }}
 {{- fail "config.provider=bedrock requires config.awsRegion. The controller throws \"Bedrock workflow runners require AWS_REGION\" on every attempt, and with admission enabled the boundary would also pin an empty awsRegion, which the policy rejects for bedrock." }}
 {{- end }}

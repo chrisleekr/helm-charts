@@ -53,10 +53,18 @@ spec:
     {{- if not (has $wsHost $ingressHosts) }}
     {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl host %q is not in ingress.hosts, so this Ingress would leave the host runners dial unrouted. Add it to ingress.hosts, or leave workflowRunner.ingress.enabled=false and terminate TLS elsewhere." $wsHost) }}
     {{- end }}
+    {{- /* Lowercased like $ingressHosts above, so both guards normalise the same
+    input identically. A wildcard entry counts as cover: *.parent matches exactly
+    one label under parent, which is how an Ingress selects the certificate, so
+    the common single-cert layout (*.example.com serving github.example.com) must
+    not be refused. It deliberately does not match a deeper name or the parent
+    itself, matching RFC 6125. */ -}}
     {{- $tlsHosts := list }}
-    {{- range .Values.ingress.tls }}{{- $tlsHosts = concat $tlsHosts .hosts }}{{- end }}
-    {{- if not (has $wsHost $tlsHosts) }}
-    {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl host %q is covered by no ingress.tls entry, so the front door would present a default certificate and every runner would fail the TLS handshake." $wsHost) }}
+    {{- range .Values.ingress.tls }}{{- range .hosts }}{{- $tlsHosts = append $tlsHosts (lower .) }}{{- end }}{{- end }}
+    {{- $wsParent := $wsHost | splitList "." | rest | join "." }}
+    {{- $tlsCovered := or (has $wsHost $tlsHosts) (and $wsParent (has (printf "*.%s" $wsParent) $tlsHosts)) }}
+    {{- if not $tlsCovered }}
+    {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl host %q is covered by no ingress.tls entry, so the front door would present a default certificate and every runner would fail the TLS handshake. An entry matching the host exactly, or the wildcard %q, satisfies this." $wsHost (printf "*.%s" $wsParent)) }}
     {{- end }}
     {{- range .Values.ingress.hosts }}
     {{- if eq (lower .host) $wsHost }}
