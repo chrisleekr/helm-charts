@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.20.0
+version: 0.21.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -36,6 +36,20 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: security
+      description: "Reject a controller-Secret/app-Secret name collision from either direction. The guard previously only fired when `secrets.existingControllerSecret` named the app Secret; pointing `secrets.existingSecret` at the chart-managed `<fullname>-controller-secret` name reached the same collision unchecked, and because the app Secret is envFrom-mounted on every daemon pool, that rendered the workflow-runner capability signing root onto workers running agent-authored code. Both names are now resolved and compared unconditionally in `github-app.controllerSecretName`."
+    - kind: security
+      description: "Refuse three further misconfigurations that previously rendered clean: `config.ephemeralDaemon.secretName` naming the chart's own app or controller Secret, which envFrom-mounts it onto agent-authored Pods; a capability root equal to a daemon-auth root, which the controller rejects at boot and which would let a daemon-auth holder mint runner capabilities; and `secrets.existingControllerSecret` set alongside an inline `workflowRunnerCapabilitySecret[Previous]`, which was silently discarded and surfaced only as rejected capabilities mid-rotation."
+    - kind: fixed
+      description: "Resolve the runner namespace through one `github-app.runnerNamespace` helper. The collision guard in `workflow-runner-namespace.yaml` hardcoded the app default when the rail was off, so it ignored `config.workflowRunner.namespace`: it refused valid installs with a message naming a namespace the controller never sees, and missed real collisions reached through the passthrough."
+    - kind: added
+      description: "Provision the isolated workflow-runner rail behind the new top-level `workflowRunner.enabled`: dedicated namespace, controller RBAC, egress NetworkPolicy, boundary ConfigMap, a fail-closed ValidatingAdmissionPolicy and an optional TLS ingress for the WS listener. Requires Kubernetes 1.30+ and cluster-admin, since the policy and its binding are cluster-scoped. Off by default."
+    - kind: added
+      description: "Optional `workflowRunner.imageWarmer` DaemonSet that holds the daemon image warm on each runner node. An attempt claims its startup lease before its Pod exists, so a cold pull is charged to a lease nothing can renew; the warmer removes the multi-minute first-attempt stall after a daemon image bump. Runs in the release namespace, not the runner namespace, whose admission policy admits only exact attempt Pods."
+    - kind: fixed
+      description: "Set `NODE_EXTRA_CA_CERTS` on the orchestrator to the projected service-account CA. Bun does not apply the CA that the Kubernetes client reads via loadFromCluster, so every API call failed with UNABLE_TO_VERIFY_LEAF_SIGNATURE and neither ephemeral daemons nor workflow runners could be spawned."
+    - kind: changed
+      description: "`config.workflowRunner.*` stays the published app-env passthrough for operators who provisioned the rail themselves. When `workflowRunner.enabled` is true the chart pins the admission boundary from `workflowRunner.*` instead, and a conflicting `config.workflowRunner.*` value is now rejected at render time rather than silently ignored, because a controller/policy disagreement denies every runner Pod at admission."
     - kind: security
       description: "Sync to github-app v1.17.1: **deps:** clear the orchestrator image's HIGH CVE findings (#295); **ci:** retry bun audit, close the signal fail-open, and skip on outage (#296). No env-surface change: the v1.17.1 contract is identical to v1.17.0. Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.1"
     - kind: changed

@@ -1,0 +1,60 @@
+# Isolated workflow runners enabled. Used by ct lint, the render matrix and
+# scripts/check-policy-parity.sh.
+#
+# extraEgressCidrs is deliberately left empty so the rendered policy keeps the
+# three-rule shape upstream validates in its own kind harness. No CI gate compares
+# them, so a fourth rule is a deliberate local widening, not a caught regression.
+image:
+  daemon:
+    # The boundary pins the image the policy admits, and both the policy and the
+    # controller reject anything without a trailing digest. Image Updater writes
+    # this tag@digest form.
+    tag: "latest-daemon@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+secrets:
+  githubAppId: "123456"
+  githubAppPrivateKey: "test-key"
+  githubWebhookSecret: "test-webhook-secret"
+  anthropicApiKey: "test-anthropic-key"
+daemon:
+  serviceAccount:
+    # Daemon Pods run agent-authored code, so they must not share the controller
+    # identity that holds pods/create in the runner namespace.
+    name: github-app-daemon
+config:
+  allowedOwners: "example-owner"
+  # Required whenever the boundary is active: it pins the model the runner reports.
+  model: "claude-opus-5"
+  ephemeralDaemon:
+    orchestratorPublicUrl: "wss://github.example.com/ws"
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: github.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: github-app-tls
+      hosts:
+        - github.example.com
+workflowRunner:
+  enabled: true
+  # Exercises the populated path: the boundary pins this name and the controller
+  # env must carry the identical value.
+  imagePullSecret: "runner-registry-credentials"
+  networkPolicy:
+    # Exercises the Pod-selected egress rule. extraEgressCidrs stays empty above, so
+    # the render covers the selector path without also widening by address.
+    extraEgressSelectors:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+  ingress:
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "4300"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "4300"

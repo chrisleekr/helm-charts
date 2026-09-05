@@ -1,0 +1,31 @@
+{{- /*
+Guards for requirements the CONTROLLER enforces, so they are gated on
+workflowRunner.enabled alone. The boundary ConfigMap's own guards live with it in
+workflow-runner-boundary.yaml and are gated on admission.enabled as well; these
+three are not, because src/k8s/workflow-runner-spawner.ts asserts them on every
+spawn whether or not an admission policy is installed. Renders nothing.
+*/ -}}
+{{- if .Values.workflowRunner.enabled }}
+{{- $c := .Values.config }}
+{{- if not $c.ephemeralDaemon.orchestratorPublicUrl }}
+{{- fail "workflowRunner.enabled is true but config.ephemeralDaemon.orchestratorPublicUrl is empty. Every structured-workflow attempt then fails permanently with \"ORCHESTRATOR_PUBLIC_URL is required for workflows\", and with admission enabled the boundary would also pin an empty orchestratorOrigin and deny every Pod. Set it to the wss:// URL runners dial back." }}
+{{- end }}
+{{- /* Runs the helper's structural check, which owns the accepted schemes and
+also rejects userinfo and an empty host. The controller refuses those too, so it
+cannot wait for the boundary template, which only renders when admission is
+enabled. */ -}}
+{{- $_ := include "github-app.workflowRunner.orchestratorOrigin" . }}
+{{- if and (not .Values.workflowRunner.admission.enabled) (not .Values.workflowRunner.admission.acknowledgeUnprotected) }}
+{{- fail "workflowRunner.enabled=true with admission.enabled=false: nothing validates a runner Pod at create time, and the controller's post-create check runs after the kubelet may already have started it. The egress NetworkPolicy also only selects Pods carrying the runner labels, which the admission policy is what guarantees. Install the policy out of band, then set workflowRunner.admission.acknowledgeUnprotected=true to record that decision in values, where review and GitOps can see it." }}
+{{- end }}
+{{- if and (not .Values.workflowRunner.networkPolicy.enabled) (not .Values.workflowRunner.networkPolicy.acknowledgeUnprotected) }}
+{{- fail "workflowRunner.enabled=true with networkPolicy.enabled=false: runner Pods execute agent-authored code with no egress boundary, so they can reach cluster services and the node. Supply an equivalent policy out of band, then set workflowRunner.networkPolicy.acknowledgeUnprotected=true to record that decision in values." }}
+{{- end }}
+{{- if and (eq $c.provider "bedrock") (not $c.awsRegion) }}
+{{- fail "config.provider=bedrock requires config.awsRegion. The controller throws \"Bedrock workflow runners require AWS_REGION\" on every attempt, and with admission enabled the boundary would also pin an empty awsRegion, which the policy rejects for bedrock." }}
+{{- end }}
+{{- $runnerImage := default (include "github-app.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image }}
+{{- if not (regexMatch "@sha256:[0-9a-f]{64}$" $runnerImage) }}
+{{- fail (printf "the workflow-runner image %q is not digest-pinned. The controller refuses a DAEMON_IMAGE without a trailing sha256 digest on every spawn, so every attempt would fail before a Pod existed. Append the digest to image.daemon.tag (the tag@sha256:... form ArgoCD Image Updater writes), or set config.ephemeralDaemon.image to the full digest reference." $runnerImage) }}
+{{- end }}
+{{- end }}

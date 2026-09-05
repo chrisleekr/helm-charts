@@ -1,0 +1,93 @@
+{{- if .Values.workflowRunner.imageWarmer.enabled }}
+{{- if not .Values.workflowRunner.enabled }}
+{{- fail "workflowRunner.imageWarmer.enabled requires workflowRunner.enabled. Without the runner rail there are no runner nodes to warm and the DaemonSet would schedule nowhere." }}
+{{- end }}
+{{/*
+Holds the daemon image in each runner node's container store so an attempt Pod
+starts from a warm cache.
+
+The controller claims an attempt's startup lease before its Pod exists, so
+scheduling and image pull run against a lease nothing can renew until the runner
+registers. A cold pull slower than that lease expires an attempt that has not
+executed a line. github-app extends the lease while kubelet reports progress, so
+this DaemonSet is a latency control rather than a correctness one: it removes the
+multi-minute first-attempt stall after every daemon image bump.
+
+Deliberately NOT in workflowRunner.namespace. The runner admission policy is
+fail-closed over every Pod there and admits only a Pod named for an exact attempt
+identity, so a warmer Pod would be denied. Image caches are per node, not per
+namespace, so warming from the release namespace onto the same nodes is
+equivalent.
+
+Placement mirrors the attempt Pod, so it warms exactly the nodes runners land on,
+and the image comes from the same helper that feeds DAEMON_IMAGE, so the warmed
+digest cannot drift from the one the controller asks kubelet for.
+*/}}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "github-app.fullname" . }}-runner-image-warmer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner-image-warmer
+spec:
+  selector:
+    matchLabels:
+      {{- include "github-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: runner-image-warmer
+  template:
+    metadata:
+      labels:
+        {{- include "github-app.labels" . | nindent 8 }}
+        app.kubernetes.io/component: runner-image-warmer
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      # The release namespace's pull secrets, NOT workflowRunner.imagePullSecret.
+      # That one names a Secret in the runner namespace and is pinned by the
+      # admission boundary; a Pod here cannot read it. Where the two namespaces
+      # hold different Secrets, referencing it silently ImagePullBackOffs and the
+      # image is never warmed.
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Matches the attempt Pod's placement. Both the selector and the toleration
+      # are required: the runner node carries a NoSchedule taint of the same key.
+      nodeSelector:
+        {{ .Values.workflowRunner.nodeLabel }}: {{ .Values.workflowRunner.nodeValue | quote }}
+      tolerations:
+        - key: {{ .Values.workflowRunner.nodeLabel | quote }}
+          operator: Equal
+          value: {{ .Values.workflowRunner.nodeValue | quote }}
+          effect: NoSchedule
+      {{- with .Values.workflowRunner.imageWarmer.priorityClassName }}
+      # Warming must never evict or delay a real attempt on a full node.
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: 1
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: warm
+          # Resolved exactly as configmap.yaml resolves DAEMON_IMAGE, override
+          # included. Any other expression here warms a digest the controller
+          # never asks for, which is worse than not warming at all: the stall
+          # comes back with nothing reporting that it did.
+          image: {{ default (include "github-app.image.daemon" (dict "root" $)) .Values.config.ephemeralDaemon.image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The pull is the entire point; the process only has to stay resident so
+          # kubelet keeps the image referenced and does not garbage-collect it.
+          command: ["sleep", "infinity"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.workflowRunner.imageWarmer.resources | nindent 12 }}
+{{- end }}

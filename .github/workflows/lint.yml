@@ -89,6 +89,8 @@ jobs:
             'scripts/check-github-app-render.sh' \
             'scripts/check-env-parity.sh' \
             'scripts/check-env-parity.test.sh' \
+            'scripts/check-policy-parity.sh' \
+            'scripts/check-policy-parity.test.sh' \
             '.github/workflows/lint-github-app.yml' \
             '.github/workflows/lint.yml'
           # renovate.json and lint-renovate.yml are here because C20 inside this

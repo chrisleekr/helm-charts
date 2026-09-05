@@ -76,18 +76,36 @@ otherwise the chart-managed name <fullname>-secret.
 {{/*
 Name of the controller-only Secret (workflow-runner capability roots). Uses
 secrets.existingControllerSecret when set, otherwise <fullname>-controller-secret.
-Compared against the resolved app Secret name, not the raw existingSecret value,
-so pointing it at the chart-managed app Secret is rejected too.
+
+Both names are RESOLVED before comparison, and the comparison is unconditional, so
+either route to a collision is rejected: pointing existingControllerSecret at the
+app Secret, and pointing existingSecret at the chart-managed controller Secret
+name. The second route matters just as much, because the app Secret is
+envFrom-mounted on every daemon pool: a collision there hands the capability
+signing root to workers that run agent-authored code.
 */}}
 {{- define "github-app.controllerSecretName" -}}
-{{- if .Values.secrets.existingControllerSecret }}
-{{- if eq .Values.secrets.existingControllerSecret (include "github-app.secretName" .) }}
-{{- fail (printf "secrets.existingControllerSecret=%q is the app Secret that every daemon pool mounts; it must name a separate Secret so the controller-only capability root never reaches workers" .Values.secrets.existingControllerSecret) }}
+{{- $app := include "github-app.secretName" . -}}
+{{- $controller := default (printf "%s-controller-secret" (include "github-app.fullname" .)) .Values.secrets.existingControllerSecret -}}
+{{- if eq $controller $app -}}
+{{- fail (printf "the controller-only Secret and the app Secret both resolve to %q. The app Secret is envFrom-mounted on every daemon pool, so the workflow-runner capability root would reach workers that run agent-authored code. Either point secrets.existingControllerSecret at a different Secret, or stop pointing secrets.existingSecret at the chart-managed <fullname>-controller-secret name." $controller) -}}
+{{- end -}}
+{{- $controller -}}
 {{- end }}
-{{- .Values.secrets.existingControllerSecret }}
-{{- else }}
-{{- printf "%s-controller-secret" (include "github-app.fullname" .) }}
-{{- end }}
+
+{{/*
+Runner namespace the controller will actually see, so the collision guard and the
+rendered WORKFLOW_RUNNER_NAMESPACE cannot disagree. With the rail on, the chart
+pins workflowRunner.namespace and the admission boundary is built from it. With it
+off, the operator provisioned the rail themselves and may forward a name via
+config.workflowRunner.namespace; empty inherits the app's own default.
+*/}}
+{{- define "github-app.runnerNamespace" -}}
+{{- if .Values.workflowRunner.enabled -}}
+{{- .Values.workflowRunner.namespace | default "github-app-runners" -}}
+{{- else -}}
+{{- (default dict .Values.config.workflowRunner).namespace | default "github-app-runners" -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -344,4 +362,69 @@ Args (dict): root (.), repoOverride (string, optional), tagOverride (string, opt
 {{- $repo := $args.repoOverride | default $args.root.Values.image.repository -}}
 {{- $tag := $args.tagOverride | default $args.root.Values.image.daemon.tag | default (printf "%s-daemon" $args.root.Chart.AppVersion) -}}
 {{- printf "%s:%s" $repo $tag -}}
+{{- end }}
+
+{{/*
+Origin of config.ephemeralDaemon.orchestratorPublicUrl: scheme and authority, no
+path, no trailing slash.
+
+The runner's ORCHESTRATOR_URL is built by the app as `new URL(publicUrl)` with the
+pathname replaced, and the policy asserts that value equals
+`orchestratorOrigin + '/ws/workflow-runner/' + ...`. WHATWG URL serialisation drops
+the port when it is the scheme default and ASCII-lowercases the host, while Go's
+urlParse preserves both, so an explicit :443 and any uppercase must be normalised
+here too or every runner Pod is denied.
+
+Plaintext is accepted only for a cluster-local Service name, which cannot resolve
+outside the cluster, so an in-cluster runner can dial the orchestrator Service
+directly instead of hairpinning out through an ingress VIP. A live GitHub
+installation token crosses that socket, so every other host must still be wss://.
+*/}}
+{{- define "github-app.workflowRunner.orchestratorOrigin" -}}
+{{- $url := .Values.config.ephemeralDaemon.orchestratorPublicUrl -}}
+{{- $secure := regexMatch "^wss://(([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\\.)*[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?)(:[1-9][0-9]{0,4})?(/.*)?$" $url -}}
+{{- $clusterLocal := regexMatch "^ws://[a-z0-9-]+\\.[a-z0-9-]+\\.svc(\\.cluster\\.local)?(:[1-9][0-9]{0,4})?(/.*)?$" $url -}}
+{{- if not (or $secure $clusterLocal) -}}
+{{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl=%q is neither wss:// plus a plain DNS host and optional numeric port, nor ws://<service>.<namespace>.svc[.cluster.local][:port]. Userinfo, an IPv6 literal and percent-encoding all serialise differently in Go and WHATWG, so the rendered orchestratorOrigin would not match the URL the runner reports and admission would deny every Pod; the controller rejects embedded credentials outright. A live GitHub installation token crosses this socket, so plaintext is confined to names that cannot resolve outside the cluster." $url) -}}
+{{- end -}}
+{{- $host := lower (urlParse $url).host -}}
+{{- $defaultPort := ternary ":443" ":80" $secure -}}
+{{- if hasSuffix $defaultPort $host -}}
+{{- $host = trimSuffix $defaultPort $host -}}
+{{- end -}}
+{{- printf "%s://%s" (ternary "wss" "ws" $secure) $host -}}
+{{- end }}
+
+{{/*
+Comma-joined Secret key names the runner may mount, in the order the app's
+credential chain emits them (src/shared/workflow-runner-provider.ts).
+
+workflowRunner.providerCredentials wins when set. It has to, because the common
+deployment uses secrets.existingSecret, where the chart cannot see which
+credential is actually populated. Deriving the wrong chain renders a boundary that
+looks valid and denies every Pod, so an underivable case fails the render instead.
+*/}}
+{{- define "github-app.workflowRunner.providerCredentials" -}}
+{{- $wr := .Values.workflowRunner -}}
+{{- if $wr.providerCredentials -}}
+{{- join "," $wr.providerCredentials -}}
+{{- else if eq .Values.config.provider "anthropic" -}}
+{{- if (trim (.Values.secrets.anthropicApiKey | default "")) -}}
+ANTHROPIC_API_KEY
+{{- else if (trim (.Values.secrets.claudeCodeOauthToken | default "")) -}}
+CLAUDE_CODE_OAUTH_TOKEN
+{{- else -}}
+{{- fail "workflowRunner.providerCredentials is empty and the Anthropic credential cannot be derived: neither secrets.anthropicApiKey nor secrets.claudeCodeOauthToken is set inline (secrets.existingSecret hides them from the chart). Set workflowRunner.providerCredentials to the Secret key the runner should mount, e.g. [\"CLAUDE_CODE_OAUTH_TOKEN\"], or set the credential inline." -}}
+{{- end -}}
+{{- else if (trim (.Values.secrets.awsBearerTokenBedrock | default "")) -}}
+AWS_BEARER_TOKEN_BEDROCK
+{{- else if and (trim (.Values.secrets.awsAccessKeyId | default "")) (trim (.Values.secrets.awsSecretAccessKey | default "")) -}}
+{{- if (trim (.Values.secrets.awsSessionToken | default "")) -}}
+AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN
+{{- else -}}
+AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY
+{{- end -}}
+{{- else -}}
+{{- fail "workflowRunner.providerCredentials is empty and the Bedrock credential chain cannot be derived: set secrets.awsBearerTokenBedrock, or secrets.awsAccessKeyId plus secrets.awsSecretAccessKey, or list the Secret keys explicitly in workflowRunner.providerCredentials. AWS_PROFILE is not usable: runner Pods mount no profile files." -}}
+{{- end -}}
 {{- end }}

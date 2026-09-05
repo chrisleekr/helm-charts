@@ -1,3 +1,87 @@
+WORKFLOW-RUNNER CAPABILITY SECRET:
+  Newer controller images require WORKFLOW_RUNNER_CAPABILITY_SECRET. The chart
+  keeps this root in a controller-only Secret that shared daemon Pods do not mount.
+
+  When secrets.existingSecret is set, also set secrets.existingControllerSecret
+  to a different Secret containing WORKFLOW_RUNNER_CAPABILITY_SECRET and optional
+  WORKFLOW_RUNNER_CAPABILITY_SECRET_PREVIOUS. Alternatively, provide
+  secrets.workflowRunnerCapabilitySecret from a secure values source.
+  Restart the controller after rotating either capability root.
+  Set workflowRunner.enabled=true to have the chart provision the dedicated
+  runner namespace and its security controls, or provision them separately.
+
+ISOLATED WORKFLOW RUNNERS (workflowRunner.enabled):
+  Provisioning the rail yourself instead is the default path: leave
+  workflowRunner.enabled=false and point the controller at it with
+  config.workflowRunner.namespace / .nodeLabel / .nodeValue / .imagePullSecret.
+  Each key left empty inherits the app's own default. With workflowRunner.enabled=true
+  the chart owns those four values and pins the admission boundary from them, so a
+  differing config.workflowRunner.* is refused at render time rather than silently
+  ignored: the controller and the policy disagreeing denies every runner Pod.
+
+  Structured workflows run in one-attempt Pods the controller creates at runtime.
+  Enabling this provisions their namespace, RBAC, egress NetworkPolicy, boundary
+  ConfigMap and a fail-closed ValidatingAdmissionPolicy.
+
+  Requirements:
+    - Kubernetes 1.30+ (ValidatingAdmissionPolicy is GA there).
+    - Cluster-admin to install: the policy and its binding are cluster-scoped, so
+      two releases in one cluster collide on those names. Run one.
+    - A digest-pinned runner image. The controller rejects a tag alone on every
+      spawn, whether or not workflowRunner.admission.enabled is set. Set
+      image.daemon.tag to the tag@sha256:... form Image Updater
+      writes, or config.ephemeralDaemon.image to a full digest reference.
+    - config.model set explicitly. The boundary pins the model the runner reports.
+    - config.ephemeralDaemon.orchestratorPublicUrl set to a wss:// URL, or a
+      ws:// <service>.<namespace>.svc[.cluster.local]:<port> name when the runner
+      dials the orchestrator directly in-cluster. A live GitHub installation token
+      crosses that socket, so plaintext is confined to names that cannot resolve
+      outside the cluster and the boundary denies any other ws:// origin.
+    - Nodes labelled and tainted with workflowRunner.nodeLabel/nodeValue. Runner
+      Pods carry that nodeSelector and only the matching NoSchedule toleration, so
+      they stay Pending until such a pool exists. Drain other workloads off it.
+    - A Secret named workflow-runner-secrets in workflowRunner.namespace, holding
+      the provider credential keys the boundary pins (see providerCredential1..3
+      in the rendered workflow-runner-boundary ConfigMap). The chart does not
+      create it: runner Pods must not share the controller's Secret. With
+      secrets.existingSecret set, the chart cannot see which credential is
+      populated, so workflowRunner.providerCredentials must name the keys or the
+      render fails.
+    - Daemon pools on their own ServiceAccount. The runner Role grants pods and
+      secrets write access in that namespace, and daemon Pods run agent-authored code.
+
+  workflowRunner.ingress.enabled publishes workflowRunner.ingress.path as a Prefix, which
+  covers both /ws/workflow-runner/<run>/<attempt> and the shared-daemon /ws
+  endpoint. Both are bearer-authenticated, but the daemon endpoint becomes
+  reachable wherever that host is.
+
+  The boundary is fail-closed. If its parameters and the Pod the controller builds
+  disagree on the image digest, orchestrator origin, provider chain or node
+  placement, every runner Pod is denied. The chart derives all four from the same
+  values the controller renders from, so do not hand-edit the rendered ConfigMap.
+
+{{- if and .Values.workflowRunner.enabled (not .Values.workflowRunner.admission.enabled) }}
+
+  WARNING: workflowRunner.admission.enabled=false. The runner rail is on but
+  nothing validates a runner Pod at create time, and the controller's post-create
+  check runs after the kubelet may already have started it. The egress
+  NetworkPolicy also only selects Pods carrying the runner labels, which the
+  admission policy is what guarantees, so an unlabelled Pod in that namespace has
+  unrestricted egress. Install the policy out of band, or re-enable this.
+{{- end }}
+{{- if and .Values.workflowRunner.enabled (not .Values.workflowRunner.networkPolicy.enabled) }}
+
+  WARNING: workflowRunner.networkPolicy.enabled=false. Runner Pods execute
+  agent-authored code with no egress boundary, so they can reach cluster services
+  and the node's metadata endpoint. Supply an equivalent policy out of band.
+{{- end }}
+
+  Only the namespace carries Prune=false and helm.sh/resource-policy: keep.
+  Turning the feature off leaves it standing but DELETES the egress NetworkPolicy,
+  boundary ConfigMap, RBAC and admission policy on the next upgrade, so any runner
+  Pod still executing loses its network boundary first. Drain in-flight attempts,
+  then disable, then remove the namespace by hand.
+
 UPGRADING to chart 0.17.0 (BREAKING: chart renamed github-app-playground to github-app):
   The chart and its Docker image were renamed to match the upstream repo rename
   (image chrisleekr/github-app-playground → chrisleekr/github-app, appVersion → 1.14.0).

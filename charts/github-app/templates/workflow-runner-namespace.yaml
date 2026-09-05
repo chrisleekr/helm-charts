@@ -1,0 +1,32 @@
+{{- if and .Values.workflowRunner.enabled (not .Values.workflowRunner.namespace) }}
+{{- fail "workflowRunner.namespace is empty. The chart would emit WORKFLOW_RUNNER_NAMESPACE=\"\", which the controller rejects at startup, and every runner resource would land in the release namespace beside the controller Secret, including a Role granting secrets create/get/update/delete. Leave it at the github-app-runners default or give it a name." }}
+{{- end }}
+{{- $effectiveRunnerNs := include "github-app.runnerNamespace" . }}
+{{- if eq $effectiveRunnerNs (default .Release.Namespace .Values.config.ephemeralDaemon.namespace) }}
+{{- fail (printf "the controller would see WORKFLOW_RUNNER_NAMESPACE=%q, which equals the ephemeral-daemon namespace. The controller rejects equal values at startup (WORKFLOW_RUNNER_NAMESPACE must differ from EPHEMERAL_DAEMON_NAMESPACE), so this renders a guaranteed CrashLoop even with workflowRunner.enabled=false, since the app applies its own default there, and the runner admission policy would validate every ephemeral daemon Pod as well. Either give workflowRunner.namespace its own value, or move config.ephemeralDaemon.namespace off it." $effectiveRunnerNs) }}
+{{- end }}
+{{- if and .Values.workflowRunner.enabled (eq .Values.workflowRunner.namespace .Release.Namespace) }}
+{{- fail "workflowRunner.namespace equals the release namespace. The fail-closed runner admission policy binds by namespace name, so it would validate and deny every controller and daemon Pod here, and restricted Pod Security would be stamped on the namespace. Give the runner namespace its own name." }}
+{{- end }}
+{{- if .Values.workflowRunner.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.workflowRunner.namespace }}
+  annotations:
+    # Runner Pods are created by the controller, not by Helm or ArgoCD. Pruning
+    # this namespace on a values flip would delete in-flight attempts and the
+    # provider Secret along with it, so both tools are told to leave it alone.
+    argocd.argoproj.io/sync-options: Prune=false
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+    # Restricted PSA is the production layer the admission policy sits behind.
+    # Pinned to v1.30, the floor at which ValidatingAdmissionPolicy is GA.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.30
+{{- end }}

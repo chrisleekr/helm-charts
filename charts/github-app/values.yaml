@@ -38,6 +38,70 @@ serviceAccount:
 rbac:
   create: false                                 # Set true to allow the orchestrator to spawn ephemeral daemon Pods.
 
+# Isolated workflow runners: one-attempt Pods the controller creates at runtime
+# via the Kubernetes API for the structured workflows. Helm never sees those Pod
+# specs, so the boundary constraining them has to be cluster resources plus
+# controller env. Off by default: it provisions a second namespace and a
+# cluster-scoped admission policy, both of which need cluster-admin to install.
+#
+# This is the CHART-PROVISIONED half. With enabled=true these values also pin the
+# admission boundary, so a config.workflowRunner.* passthrough that disagrees is
+# refused at render time. See the config.workflowRunner block for the other half,
+# used when the rail is provisioned out of band.
+workflowRunner:
+  enabled: false                                # Set true to provision the runner namespace and its admission boundary.
+  namespace: github-app-runners                 # Must differ from config.ephemeralDaemon.namespace; the app rejects equal values at startup.
+  # Drives the runner nodeSelector AND its matching NoSchedule toleration. The
+  # default prefix is reserved by the NodeRestriction admission plugin, so a
+  # kubelet cannot label its own node to attract runner Pods. Overriding this to
+  # an unprefixed key gives up that protection.
+  nodeLabel: "github-app.node-restriction.kubernetes.io/workflow-runner"
+  nodeValue: "true"
+  rbac:
+    create: true                                # Role + RoleBinding in .namespace for the controller ServiceAccount.
+  providerCredentials: []                       # Secret key names the runner may mount. Empty derives them from the inline secrets.*; required with secrets.existingSecret, which hides them.
+  imagePullSecret: ""                           # Name of an existing dockerconfigjson Secret in .namespace that runner Pods may reference. The boundary pins it, so empty forbids every pull secret.
+  # Holds the daemon image warm in each runner node's container store. An attempt's
+  # startup lease is claimed before its Pod exists, so a cold pull is charged to a
+  # lease nothing can renew until the runner registers. The app extends that lease
+  # while kubelet reports progress, so this is a latency control: it removes the
+  # multi-minute first-attempt stall after every daemon image bump. Costs one idle
+  # Pod and one image's disk per runner node. Runs in the release namespace, not
+  # .namespace, whose fail-closed admission policy admits only exact attempt Pods.
+  imageWarmer:
+    enabled: false
+    # Empty uses the cluster default. Set a low- or negative-priority class so a
+    # warmer can never evict or delay a real attempt on a full node.
+    priorityClassName: ""
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        memory: 32Mi
+  admission:
+    enabled: true                               # ValidatingAdmissionPolicy + Binding. Requires Kubernetes 1.30+.
+    acknowledgeUnprotected: false               # Must be true to run the rail with no admission boundary.
+  networkPolicy:
+    enabled: true                               # Egress boundary: DNS, the orchestrator, public HTTPS only.
+    acknowledgeUnprotected: false               # Must be true to run the rail with no egress boundary.
+    # Extra CIDRs reachable on 443. Matches only destinations the CNI resolves to a
+    # CIDR identity. A LoadBalancer VIP may instead carry a node identity that
+    # ipBlock cannot match at all (Cilium reports reserved:host), in which case
+    # listing it here admits nothing: use extraEgressSelectors for those.
+    # Adds a rule; upstream validates the 3-rule shape in its own kind harness, and
+    # no CI gate compares them.
+    extraEgressCidrs: []
+    # Pod-selected destinations reachable on 443, as NetworkPolicy peers
+    # (namespaceSelector and/or podSelector). REQUIRED when the wss:// front door is
+    # a private VIP: select the ingress controller Pods it resolves to, or a runner
+    # hangs silently until its 4200s deadline.
+    extraEgressSelectors: []
+  ingress:
+    enabled: false                              # TLS front door for the WS listener. Not needed when runners dial the orchestrator Service directly over a cluster-local ws:// origin.
+    path: /ws                                   # Prefix match, covers /ws and /ws/workflow-runner/<run>/<attempt>.
+    annotations: {}                             # Set proxy read/send timeouts here if config.heartbeatIntervalMs exceeds the proxy's idle timeout.
+
 podAnnotations: {}
 podLabels: {}
 
@@ -250,10 +314,9 @@ valkey:
         - ALL
 
 # ─────────────────────────── APPLICATION SECRETS ──────────────────────
-# `secrets:` holds every credential / token that is sensitive. These fields
-# are rendered into the chart-managed Kubernetes Secret and injected via
-# `envFrom: secretRef`. Section numbers mirror the groups in the app's
-# `src/config.ts` Zod schema (same ordering as `config:` below).
+# `secrets:` holds every credential / token that is sensitive. Shared fields
+# are rendered into the application Secret and injected into controllers and
+# daemons. Workflow-runner capability roots use a controller-only Secret.
 #
 # NEVER commit real values here. Either:
 #   1) supply them via an out-of-repo, gitignored values file
@@ -267,11 +330,6 @@ secrets:
   # It is mounted on the orchestrator AND every daemon pool, so keep
   # controller-only keys out of it and use existingControllerSecret instead.
   existingSecret: ""
-  # Same escape hatch for the controller-only Secret (see controller-secret.yaml):
-  # WORKFLOW_RUNNER_CAPABILITY_SECRET[_PREVIOUS]. Mounted on the orchestrator only.
-  # Must name a Secret other than the app Secret; the named Secret must carry
-  # WORKFLOW_RUNNER_CAPABILITY_SECRET (required on the controller since v1.17.0).
-  existingControllerSecret: ""
 
   # --- 1. GitHub App credentials (server mode) ---
   appId: ""                                     # Required in server mode (orchestratorUrl unset).
@@ -299,8 +357,20 @@ secrets:
   # --- 8. Daemon / Orchestrator WebSocket (auto-generated, persisted across upgrades) ---
   daemonAuthToken: ""                           # Leave empty to auto-generate and persist.
   daemonAuthTokenPrevious: ""                   # Optional rotation-window predecessor of daemonAuthToken. When set, the orchestrator accepts daemons whose Bearer header matches EITHER the primary or this previous value (constant-time). Set to the old token during a rolling rotation, then unset once every daemon has restarted on the new primary. Daemon-side ignored — daemons always send the primary daemonAuthToken.
+  # Escape hatch for the controller-only Secret (see controller-secret.yaml):
+  # WORKFLOW_RUNNER_CAPABILITY_SECRET[_PREVIOUS]. Mounted on the orchestrator only.
+  # Must name a Secret other than the app Secret; the named Secret must carry
+  # WORKFLOW_RUNNER_CAPABILITY_SECRET (required on the controller since v1.17.0).
+  existingControllerSecret: ""
   # Both keys below render into a separate <fullname>-controller-secret mounted
   # on the orchestrator only, never on daemon pools (upstream K8s Secret split).
+  # "Auto-generate and persist" relies on `lookup`, which reads the live cluster.
+  # Helm does not contact the API server during `helm template` or a client-side
+  # --dry-run, so a renderer that never talks to the cluster mints a NEW root every
+  # render. Under Argo CD (which inflates charts with `helm template`) that shows up
+  # as permanent drift, and each sync invalidates every capability signed with the
+  # previous root, failing in-flight runner attempts. Set these explicitly from your
+  # secret store when rendering that way, or diff with --dry-run=server.
   workflowRunnerCapabilitySecret: ""            # Controller-only HMAC root for deadline-bound, per-attempt isolated-workflow-runner capabilities. Required on the controller since v1.17.0 (boot fails without it). Leave empty to auto-generate and persist across upgrades, like daemonAuthToken. Min 32 chars when set. Must differ from daemonAuthToken and daemonAuthTokenPrevious. A shared daemon that sees it logs a leak warning; an isolated runner refuses to start.
   workflowRunnerCapabilitySecretPrevious: ""    # Optional controller-only rotation predecessor of workflowRunnerCapabilitySecret. Accepted only for capabilities whose signed expiry has not elapsed. Must also differ from both daemon-auth slots.
 
@@ -312,7 +382,7 @@ secrets:
 config:
   # --- 2. AI provider selection ---
   provider: anthropic                           # anthropic | bedrock.
-  model: ""                                     # Required when provider=bedrock.
+  model: ""                                     # Required when provider=bedrock, and whenever workflowRunner.admission.enabled: the boundary pins the model the runner reports.
 
   # --- 4. AWS Bedrock credentials (non-secret subset) ---
   awsRegion: ""                                 # Required when provider=bedrock.
@@ -386,9 +456,14 @@ config:
 
   # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
   # Since v1.17.0 every structured `workflow-run` job runs in one bare Pod per
-  # attempt in a dedicated namespace; there is no daemon fallback. The chart
-  # only supplies the controller side (capability root, these knobs). The
-  # runner namespace itself is NOT provisioned here and needs, per upstream
+  # attempt in a dedicated namespace; there is no daemon fallback.
+  #
+  # This block is the CONTROLLER SIDE ONLY: it tells the app where runners go.
+  # Set the top-level `workflowRunner.enabled=true` to have the chart provision
+  # the rail itself, in which case it owns these values, pins the admission
+  # boundary from them, and a conflicting value here is rejected at render time.
+  #
+  # Leaving the rail off means provisioning it yourself, per upstream
   # docs/operate/deployment.md "Kubernetes worker requirements":
   #   - a Role+RoleBinding for the orchestrator ServiceAccount in that
   #     namespace: pods create/get/delete, secrets create/get/update/delete.
@@ -434,8 +509,8 @@ config:
   # remains authoritative). Disable to remove the per-reply round-trip if
   # latency budgets are tight.
   llmOutputScannerEnabled: true                 # Kill-switch for the LLM scanner. Default ON.
-  llmOutputScannerModel: sonnet-4-6             # Model alias for the scanner call. Sonnet 4.6 default — higher reasoning materially reduces false-negatives on obfuscated/encoded secrets vs. Haiku, at the cost of per-call latency.
-  llmOutputScannerTimeoutMs: 3000               # Hard cap per scanner call. On exceed, fail-open (post regex-survived body, log warn).
+  llmOutputScannerModel: haiku-4-5              # Model alias for the scanner call. A Sonnet alias detects more obfuscated/encoded variants; raise the timeout alongside it, since the isolated-runner boundary treats a slow scan as a rejection.
+  llmOutputScannerTimeoutMs: 30000              # Hard cap per scanner call. Fail-open for GitHub-bound output (post regex-survived body, log warn), fail-CLOSED for isolated-runner RPC, where a timeout discards a completed run.
 
   # --- 10. Agent max turns ---
   defaultMaxTurns: ""                           # Leave empty for no turn cap (recommended). Set to a positive int only when ops needs a hard ceiling; AGENT_MAX_TURNS overrides this when both are set.
