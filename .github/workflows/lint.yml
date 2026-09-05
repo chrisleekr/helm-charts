@@ -141,6 +141,9 @@ jobs:
         # check-version-increment in ct.yaml enforces the Chart.yaml version bump.
         run: ct lint --config ct.yaml
 
+      - name: Validate rendered chart schemas
+        run: bash scripts/check-chart-schemas.sh
+
   renovate:
     name: renovate config
     needs: changes
