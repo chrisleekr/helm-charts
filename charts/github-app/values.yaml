@@ -372,9 +372,10 @@ config:
     # does not exist unless you create it: the spawner mounts it with a
     # non-optional envFrom, so every spawned Pod stalls in
     # CreateContainerConfigError until it does. Create it in the
-    # ephemeral-daemon namespace carrying DAEMON_AUTH_TOKEN (copy the value the
-    # chart generated into <fullname>-secret) plus the provider credential the
-    # daemons need: ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN with
+    # ephemeral-daemon namespace carrying DAEMON_AUTH_TOKEN (the value in the
+    # app Secret, which is <fullname>-secret when the chart generates one, or
+    # secrets.existingSecret when you supply it) plus the provider credential
+    # the daemons need: ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN with
     # ALLOWED_OWNERS, or the Bedrock AWS_* set. Upstream forbids DATABASE_URL
     # and VALKEY_URL here, and pointing this at the chart's own app Secret hands
     # short-lived agent Pods the GitHub App private key. See upstream
