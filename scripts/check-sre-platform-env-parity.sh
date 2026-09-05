@@ -23,6 +23,32 @@ render_chart_env() {
     --set-string 'bootstrap.staffProvider.audience=https://api.sre.example.com/' \
     --set-string 'bootstrap.platformAdmins[0].subject=directory|000000000000000000000001' \
     >>"$out"
+  # Every remaining conditional branch. Keys behind a `with`/`if` are absent from
+  # a render that does not enable the feature, and this gate reads keys from the
+  # render rather than the templates, so an unrendered branch reads as a key the
+  # chart never mirrored. That failure would surface on the first real release,
+  # not here, because a missing contract SKIPs while appVersion is 0.0.0.
+  helm template sre "$chart" -f "$chart/ci/ct-values.yaml" \
+    --set smtp.enabled=true \
+    --set-string 'smtp.host=smtp.example.com' \
+    --set-string 'smtp.from=sre@example.com' \
+    --set-string 'smtp.username=smtp-user' \
+    --set-string 'public.supportUrl=https://support.example.com' \
+    --set-string 'public.termsUrl=https://terms.example.com' \
+    --set-string 'public.termsVersion=2026-01-01' \
+    --set llm.provider=openai \
+    --set-string 'llm.openaiModel=gpt-4o-mini' \
+    >>"$out"
+}
+
+# The single definition of "which keys the chart mirrors". Shared with the
+# self-test so its synthetic contract cannot drift from what the gate enforces:
+# two copies would let the "matching contract" case pass against a different key
+# set than the gate checks, and stop proving anything.
+chart_env_keys() { # <render-file>
+  grep -E '(^  [A-Z][A-Z0-9_]{2,}:)|(name: [A-Z][A-Z0-9_]{2,}$)' "$1" \
+    | sed -E 's/.*name: //; s/^[[:space:]]*//; s/:.*$//' \
+    | sort -u
 }
 
 main() {
@@ -52,9 +78,7 @@ render_chart_env "$chart" "$tmp/render.yaml"
 
 # ConfigMap data keys and explicit env names. Rendering expands ranged Secret
 # keys, so this also sees credentials that are not string literals in templates.
-chart_keys=$(grep -E '(^  [A-Z][A-Z0-9_]{2,}:)|(name: [A-Z][A-Z0-9_]{2,}$)' "$tmp/render.yaml" \
-  | sed -E 's/.*name: //; s/^[[:space:]]*//; s/:.*$//' \
-  | sort -u)
+chart_keys=$(chart_env_keys "$tmp/render.yaml")
 contract_keys=$(jq -r '.[].env' "$contract_file" | sort -u)
 ignore=$(grep -vE '^[[:space:]]*(#|$)' "$chart/.env-contract-ignore" | tr -d ' ' | sort -u)
 

@@ -131,7 +131,7 @@ ingress:
 
 Add the dashboard origin to the Auth0 SPA's callback, logout, and web-origin allowlists. Use the same `auth0.audience` as the custom API identifier.
 
-If TLS terminates before the Kubernetes ingress, set `ingress.allowInsecure=true`. That acknowledges the ingress objects have no local TLS section; the public URLs must still use `https://` and `wss://` is derived automatically for dashboard WebSockets.
+If TLS terminates before the Kubernetes ingress, set `ingress.allowInsecure=true`. That acknowledges the ingress objects have no local TLS section; the public URLs must still use `https://` and `wss://` is derived automatically for dashboard WebSockets. Note that redirecting plaintext HTTP to HTTPS is controller or edge policy either way: a `tls` block tells the controller which certificate to serve, not what to do with a port-80 request. nginx redirects by default; confirm the behaviour of whichever class you set on both the API and dashboard hosts.
 
 ## Install and upgrade
 

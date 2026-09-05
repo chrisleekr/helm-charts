@@ -56,7 +56,10 @@ spec:
               # egress restriction at all. Traffic to ::ffff:10.0.0.1 is IPv4
               # traffic and is already covered by the IPv4 exceptions above.
               - 64:ff9b::/96
+              # 6to4 and Teredo both carry IPv6 to an IPv4 endpoint, so leaving
+              # either open reaches addresses the IPv4 except list above denies.
               - 2002::/16
+              - 2001::/32
               - fc00::/7
               - fe80::/10
               - fec0::/10

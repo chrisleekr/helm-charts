@@ -48,6 +48,28 @@ jobs:
             exit 1
           fi
 
+      - name: Withhold placeholder-appVersion charts
+        # A chart whose appVersion is still the 0.0.0 bootstrap placeholder points
+        # at an image tag that does not exist on Docker Hub, so publishing it puts
+        # an uninstallable chart on the Helm repo and Artifact Hub. Its <name>-sync
+        # workflow replaces the placeholder on the first public release; until that
+        # PR merges the chart is simply withheld. Moved out of charts/ rather than
+        # failing the job, so one unreleased chart cannot block every other one.
+        run: |
+          set -euo pipefail
+          mkdir -p .withheld
+          for chart_dir in charts/*/; do
+            if [ ! -f "${chart_dir}Chart.yaml" ]; then
+              continue
+            fi
+            appversion=$(yq e '.appVersion' "${chart_dir}Chart.yaml" | tr -d '"')
+            if [ "$appversion" = "0.0.0" ]; then
+              name=$(yq e '.name' "${chart_dir}Chart.yaml")
+              echo "::notice file=${chart_dir}Chart.yaml::withholding ${name} from release: appVersion is the 0.0.0 placeholder"
+              mv "$chart_dir" .withheld/
+            fi
+          done
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:

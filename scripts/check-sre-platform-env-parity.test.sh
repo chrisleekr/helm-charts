@@ -19,10 +19,7 @@ fi
 echo "PASS only bootstrap may omit the public contract"
 
 render_chart_env "$chart" "$tmp/render.yaml"
-grep -E '(^  [A-Z][A-Z0-9_]{2,}:)|(name: [A-Z][A-Z0-9_]{2,}$)' "$tmp/render.yaml" \
-  | sed -E 's/.*name: //; s/^[[:space:]]*//; s/:.*$//' \
-  | sort -u \
-  | jq -Rn '[inputs | {env: .}]' >"$tmp/matching.json"
+chart_env_keys "$tmp/render.yaml" | jq -Rn '[inputs | {env: .}]' >"$tmp/matching.json"
 
 ENV_CONTRACT_FILE="$tmp/matching.json" bash "$gate" >/dev/null
 echo "PASS matching contract"

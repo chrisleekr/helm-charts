@@ -390,11 +390,15 @@ else
   want "$tmp/path.err" 'without a path' "public API URL path fails clearly"
 fi
 for unsafe in 'https://api.sre.example.com?tenant=x' 'https://api.sre.example.com#fragment' 'https://user:pass@api.sre.example.com'; do
+  # Asserted inside the loop like every other failure check here. A single `want`
+  # after the loop reads only the last iteration's stderr, so the query and
+  # fragment cases went unasserted and a stale file could satisfy it.
   if helm template sre "$chart" -f "$ci/ct-values.yaml" --set-string public.apiUrl="$unsafe" >/dev/null 2>"$tmp/origin.err"; then
     bad "non-origin public API URL must fail: $unsafe"
+  else
+    want "$tmp/origin.err" 'without a path, query, fragment, or credentials' "non-origin URL rejected clearly: $unsafe"
   fi
 done
-want "$tmp/origin.err" 'without a path, query, fragment, or credentials' "non-origin URL components fail clearly"
 if helm template sre "$chart" -f "$ci/ct-values.yaml" --set public.dashboardUrl=https://api.sre.example.com >/dev/null 2>"$tmp/same-origin.err"; then
   bad "identical dashboard and API origins must fail"
 else

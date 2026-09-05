@@ -164,6 +164,13 @@ and the chart passes the value through instead of composing one.
 {{- if and $email (hasKey $invitationEmails $emailKey) -}}
 {{- fail (printf "bootstrap.platformAdmins[%v].email conflicts with email-only entry %v." $index (index $invitationEmails $emailKey)) -}}
 {{- end -}}
+{{- /* Recorded only on first sight, so a later subject entry carrying the same
+address neither overwrites the index this error message reports nor fails. That
+is deliberate: for a subject entry the OIDC subject is the identity and the email
+is metadata, so two directory subjects may share one mailbox. README.md lists the
+rejected shapes and this is not among them. If the application ever constrains
+operator email to be unique, drop the hasKey test so a repeat fails here, the way
+the invitation side already does. */ -}}
 {{- if and $email (not (hasKey $subjectEmails $emailKey)) -}}
 {{- $_ := set $subjectEmails $emailKey $index -}}
 {{- end -}}
