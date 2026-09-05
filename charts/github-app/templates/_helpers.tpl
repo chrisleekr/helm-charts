@@ -80,6 +80,9 @@ enabling the feature changes the pod template and triggers a rollout.
 */}}
 {{- define "github-app.controllerSecretName" -}}
 {{- if .Values.secrets.existingControllerSecret }}
+{{- if eq .Values.secrets.existingControllerSecret .Values.secrets.existingSecret }}
+{{- fail "secrets.existingControllerSecret must differ from secrets.existingSecret: the app Secret is mounted on daemon pools, so sharing it would expose the controller-only capability root to workers" }}
+{{- end }}
 {{- .Values.secrets.existingControllerSecret }}
 {{- else if or .Values.secrets.workflowRunnerCapabilitySecret .Values.secrets.workflowRunnerCapabilitySecretPrevious }}
 {{- printf "%s-controller-secret" (include "github-app.fullname" .) }}

@@ -111,4 +111,14 @@ if printf '%s\n' "$out" | grep -q '^  REPO_CONFIG_FILE:'; then
   exit 1
 fi
 
-echo "github-app render matrix: 11/11 cases rendered"
+# 12. Negative: the two external Secret names must differ, otherwise the
+#     controller-only keys ride the Secret every daemon pool mounts and the
+#     split in case 10 is undone by configuration.
+if helm template "$chart" \
+  --set secrets.existingSecret=shared \
+  --set secrets.existingControllerSecret=shared > /dev/null 2>&1; then
+  echo "::error file=charts/github-app/templates/_helpers.tpl::secrets.existingControllerSecret equal to secrets.existingSecret rendered instead of failing; the same-name guard is gone" >&2
+  exit 1
+fi
+
+echo "github-app render matrix: 12/12 cases rendered"
