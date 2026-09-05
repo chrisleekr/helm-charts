@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "api") }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.components.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sre-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sre-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "sre-platform.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.components.api.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "sre-platform.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "sre-platform.fullname" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with (include "sre-platform.optionalWebUrl" (dict "name" "supportUrl" "value" .Values.public.supportUrl)) }}
+            - name: SUPPORT_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with (include "sre-platform.optionalWebUrl" (dict "name" "termsUrl" "value" .Values.public.termsUrl)) }}
+            - name: TERMS_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with (include "sre-platform.termsVersion" .) }}
+            - name: TERMS_VERSION
+              value: {{ . | quote }}
+            {{- end }}
+            - name: REGISTRATION_MODE
+              value: {{ .Values.config.registrationMode | quote }}
+            - name: TRUST_PROXY_HOPS
+              value: {{ .Values.config.trustedProxyHops | quote }}
+            - name: ROLE
+              value: api
+            - name: PORT
+              value: "3000"
+            {{- range $key := list "DATABASE_URL" "APP_DATABASE_URL" "VALKEY_URL" "SECRETS_MASTER_KEY" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" $ }}
+                  key: {{ $key }}
+            {{- end }}
+            {{- range $key := list "ANTHROPIC_API_KEY" "CLAUDE_CODE_OAUTH_TOKEN" "OPENAI_API_KEY" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" $ }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.components.api.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "sre-platform.placement" . | nindent 6 }}

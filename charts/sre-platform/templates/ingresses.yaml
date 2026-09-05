@@ -1,0 +1,67 @@
+{{- if .Values.ingress.api.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "api") }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with .Values.ingress.api.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.api.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.api.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.api.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.api.path | quote }}
+            pathType: {{ .Values.ingress.api.pathType }}
+            backend:
+              service:
+                name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "api") }}
+                port:
+                  number: {{ .Values.service.api.port }}
+{{- end }}
+{{- if and .Values.ingress.api.enabled .Values.ingress.dashboard.enabled }}
+---
+{{- end }}
+{{- if .Values.ingress.dashboard.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "dashboard") }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+  {{- with .Values.ingress.dashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.dashboard.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.dashboard.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.dashboard.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.dashboard.path | quote }}
+            pathType: {{ .Values.ingress.dashboard.pathType }}
+            backend:
+              service:
+                name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "dashboard") }}
+                port:
+                  number: {{ .Values.service.dashboard.port }}
+{{- end }}

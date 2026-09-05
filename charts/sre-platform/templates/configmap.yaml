@@ -1,0 +1,48 @@
+{{- $validated := include "sre-platform.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sre-platform.fullname" . }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+  {{- if .Values.bootstrap.enabled }}
+  annotations:
+    sre-platform.io/bootstrap-revision: {{ include "sre-platform.bootstrapRevision" . | quote }}
+  {{- end }}
+data:
+  NODE_ENV: "production"
+  AUTH0_ISSUER: {{ .Values.auth0.issuer | quote }}
+  AUTH0_AUDIENCE: {{ .Values.auth0.audience | quote }}
+  AUTH0_DOMAIN: {{ .Values.auth0.domain | quote }}
+  AUTH0_CLIENT_ID: {{ .Values.auth0.clientId | quote }}
+  {{- with .Values.auth0.jwksUri }}
+  AUTH0_JWKS_URI: {{ . | quote }}
+  {{- end }}
+  CORS_ORIGINS: {{ include "sre-platform.dashboardUrl" . | quote }}
+  DASHBOARD_BASE_URL: {{ include "sre-platform.dashboardUrl" . | quote }}
+  DASHBOARD_API_BASE_URL: {{ include "sre-platform.apiUrl" . | quote }}
+  DASHBOARD_WS_BASE_URL: {{ include "sre-platform.apiWsUrl" . | quote }}
+  EMBEDDINGS_URL: {{ .Values.embeddings.url | quote }}
+  EMBEDDINGS_DIM: {{ .Values.embeddings.dim | quote }}
+  {{- with .Values.llm.provider }}
+  LLM_PROVIDER: {{ . | quote }}
+  {{- end }}
+  ANTHROPIC_MODEL: {{ .Values.llm.anthropicModel | quote }}
+  ANTHROPIC_MAX_TURNS: {{ .Values.llm.anthropicMaxTurns | quote }}
+  {{- with (.Values.llm.openaiModel | trim) }}
+  OPENAI_MODEL: {{ . | quote }}
+  {{- end }}
+  OPENAI_MAX_TURNS: {{ .Values.llm.openaiMaxTurns | quote }}
+  {{- if .Values.smtp.enabled }}
+  SMTP_HOST: {{ .Values.smtp.host | trim | quote }}
+  SMTP_PORT: {{ .Values.smtp.port | quote }}
+  SMTP_SECURE: {{ .Values.smtp.secure | quote }}
+  SMTP_FROM: {{ .Values.smtp.from | trim | quote }}
+  {{- with (.Values.smtp.username | trim) }}
+  SMTP_USERNAME: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  CLASSIFY_FAIRNESS_WINDOW_SEC: {{ .Values.config.classifyFairnessWindowSec | quote }}
+  INCIDENT_AUTO_ARCHIVE_DAYS: {{ .Values.config.incidentAutoArchiveDays | quote }}
+  RECOVERY_MAX_CHECKS: {{ .Values.config.recoveryMaxChecks | quote }}
+  MANUAL_INCIDENT_RATE_LIMIT_PER_MINUTE: {{ .Values.config.manualIncidentRateLimitPerMinute | quote }}

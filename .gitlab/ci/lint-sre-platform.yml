@@ -1,0 +1,25 @@
+# Mirror of .github/workflows/lint-sre-platform.yml.
+sre-platform:
+  stage: lint
+  image:
+    name: alpine/helm:3.20.0
+    entrypoint: [""]
+  interruptible: true
+  rules:
+    - changes:
+        paths:
+          - charts/sre-platform/**/*
+          - scripts/check-sre-platform-render.sh
+          - scripts/check-sre-platform-env-parity.sh
+          - scripts/check-sre-platform-env-parity.test.sh
+          - .github/workflows/lint-sre-platform.yml
+          - .github/workflows/sre-platform-sync.yml
+          - .gitlab/ci/lint-sre-platform.yml
+          - .gitlab-ci.yml
+        compare_to: refs/heads/main
+  before_script:
+    - apk add --no-cache jq
+  script:
+    - bash scripts/check-sre-platform-render.sh
+    - bash scripts/check-sre-platform-env-parity.test.sh
+    - bash scripts/check-sre-platform-env-parity.sh

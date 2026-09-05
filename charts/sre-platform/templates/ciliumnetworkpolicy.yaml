@@ -1,0 +1,39 @@
+{{- if .Values.networkPolicy.apiServerEgress.enabled }}
+{{- if not .Values.networkPolicy.enabled }}
+{{- fail "networkPolicy.apiServerEgress.enabled requires networkPolicy.enabled" }}
+{{- end }}
+# Cilium only. The egress NetworkPolicy denies RFC1918, which includes the route
+# to this cluster's own API server. A CIDR selector cannot reopen it: kube-proxy
+# rewrites the ClusterIP to the node address before the CNI evaluates egress, and
+# Cilium resolves a node address to a reserved identity, which CIDR selectors do
+# not match unless policy-cidr-match-mode includes nodes. Entities are the only
+# selector that names the destination Cilium actually sees.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "apiserver-egress") }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "sre-platform.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - api
+          - triage-worker
+  egress:
+    # kube-apiserver covers a control plane off-cluster or on another node; host
+    # covers the node this Pod is scheduled on, which loses the kube-apiserver
+    # label locally; remote-node covers a multi-node control plane.
+    - toEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: {{ .Values.networkPolicy.apiServerEgress.port | quote }}
+              protocol: TCP
+{{- end }}

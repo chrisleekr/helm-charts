@@ -36,4 +36,5 @@ include:
   - local: .gitlab/ci/lint-omniroute.yml
   - local: .gitlab/ci/lint-github-app.yml
   - local: .gitlab/ci/lint-binance-trading-bot.yml
+  - local: .gitlab/ci/lint-sre-platform.yml
   - local: .gitlab/ci/publish-devel.yml
