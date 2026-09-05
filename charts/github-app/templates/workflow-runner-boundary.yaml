@@ -1,0 +1,54 @@
+{{- if and .Values.workflowRunner.enabled .Values.workflowRunner.admission.enabled }}
+{{- $c := .Values.config }}
+{{- $runnerImage := default (include "github-app.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image }}
+{{- if not $c.model }}
+{{- fail "workflowRunner.admission.enabled requires config.model to be set explicitly. The boundary has to pin the model the runner will report, and the chart cannot track the app's compiled-in default without silently drifting into a deny-all." }}
+{{- end }}
+{{- $bedrock := eq $c.provider "bedrock" }}
+{{- $creds := include "github-app.workflowRunner.providerCredentials" . }}
+{{- $chains := ternary (list "AWS_BEARER_TOKEN_BEDROCK" "AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY" "AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN") (list "ANTHROPIC_API_KEY" "CLAUDE_CODE_OAUTH_TOKEN") $bedrock }}
+{{- if not (has $creds $chains) }}
+{{- fail (printf "workflowRunner.providerCredentials=[%s] is not a chain the app emits for config.provider=%q. The policy pairs the provider with the credential slots, so a chain from the other provider renders a boundary that looks valid and denies every Pod. Use %s." $creds $c.provider (join " | " $chains)) }}
+{{- end }}
+{{- $slots := concat (splitList "," $creds) (list "" "" "") }}
+{{- $owners := list }}
+{{- range splitList "," ($c.allowedOwners | default "") }}
+{{- if trim . }}{{ $owners = append $owners (trim .) }}{{ end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-runner-boundary
+  namespace: {{ .Values.workflowRunner.namespace }}
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+# Exactly 13 keys. The policy asserts size(params.data) == 13 and denies every
+# runner Pod if that count changes, so nothing may be added here: no checksum
+# annotation content, no label passthrough. Metadata above is unconstrained.
+data:
+  # The same expression configmap.yaml uses for DAEMON_IMAGE, so the image the
+  # controller spawns and the image the policy pins cannot drift. One Image
+  # Updater write to image.daemon.tag moves both.
+  runnerImage: {{ $runnerImage | quote }}
+  orchestratorOrigin: {{ include "github-app.workflowRunner.orchestratorOrigin" . | quote }}
+  provider: {{ $c.provider | quote }}
+  model: {{ $c.model | quote }}
+  # The app's credential chain returns before it reaches the Bedrock settings when
+  # provider is anthropic, so the Pod carries neither of these. Copying a stale
+  # config.awsRegion through would pin a value no runner ever reports.
+  awsRegion: {{ if $bedrock }}{{ $c.awsRegion | quote }}{{ else }}""{{ end }}
+  anthropicBedrockBaseUrl: {{ if $bedrock }}{{ $c.anthropicBedrockBaseUrl | quote }}{{ else }}""{{ end }}
+  # Normalised the way config.ts parses ALLOWED_OWNERS, because the runner env
+  # carries the re-joined list, not the raw string. "acme, widgets" would
+  # otherwise pin a value the Pod never matches.
+  allowedOwners: {{ join "," $owners | quote }}
+  providerCredential1: {{ index $slots 0 | quote }}
+  providerCredential2: {{ index $slots 1 | quote }}
+  providerCredential3: {{ index $slots 2 | quote }}
+  runnerNodeLabel: {{ .Values.workflowRunner.nodeLabel | quote }}
+  runnerNodeValue: {{ .Values.workflowRunner.nodeValue | quote }}
+  # Empty forbids every pull secret, which is the pre-existing behaviour. Runner
+  # Pods are created by the controller, not rendered here, so they cannot inherit
+  # the release's top-level imagePullSecrets.
+  runnerImagePullSecret: {{ .Values.workflowRunner.imagePullSecret | quote }}
+{{- end }}

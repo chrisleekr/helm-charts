@@ -55,12 +55,31 @@ spec:
                 name: {{ include "github-app.fullname" . }}-config
             - secretRef:
                 name: {{ include "github-app.secretName" . }}
-            - secretRef:
-                name: {{ include "github-app.controllerSecretName" . }}
-          {{- with .Values.extraEnv }}
           env:
+            - name: WORKFLOW_RUNNER_CAPABILITY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "github-app.controllerSecretName" . }}
+                  key: WORKFLOW_RUNNER_CAPABILITY_SECRET
+            - name: WORKFLOW_RUNNER_CAPABILITY_SECRET_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "github-app.controllerSecretName" . }}
+                  key: WORKFLOW_RUNNER_CAPABILITY_SECRET_PREVIOUS
+                  optional: true
+            # Bun does not apply the CA that the Kubernetes client reads via
+            # loadFromCluster, so every API call fails verification with
+            # UNABLE_TO_VERIFY_LEAF_SIGNATURE. Only the controller calls that API,
+            # to spawn ephemeral daemons and workflow runners. The projected token
+            # is always mounted, so the path always resolves. extraEnv renders
+            # after this, so a deployment needing a different bundle overrides it
+            # there; the variable takes a single file, so such a bundle has to
+            # concatenate this CA rather than replace it.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
           volumeMounts:
             {{- if .Values.workspace.persistence.enabled }}
             - name: workspace

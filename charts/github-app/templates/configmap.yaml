@@ -83,9 +83,18 @@ data:
   EPHEMERAL_DAEMON_IDLE_TIMEOUT_MS: {{ $c.ephemeralDaemon.idleTimeoutMs | quote }}
   EPHEMERAL_DAEMON_SPAWN_COOLDOWN_MS: {{ $c.ephemeralDaemon.spawnCooldownMs | quote }}
   EPHEMERAL_DAEMON_SPAWN_QUEUE_THRESHOLD: {{ $c.ephemeralDaemon.spawnQueueThreshold | quote }}
-  EPHEMERAL_DAEMON_NAMESPACE: {{ default .Release.Namespace $c.ephemeralDaemon.namespace | quote }}
-  {{- if $c.ephemeralDaemon.secretName }}
-  EPHEMERAL_DAEMON_SECRET_NAME: {{ $c.ephemeralDaemon.secretName | quote }}
+  {{- $daemonNs := default .Release.Namespace $c.ephemeralDaemon.namespace }}
+  EPHEMERAL_DAEMON_NAMESPACE: {{ $daemonNs | quote }}
+  {{- with $c.ephemeralDaemon.secretName }}
+  # Left unrendered when empty so the app owns the default name, not the chart.
+  # Upstream envFrom-mounts this Secret onto Pods that run agent-authored code, so
+  # naming one of the chart's own Secrets here would hand those Pods either the
+  # GitHub App private key or the runner capability signing root. Only checkable
+  # when the daemons land in the release namespace, where those Secrets live.
+  {{- if and (eq $daemonNs $.Release.Namespace) (has . (list (include "github-app.secretName" $) (include "github-app.controllerSecretName" $))) }}
+  {{- fail (printf "config.ephemeralDaemon.secretName=%q names a Secret this chart renders for the controller. Ephemeral daemon Pods envFrom-mount it and run agent-authored code, so the GitHub App private key or the workflow-runner capability root would reach a worker. Point it at a daemon-only Secret." .) }}
+  {{- end }}
+  EPHEMERAL_DAEMON_SECRET_NAME: {{ . | quote }}
   {{- end }}
   DAEMON_IMAGE: {{ default (include "github-app.image.daemon" (dict "root" .)) $c.ephemeralDaemon.image | quote }}
   {{- if $c.ephemeralDaemon.orchestratorPublicUrl }}
@@ -93,27 +102,50 @@ data:
   {{- end }}
 
   # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
-  # config.ts validateWorkerNamespaces rejects controller boot when the runner
-  # and ephemeral-daemon namespaces match; both are known here, so fail early.
-  {{- $runnerNs := $c.workflowRunner.namespace | default "github-app-runners" }}
-  {{- $daemonNs := $c.ephemeralDaemon.namespace | default .Release.Namespace }}
-  {{- if eq $runnerNs $daemonNs }}
-  {{- fail (printf "config.workflowRunner.namespace resolves to %q, the same as the ephemeral-daemon namespace. Upstream refuses to boot when WORKFLOW_RUNNER_NAMESPACE equals EPHEMERAL_DAEMON_NAMESPACE. Set config.workflowRunner.namespace to a dedicated namespace, or install the release into a different namespace." $runnerNs) }}
+  # Two ways to reach the same four env vars, because the chart supports both
+  # halves of the feature:
+  #   workflowRunner.*        the chart provisions the rail (namespace, RBAC,
+  #                           NetworkPolicy, admission policy) and must pin the
+  #                           boundary from the same values the controller gets.
+  #   config.workflowRunner.* published passthrough for an operator who built the
+  #                           rail themselves; each key empty inherits the app default.
+  # Rendered here rather than in the runner templates so the env-parity gate,
+  # which greps only this file plus the two Secrets and daemon-deployment, can see them.
+  {{- $rn := .Values.workflowRunner }}
+  {{- $cr := default dict $c.workflowRunner }}
+  # The runner/ephemeral-daemon namespace collision that upstream's
+  # validateWorkerNamespaces refuses to boot on is guarded once, in
+  # workflow-runner-namespace.yaml, off the shared github-app.runnerNamespace
+  # helper. Helm renders that template first and aborts on the first fail, so a
+  # second copy here would be unreachable and the two could drift apart.
+  {{- if $rn.enabled }}
+  # The provisioning values are the single source of truth while the chart owns
+  # the rail: the same .Values feed the runner boundary ConfigMap, and any
+  # disagreement between controller env and the admission policy denies every
+  # runner Pod. So reject a conflicting passthrough value rather than ignore it.
+  {{- range $k, $v := dict "namespace" $rn.namespace "nodeLabel" $rn.nodeLabel "nodeValue" $rn.nodeValue "imagePullSecret" $rn.imagePullSecret }}
+  {{- $override := index $cr $k }}
+  {{- if and $override (ne ($override | toString) ($v | toString)) }}
+  {{- fail (printf "config.workflowRunner.%s=%q conflicts with workflowRunner.%s=%q. With workflowRunner.enabled=true the chart pins the admission boundary from workflowRunner.*, so a differing config.workflowRunner.* value would make the controller and the policy disagree and every runner Pod would be denied at admission. Unset one of them." $k ($override | toString) $k ($v | toString)) }}
   {{- end }}
-  # Operator half of the isolated workflow-runner feature (gated by
-  # secrets.workflowRunnerCapabilitySecret). Each key is gated so empty → app
-  # default. The internal WORKFLOW_RUNNER flag is spawner-injected, never set here.
-  {{- if $c.workflowRunner.namespace }}
-  WORKFLOW_RUNNER_NAMESPACE: {{ $c.workflowRunner.namespace | quote }}
   {{- end }}
-  {{- if $c.workflowRunner.nodeLabel }}
-  WORKFLOW_RUNNER_NODE_LABEL: {{ $c.workflowRunner.nodeLabel | quote }}
+  WORKFLOW_RUNNER_NAMESPACE: {{ $rn.namespace | quote }}
+  WORKFLOW_RUNNER_NODE_LABEL: {{ $rn.nodeLabel | quote }}
+  WORKFLOW_RUNNER_NODE_VALUE: {{ $rn.nodeValue | quote }}
+  WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $rn.imagePullSecret | quote }}
+  {{- else }}
+  {{- if $cr.namespace }}
+  WORKFLOW_RUNNER_NAMESPACE: {{ $cr.namespace | quote }}
   {{- end }}
-  {{- if $c.workflowRunner.nodeValue }}
-  WORKFLOW_RUNNER_NODE_VALUE: {{ $c.workflowRunner.nodeValue | quote }}
+  {{- if $cr.nodeLabel }}
+  WORKFLOW_RUNNER_NODE_LABEL: {{ $cr.nodeLabel | quote }}
   {{- end }}
-  {{- if $c.workflowRunner.imagePullSecret }}
-  WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $c.workflowRunner.imagePullSecret | quote }}
+  {{- if $cr.nodeValue }}
+  WORKFLOW_RUNNER_NODE_VALUE: {{ $cr.nodeValue | quote }}
+  {{- end }}
+  {{- if $cr.imagePullSecret }}
+  WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $cr.imagePullSecret | quote }}
+  {{- end }}
   {{- end }}
 
   # --- 9. Triage (binary heavy classifier) ---

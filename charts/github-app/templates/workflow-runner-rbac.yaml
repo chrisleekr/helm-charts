@@ -1,0 +1,49 @@
+{{- if and .Values.workflowRunner.enabled .Values.workflowRunner.rbac.create }}
+{{- $controllerSA := include "github-app.serviceAccountName" . }}
+{{- if eq $controllerSA "default" }}
+{{- fail "this RoleBinding would bind the namespace default ServiceAccount to a Role holding pods create/get/delete and secrets create/get/update/delete in the runner namespace, because serviceAccount.create=false leaves serviceAccount.name empty. Every Pod in the release namespace using the default ServiceAccount would inherit read access to the provider credential in workflow-runner-secrets. Set serviceAccount.name to a dedicated ServiceAccount, or set workflowRunner.rbac.create=false and bind the Role yourself." }}
+{{- end }}
+{{- range $poolName, $pool := .Values.daemon.pools }}
+{{- if ne ($pool.enabled | toString) "false" }}
+{{- if eq (include "github-app.daemon.serviceAccountName" (dict "root" $ "pool" $pool)) $controllerSA }}
+{{- fail (printf "daemon pool %q resolves to the controller ServiceAccount %q, which this RoleBinding grants pods create/get/delete and secrets create/get/update/delete in the runner namespace. Daemon Pods execute agent-authored code, so sharing that identity hands them the isolation the runner namespace exists to enforce, including the provider credential in workflow-runner-secrets. Give the pool its own identity via daemon.serviceAccount.name or daemon.pools.%s.serviceAccount.name, or set workflowRunner.rbac.create=false and bind the Role yourself." $poolName $poolName) }}
+{{- end }}
+{{- end }}
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "github-app.fullname" . }}-workflow-runner
+  namespace: {{ .Values.workflowRunner.namespace }}
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+rules:
+  # src/k8s/workflow-runner-spawner.ts creates one bare Pod per attempt and polls
+  # it to completion.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "delete"]
+  # Created after the Pod so its ownerReference can carry the real pod UID.
+  # Replaced only to rotate a stale capability on a 409 replay; deleted on cleanup.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "github-app.fullname" . }}-workflow-runner
+  namespace: {{ .Values.workflowRunner.namespace }}
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "github-app.fullname" . }}-workflow-runner
+subjects:
+  # The controller only, enforced by the guard at the top of this file: daemon
+  # Pods run agent-authored code and must never hold these verbs.
+  - kind: ServiceAccount
+    name: {{ include "github-app.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

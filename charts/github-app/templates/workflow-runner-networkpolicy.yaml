@@ -1,0 +1,116 @@
+{{- if and .Values.workflowRunner.enabled .Values.workflowRunner.networkPolicy.enabled }}
+{{- range .Values.workflowRunner.networkPolicy.extraEgressCidrs }}
+{{- if or (hasPrefix "0.0.0.0/" .) (has . (list "::/0" "::0/0" "0::/0" "0:0:0:0:0:0:0:0/0")) }}
+{{- fail (printf "workflowRunner.networkPolicy.extraEgressCidrs entry %q is a default route, which reopens every range the public-HTTPS rule excludes. This check only catches that spelling: any supernet listed here widens the boundary and the chart cannot judge the destination for you, so list single destinations." .) }}
+{{- end }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  annotations:
+    # Kept for the same reason as the namespace: pruning this while an attempt is
+    # still executing strips the egress boundary off a live Pod. Remove by hand
+    # after draining.
+    argocd.argoproj.io/sync-options: Prune=false
+    helm.sh/resource-policy: keep
+  name: github-app-workflow-runner-egress-boundary
+  namespace: {{ .Values.workflowRunner.namespace }}
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+spec:
+  # Literal, not the name helper: these labels are hardcoded by the app in
+  # src/k8s/workflow-runner-spawner.ts, so a chart nameOverride must not change
+  # them or the policy would select nothing and the boundary would be silent.
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: github-app
+      app.kubernetes.io/component: workflow-runner
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The controller's WebSocket listener. Selected by the release namespace's
+    # automatic metadata.name label, so no namespace has to be labelled by hand.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "github-app.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: orchestrator
+      ports:
+        - protocol: TCP
+          port: {{ .Values.config.wsPort }}
+    {{- with .Values.workflowRunner.networkPolicy.extraEgressCidrs }}
+    # Additional HTTPS destinations inside the private ranges the public rule below
+    # excludes. Matches on the packet's destination address, so it cannot name a
+    # Service or LoadBalancer VIP: see extraEgressSelectors.
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- with .Values.workflowRunner.networkPolicy.extraEgressSelectors }}
+    # The same, selected by Pod rather than address. A CNI may give a LoadBalancer
+    # VIP a node identity rather than a CIDR one, and ipBlock cannot match that, so
+    # naming the VIP above admits nothing. Cilium is one such: it reports the VIP as
+    # reserved:host. Selecting the backend Pods is what admits that traffic.
+    - to:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    # Public HTTPS for GitHub, the model provider and package registries. Every
+    # private and link-local range is excluded so a runner cannot reach cluster
+    # services or a cloud metadata endpoint. Traffic to the Pod's own node is not
+    # covered: the CNI applies policy between Pods, and node-local delivery can
+    # bypass it. Node hardening, not this policy, is what closes that path.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.0.0.0/24
+              - 192.0.2.0/24
+              - 192.168.0.0/16
+              - 198.18.0.0/15
+              - 198.51.100.0/24
+              - 203.0.113.0/24
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::/128
+              - ::1/128
+              - 100::/64
+              - 2001:db8::/32
+              - fc00::/7
+              - fe80::/10
+              - ff00::/8
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

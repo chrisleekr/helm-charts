@@ -19,6 +19,8 @@ github-app:
           - scripts/check-github-app-render.sh
           - scripts/check-env-parity.sh
           - scripts/check-env-parity.test.sh
+          - scripts/check-policy-parity.sh
+          - scripts/check-policy-parity.test.sh
           - .gitlab/ci/lint-github-app.yml
           - .gitlab-ci.yml
         # Without compare_to, a branch pipeline diffs against the previous commit
@@ -36,6 +38,12 @@ github-app:
     # Exercises the gate's own comparison logic against a synthetic contract, so
     # that logic has coverage even while the live contract 404s and the gate SKIPs.
     - bash scripts/check-env-parity.test.sh
+    # Exercises the policy-parity comparison logic against a chart-derived fixture,
+    # so it has coverage while the live example at v<appVersion> 404s and SKIPs.
+    - bash scripts/check-policy-parity.test.sh
+    # Fails when the chart's copy of the workflow-runner admission policy drifts
+    # from github-app's canonical examples/workflow-runner-admission.yaml.
+    - bash scripts/check-policy-parity.sh
     # Fails when the chart's ConfigMap/Secret env surface drifts from github-app's
     # env-contract.json. Catches what helm template cannot: a config.ts var the
     # chart never mirrored.

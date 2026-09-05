@@ -27,6 +27,18 @@ jobs:
         # contract at v<appVersion> 404s (bootstrap window) and the gate SKIPs.
         run: bash scripts/check-env-parity.test.sh
 
+      - name: Policy-parity self-test
+        # Exercises the gate's comparison logic against a fixture derived from the
+        # chart, so the logic has coverage even while the live example at
+        # v<appVersion> 404s (bootstrap window) and the gate SKIPs.
+        run: bash scripts/check-policy-parity.test.sh
+
+      - name: Policy-parity gate
+        # Fails when the chart's copy of the workflow-runner admission policy
+        # drifts from github-app's canonical examples/workflow-runner-admission.yaml.
+        # A stale copy renders fine and then denies every runner Pod at admission.
+        run: bash scripts/check-policy-parity.sh
+
       - name: Env-parity gate
         # Fails when the chart's ConfigMap/Secret env surface drifts from
         # github-app's env-contract.json (published at v<appVersion>). Catches the

@@ -1,0 +1,96 @@
+{{- if and .Values.workflowRunner.enabled .Values.workflowRunner.ingress.enabled }}
+{{- if not .Values.ingress.enabled }}
+{{- fail "workflowRunner.ingress.enabled is true but ingress.enabled is false. This Ingress reuses the release host and certificate, so on its own it would publish the WebSocket endpoints on a host the chart does not otherwise serve. Set ingress.enabled=true, or terminate TLS elsewhere and leave workflowRunner.ingress.enabled=false." }}
+{{- end }}
+{{- if not .Values.ingress.hosts }}
+{{- fail "workflowRunner.ingress.enabled is true but ingress.hosts is empty. The runner Ingress reuses the release's host and certificate rather than introducing a second hostname. Set ingress.hosts, or point config.ephemeralDaemon.orchestratorPublicUrl at a wss:// front door you terminate elsewhere and leave workflowRunner.ingress.enabled=false." }}
+{{- end }}
+{{- if not .Values.ingress.tls }}
+{{- fail "workflowRunner.ingress.enabled is true but ingress.tls is empty. This Ingress exists to publish a wss:// front door, so without TLS it produces one runners will not dial. Set ingress.tls, or leave workflowRunner.ingress.enabled=false." }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "github-app.fullname" . }}-ws
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+  # A separate Ingress, not another path on the main one: nginx annotations apply
+  # per-Ingress. That also means the release Ingress's own annotations, an IP
+  # allowlist or WAF among them, would not reach this path, so start from those
+  # and let the runner-specific ones win. The socket is idle between heartbeats,
+  # so it needs a proxy read timeout above config.heartbeatIntervalMs.
+  # Route- and certificate-scoped keys are dropped from what is inherited. They
+  # are correct on the release Ingress and wrong here: this Ingress re-declares
+  # the same tls[].secretName, so a second tls-acme/cert-manager claim makes two
+  # Ingresses fight over one Certificate, and a rewrite-target that is harmless on
+  # the release's / route rewrites /ws/workflow-runner/<run>/<attempt> to /, which
+  # hangs the runner until its deadline. Set them under
+  # workflowRunner.ingress.annotations to put them back deliberately.
+  {{- $inherited := dict }}
+  {{- range $k, $v := (.Values.ingress.annotations | default dict) }}
+  {{- if not (or (eq $k "kubernetes.io/tls-acme") (hasPrefix "cert-manager.io/" $k) (eq $k "nginx.ingress.kubernetes.io/rewrite-target") (eq $k "nginx.ingress.kubernetes.io/app-root")) }}
+  {{- $_ := set $inherited $k $v }}
+  {{- end }}
+  {{- end }}
+  {{- with merge (deepCopy (.Values.workflowRunner.ingress.annotations | default dict)) $inherited }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  rules:
+    # Only the host runners actually dial. Publishing the WebSocket endpoints on
+    # every ingress.hosts entry would expose the bearer-authenticated shared-daemon
+    # /ws on hosts that may sit behind different network controls.
+    {{- $origin := include "github-app.workflowRunner.orchestratorOrigin" . }}
+    {{- if not (hasPrefix "wss://" $origin) }}
+    {{- fail (printf "workflowRunner.ingress.enabled is true but config.ephemeralDaemon.orchestratorPublicUrl=%q is plaintext, so runners dial the orchestrator Service in-cluster and never traverse an Ingress. This one would publish the WebSocket endpoints on the release host for nothing. Set workflowRunner.ingress.enabled=false." .Values.config.ephemeralDaemon.orchestratorPublicUrl) }}
+    {{- end }}
+    {{- $authority := $origin | trimPrefix "wss://" }}
+    {{- $wsHost := $authority | splitList ":" | first }}
+    {{- if ne $authority $wsHost }}
+    {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl carries an explicit port (%q) but an Ingress only ever serves 443, so runners would dial a port nothing publishes. Drop the port, or leave workflowRunner.ingress.enabled=false and terminate TLS on that port yourself." $authority) }}
+    {{- end }}
+    {{- $ingressHosts := list }}
+    {{- range .Values.ingress.hosts }}{{- $ingressHosts = append $ingressHosts (lower .host) }}{{- end }}
+    {{- if not (has $wsHost $ingressHosts) }}
+    {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl host %q is not in ingress.hosts, so this Ingress would leave the host runners dial unrouted. Add it to ingress.hosts, or leave workflowRunner.ingress.enabled=false and terminate TLS elsewhere." $wsHost) }}
+    {{- end }}
+    {{- /* Lowercased like $ingressHosts above, so both guards normalise the same
+    input identically. A wildcard entry counts as cover: *.parent matches exactly
+    one label under parent, which is how an Ingress selects the certificate, so
+    the common single-cert layout (*.example.com serving github.example.com) must
+    not be refused. It deliberately does not match a deeper name or the parent
+    itself, matching RFC 6125. */ -}}
+    {{- $tlsHosts := list }}
+    {{- range .Values.ingress.tls }}{{- range .hosts }}{{- $tlsHosts = append $tlsHosts (lower .) }}{{- end }}{{- end }}
+    {{- $wsParent := $wsHost | splitList "." | rest | join "." }}
+    {{- $tlsCovered := or (has $wsHost $tlsHosts) (and $wsParent (has (printf "*.%s" $wsParent) $tlsHosts)) }}
+    {{- if not $tlsCovered }}
+    {{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl host %q is covered by no ingress.tls entry, so the front door would present a default certificate and every runner would fail the TLS handshake. An entry matching the host exactly, or the wildcard %q, satisfies this." $wsHost (printf "*.%s" $wsParent)) }}
+    {{- end }}
+    {{- range .Values.ingress.hosts }}
+    {{- if eq (lower .host) $wsHost }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: {{ $.Values.workflowRunner.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "github-app.fullname" $ }}
+                port:
+                  number: {{ $.Values.config.wsPort }}
+    {{- end }}
+    {{- end }}
+{{- end }}
