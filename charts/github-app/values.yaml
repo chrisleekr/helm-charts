@@ -367,7 +367,20 @@ config:
     spawnCooldownMs: 30000                      # Minimum interval between spawns. Prevents burst storms.
     spawnQueueThreshold: 3                      # Queue depth that triggers overflow spawn when persistent pool is saturated.
     namespace: ""                               # Leave empty to use the release namespace. Sets EPHEMERAL_DAEMON_NAMESPACE.
-    secretName: ""                              # Existing Secret in the ephemeral-daemon namespace that spawned Pods mount via envFrom. Leave empty to use the app default (daemon-secrets). Every key in it becomes an env var on Pods that run agent-authored code. Sets EPHEMERAL_DAEMON_SECRET_NAME.
+    # PREREQUISITE: this Secret is provisioned out-of-band, the chart never
+    # renders it. Empty here means the app default name `daemon-secrets`, which
+    # does not exist unless you create it: the spawner mounts it with a
+    # non-optional envFrom, so every spawned Pod stalls in
+    # CreateContainerConfigError until it does. Create it in the
+    # ephemeral-daemon namespace carrying DAEMON_AUTH_TOKEN (the value in the
+    # app Secret, which is <fullname>-secret when the chart generates one, or
+    # secrets.existingSecret when you supply it) plus the provider credential
+    # the daemons need: ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN with
+    # ALLOWED_OWNERS, or the Bedrock AWS_* set. Upstream forbids DATABASE_URL
+    # and VALKEY_URL here, and pointing this at the chart's own app Secret hands
+    # short-lived agent Pods the GitHub App private key. See upstream
+    # docs/operate/deployment.md "daemon-secrets Secret".
+    secretName: ""                              # Name only, not contents. Every key in the named Secret becomes an env var on Pods that run agent-authored code. Sets EPHEMERAL_DAEMON_SECRET_NAME.
     image: ""                                   # Leave empty to use the daemon image helper. Sets DAEMON_IMAGE.
     orchestratorPublicUrl: ""                   # Optional ws:// or wss:// URL ephemeral daemons dial back. Unset OK when spawned Pods can reach the in-cluster orchestrator Service.
 
