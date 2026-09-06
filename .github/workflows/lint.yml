@@ -35,6 +35,7 @@ jobs:
       omniroute: ${{ steps.filter.outputs.omniroute }}
       github_app: ${{ steps.filter.outputs.github_app }}
       binance_trading_bot: ${{ steps.filter.outputs.binance_trading_bot }}
+      sre_platform: ${{ steps.filter.outputs.sre_platform }}
       renovate: ${{ steps.filter.outputs.renovate }}
     steps:
       - name: Checkout
@@ -105,6 +106,16 @@ jobs:
             '.gitlab/ci/lint-binance-trading-bot.yml' \
             '.gitlab-ci.yml' \
             'renovate.json' \
+            '.github/workflows/lint.yml'
+          emit sre_platform \
+            'charts/sre-platform/*' \
+            'scripts/check-sre-platform-render.sh' \
+            'scripts/check-sre-platform-env-parity.sh' \
+            'scripts/check-sre-platform-env-parity.test.sh' \
+            '.github/workflows/lint-sre-platform.yml' \
+            '.github/workflows/sre-platform-sync.yml' \
+            '.gitlab/ci/lint-sre-platform.yml' \
+            '.gitlab-ci.yml' \
             '.github/workflows/lint.yml'
           emit renovate \
             'renovate.json' \
@@ -178,6 +189,14 @@ jobs:
       contents: read
     uses: ./.github/workflows/lint-binance-trading-bot.yml
 
+  sre_platform:
+    name: sre-platform
+    needs: changes
+    if: needs.changes.outputs.sre_platform == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-sre-platform.yml
+
   lint:
     # THE required status check. Keep this job id as "lint" — the ruleset pins
     # that exact context, so renaming it silently unblocks every merge.
@@ -185,7 +204,7 @@ jobs:
     # if: always() is load-bearing. Without it this job is skipped whenever a
     # dependency fails, and a skipped required check does not block the merge,
     # which turns the whole gate into a rubber stamp.
-    needs: [changes, ct_lint, renovate, omniroute, github_app, binance_trading_bot]
+    needs: [changes, ct_lint, renovate, omniroute, github_app, binance_trading_bot, sre_platform]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest

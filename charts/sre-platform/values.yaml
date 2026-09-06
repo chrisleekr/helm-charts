@@ -1,0 +1,268 @@
+# SRE Platform runs four long-lived roles from one versioned image. The chart
+# deliberately does not manage Postgres, Valkey, or an embeddings server.
+
+image:
+  repository: chrisleekr/sre-platform
+  pullPolicy: IfNotPresent
+  # Set tag and digest together for a reviewed image override. Leaving both
+  # empty uses Chart.appVersion and the automation-owned releaseDigest.
+  # A tag that already carries its own digest ("<tag>@sha256:<64 hex>") is
+  # passed through unchanged and requires digest to stay empty. That is the
+  # shape a delivery controller writes when it follows a mutable tag and
+  # records the digest it resolved.
+  tag: ""
+  digest: ""
+  # Release automation records this digest for Chart.appVersion. Kubernetes
+  # executes this content even if the human-readable release tag is replaced.
+  releaseDigest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Required. The Secret must exist before installation because the migration Job
+# is a pre-install hook. See README.md for the exact key contract.
+existingSecret: ""
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Public browser origins. Use two origins because the dashboard SPA and API both
+# own root paths. A trailing slash is accepted and removed when rendered.
+public:
+  dashboardUrl: ""
+  apiUrl: ""
+  # Optional links exposed by the unauthenticated onboarding API.
+  supportUrl: ""
+  # Configure both terms fields or leave both empty.
+  termsUrl: ""
+  termsVersion: ""
+
+auth0:
+  issuer: ""
+  audience: ""
+  domain: ""
+  clientId: ""
+  jwksUri: ""
+
+embeddings:
+  url: ""
+  dim: 1024
+
+config:
+  classifyFairnessWindowSec: 3600
+  incidentAutoArchiveDays: 7
+  recoveryMaxChecks: 3
+  manualIncidentRateLimitPerMinute: 5
+  # New workspace requests require approval unless explicitly opened or closed.
+  registrationMode: approval_required
+  # Number of trusted reverse proxies immediately in front of the API. Zero ignores
+  # forwarded addresses and rate-limits by the direct peer address.
+  trustedProxyHops: 0
+
+# Bootstrap fallback only. Platform Settings owns the active runtime after an
+# operator saves its first durable model configuration.
+llm:
+  provider: ""
+  anthropicModel: claude-opus-4-8
+  anthropicMaxTurns: 8
+  openaiModel: ""
+  openaiMaxTurns: 8
+
+# Optional non-secret SMTP fallback. The API stores an authenticated password
+# separately through Platform Settings; never put it in public chart values.
+smtp:
+  enabled: false
+  host: ""
+  port: 587
+  secure: false
+  from: ""
+  username: ""
+
+components:
+  api:
+    replicaCount: 1
+    terminationGracePeriodSeconds: 60
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  dashboard:
+    replicaCount: 1
+    terminationGracePeriodSeconds: 30
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  triageWorker:
+    replicaCount: 1
+    terminationGracePeriodSeconds: 120
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+  surfaceWorker:
+    replicaCount: 1
+    terminationGracePeriodSeconds: 60
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+migrations:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# First-run bootstrap registers one staff OIDC provider and the first platform
+# administrators. It creates no organisation or membership. The Job runs on
+# every install and upgrade while enabled, but repeated declarations are no-ops.
+# These values are public identity metadata, not credentials. Anyone who can
+# change them can control the installation's staff sign-in or operator access,
+# so review changes as access-control changes.
+bootstrap:
+  enabled: false
+  staffProvider:
+    displayName: ""
+    issuer: ""
+    browserClientId: ""
+    audience: ""
+    emailClaim: email
+    # Optional. When empty, bootstrap discovers it from the issuer.
+    jwksUri: ""
+  # A subject grants the platform-operator record immediately. An email-only
+  # entry creates a pending invitation; acceptance is a separate operation.
+  platformAdmins: []
+  # - subject: directory-subject
+  #   email: operator@example.com
+  # - email: invited@example.com
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+service:
+  api:
+    type: ClusterIP
+    port: 3000
+  dashboard:
+    type: ClusterIP
+    port: 8080
+
+ingress:
+  allowInsecure: false
+  api:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    path: /
+    pathType: Prefix
+    tls: []
+  dashboard:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    path: /
+    pathType: Prefix
+    tls: []
+
+# The application validates connector URLs before use, but DNS can change
+# between validation and fetch. This policy restricts CNI-observed egress into
+# private or metadata networks. Whether it also filters pod-localhost and
+# resident-node traffic is left to the CNI: Cilium enforces both, so reaching a
+# component on the Pod's own node is denied here like any other private address.
+networkPolicy:
+  enabled: true
+  # Set true only when an equivalent cluster-level policy selects the API and
+  # triage-worker Pods. Disabling both controls fails chart rendering.
+  acknowledgeExternalPolicy: false
+  # Reopens egress to this cluster's own API server, which the rules above deny.
+  # Needed only to run a Kubernetes connector against the cluster the platform is
+  # deployed into. Emits a CiliumNetworkPolicy, so it requires Cilium; on another
+  # CNI use privateEgress below with the node address and port from
+  # `kubectl get endpoints kubernetes -n default`, never the ClusterIP.
+  apiServerEgress:
+    enabled: false
+    port: 6443
+  dns:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: kube-system
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+  # Add narrow rules for private Postgres, Valkey, embeddings, and approved
+  # private connector endpoints. NetworkPolicy rules are additive. Name the
+  # address the CNI sees: kube-proxy rewrites a Service ClusterIP to the backing
+  # endpoint before egress is evaluated, so an ipBlock naming a ClusterIP never
+  # matches.
+  privateEgress: []
+  # - to:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: data
+  #       podSelector:
+  #         matchLabels:
+  #           app.kubernetes.io/name: postgres
+  #   ports:
+  #     - protocol: TCP
+  #       port: 5432
+# Extra environment is reserved for deployment-specific runtime integration.
+# Do not use it to replace the required Secret or fixed ROLE/PORT values.
+extraEnv: []
+extraEnvFrom: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

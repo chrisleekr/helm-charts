@@ -1,0 +1,94 @@
+{{- $root := . -}}
+{{- range $component := list
+  (dict "name" "triage-worker" "values" .Values.components.triageWorker "home" true)
+  (dict "name" "surface-worker" "values" .Values.components.surfaceWorker "home" false) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" $root "suffix" $component.name) }}
+  labels:
+    {{- include "sre-platform.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $component.name }}
+spec:
+  replicas: {{ $component.values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sre-platform.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ $component.name }}
+  template:
+    metadata:
+      annotations:
+        # Hashes the ConfigMap data only. The bootstrap-revision annotation on that
+        # same document exists to give GitOps a desired-state change without a
+        # hook, so including it here restarted every workload on a seed-only
+        # edit, which README.md states does not happen.
+        checksum/config: {{ include (print $root.Template.BasePath "/configmap.yaml") $root | fromYaml | dig "data" dict | toYaml | sha256sum }}
+        {{- with $root.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sre-platform.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $component.name }}
+        {{- with $root.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "sre-platform.serviceAccountName" $root }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $component.values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml $root.Values.podSecurityContext | nindent 8 }}
+      {{- with $root.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $component.name }}
+          image: {{ include "sre-platform.image" $root | quote }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $root.Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "sre-platform.fullname" $root }}
+            {{- with $root.Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- with $root.Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: ROLE
+              value: {{ $component.name }}
+            {{- if $component.home }}
+            - name: HOME
+              value: /tmp/sre-platform
+            {{- end }}
+            {{- range $key := list "DATABASE_URL" "APP_DATABASE_URL" "VALKEY_URL" "SECRETS_MASTER_KEY" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" $root }}
+                  key: {{ $key }}
+            {{- end }}
+            {{- if $component.home }}
+            {{- range $key := list "ANTHROPIC_API_KEY" "CLAUDE_CODE_OAUTH_TOKEN" "OPENAI_API_KEY" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" $root }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
+          resources:
+            {{- toYaml $component.values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "sre-platform.placement" $root | nindent 6 }}
+{{- end }}

@@ -1,0 +1,67 @@
+{{- if .Values.bootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "bootstrap") }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+  annotations:
+    # Weight 1 places this after the migration Job's weight 0. Helm sorts the
+    # hooks of one event by ascending weight and waits for each to finish, and
+    # this task writes to tables the migration creates.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.bootstrap.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.bootstrap.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "sre-platform.selectorLabels" . | nindent 8 }}
+        # No egress policy selects this component, so the pod is non-isolated,
+        # exactly as the migration Job is. Hook pods talk only to the database
+        # and are deliberately left out of the workload policy.
+        app.kubernetes.io/component: bootstrap
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap
+          image: {{ include "sre-platform.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: ROLE
+              value: bootstrap
+            - name: NODE_ENV
+              value: production
+            # The administrative connection only. This task writes authentication
+            # trust roots and the operator allowlist, which the runtime role cannot.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" . }}
+                  key: DATABASE_URL
+            - name: BOOTSTRAP_STAFF_PROVIDER
+              value: {{ include "sre-platform.bootstrapStaffProvider" . | quote }}
+            - name: BOOTSTRAP_PLATFORM_ADMINS
+              value: {{ include "sre-platform.bootstrapPlatformAdmins" . | quote }}
+          resources:
+            {{- toYaml .Values.bootstrap.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "sre-platform.placement" . | nindent 6 }}
+{{- end }}

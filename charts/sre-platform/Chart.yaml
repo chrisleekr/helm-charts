@@ -1,0 +1,42 @@
+apiVersion: v2
+name: sre-platform
+description: >-
+  A Helm chart for SRE Platform, an interactive incident investigation workspace
+type: application
+version: 0.1.9
+# 0.0.0 is the unpublished placeholder; sre-platform-sync.yml sets the released
+# version here, and release.yml withholds the chart while the placeholder stands.
+appVersion: "0.0.0"
+home: https://github.com/chrisleekr/sre-platform
+sources:
+  - https://github.com/chrisleekr/sre-platform
+maintainers:
+  - name: Chris Lee
+    url: https://github.com/chrisleekr
+keywords:
+  - sre
+  - incidents
+  - observability
+  - kubernetes
+annotations:
+  artifacthub.io/changes: |
+    - kind: added
+      description: "Initial chart with separate API, dashboard, triage worker, surface worker, and migration workloads."
+    - kind: changed
+      description: "Accept an image.tag that already embeds its own digest so a delivery controller can pin the image through a single Helm key."
+    - kind: fixed
+      description: "Drop the IPv4-mapped range from the egress policy. The API server rejects it, which left the whole policy unadmittable."
+    - kind: added
+      description: "Optional first-run bootstrap Job that creates the first organisation and its platform operators, which no screen in the application can create."
+    - kind: changed
+      description: "Bootstrap now registers the staff OIDC provider and initial platform administrators without creating an organisation or membership."
+    - kind: fixed
+      description: "Expose enabled bootstrap declarations as an opaque ConfigMap revision so GitOps controllers run PreSync hooks for bootstrap-only changes."
+    - kind: added
+      description: "Configure workspace registration policy and the exact number of trusted reverse-proxy hops."
+    - kind: added
+      description: "Optional networkPolicy.apiServerEgress that reopens egress to the cluster's own API server on Cilium, which the egress policy otherwise denies."
+    - kind: added
+      description: "Optional support and terms metadata for the public onboarding experience, plus closed workspace registration mode."
+    - kind: added
+      description: "Optional non-secret SMTP fallback values for the durable notification inbox email channel."

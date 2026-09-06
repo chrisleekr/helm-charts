@@ -1,0 +1,37 @@
+# TLS ingress branch for the permanent render gate. Not for production use.
+existingSecret: sre-platform-ci
+
+public:
+  dashboardUrl: https://sre.example.com
+  apiUrl: https://api.sre.example.com
+
+auth0:
+  issuer: https://tenant.example.auth0.com/
+  audience: https://api.sre.example.com/
+  domain: tenant.example.auth0.com
+  clientId: ci-public-client-id
+  jwksUri: https://tenant.example.auth0.com/.well-known/jwks.json
+
+embeddings:
+  url: http://embeddings.default.svc.cluster.local:8080
+
+llm:
+  provider: claude
+
+ingress:
+  api:
+    enabled: true
+    className: nginx
+    host: api.sre.example.com
+    tls:
+      - secretName: api-sre-example-tls
+        hosts:
+          - api.sre.example.com
+  dashboard:
+    enabled: true
+    className: nginx
+    host: sre.example.com
+    tls:
+      - secretName: sre-example-tls
+        hosts:
+          - sre.example.com

@@ -1,0 +1,32 @@
+# Render-only chart-testing values. Every identifier and credential is a fixture.
+existingSecret: sre-platform-ci
+
+public:
+  dashboardUrl: https://sre.example.com
+  apiUrl: https://api.sre.example.com
+
+auth0:
+  issuer: https://tenant.example.auth0.com/
+  audience: https://api.sre.example.com/
+  domain: tenant.example.auth0.com
+  clientId: ci-public-client-id
+  jwksUri: https://tenant.example.auth0.com/.well-known/jwks.json
+
+embeddings:
+  url: http://embeddings.default.svc.cluster.local:8080
+
+llm:
+  provider: claude
+
+networkPolicy:
+  privateEgress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ai
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: embeddings-ci
+      ports:
+        - protocol: TCP
+          port: 8080

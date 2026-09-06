@@ -1,0 +1,36 @@
+SRE Platform is configured for these public origins:
+
+  Dashboard: {{ include "sre-platform.dashboardUrl" . }}
+  API:       {{ include "sre-platform.apiUrl" . }}
+
+The release uses the pre-existing Secret "{{ include "sre-platform.secretName" . }}".
+Helm does not create, display, or rotate that Secret.
+
+{{- if .Values.ingress.dashboard.enabled }}
+Dashboard ingress: https://{{ .Values.ingress.dashboard.host }}{{ .Values.ingress.dashboard.path }}
+{{- else }}
+Dashboard ingress is disabled. Route {{ include "sre-platform.dashboardUrl" . }} to Service
+{{ include "sre-platform.componentName" (dict "ctx" . "suffix" "dashboard") }}:{{ .Values.service.dashboard.port }}.
+{{- end }}
+
+{{- if .Values.ingress.api.enabled }}
+API ingress: https://{{ .Values.ingress.api.host }}{{ .Values.ingress.api.path }}
+{{- else }}
+API ingress is disabled. Route {{ include "sre-platform.apiUrl" . }} to Service
+{{ include "sre-platform.componentName" (dict "ctx" . "suffix" "api") }}:{{ .Values.service.api.port }}.
+{{- end }}
+
+{{ if .Values.bootstrap.enabled -}}
+First-run bootstrap is ENABLED. This release registers the staff identity
+provider and creates grants or pending invitations for every entry in
+bootstrap.platformAdmins. It creates no organisation or membership and does
+not give an identity access to tenant-scoped routes without a membership.
+Review changes to these values as access-control changes.
+{{- else -}}
+First-run bootstrap is disabled. A fresh installation needs a staff identity
+provider and at least one platform administrator record. See the chart's
+"First-run bootstrap" section before allowing staff sign-in.
+{{- end }}
+
+After the workloads are ready, sign in with Auth0 and set the active investigator
+model and credentials from Platform Settings.

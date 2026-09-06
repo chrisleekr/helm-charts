@@ -39,6 +39,17 @@ publish-devel:
       for name in $changed; do
         # A deleted chart still shows in the diff.
         [ -f "charts/$name/Chart.yaml" ] || continue
+        # Same rule as the "Withhold placeholder-appVersion charts" step in
+        # .github/workflows/release.yml. devel is a prerelease channel, but a
+        # chart whose appVersion is still the 0.0.0 bootstrap placeholder points
+        # at an image tag that does not exist, so it is uninstallable on either
+        # host. Its <name>-sync workflow replaces the placeholder on the first
+        # public release and publishing resumes.
+        appversion=$(yq e '.appVersion' "charts/$name/Chart.yaml" | tr -d '"')
+        if [ "$appversion" = "0.0.0" ]; then
+          echo "withholding $name from devel: appVersion is the 0.0.0 placeholder"
+          continue
+        fi
         version=$(yq e '.version' "charts/$name/Chart.yaml")
         # helm names the archive after Chart.yaml .name, not after the
         # directory. They match today; reading both keeps the curl --form path

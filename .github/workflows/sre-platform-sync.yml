@@ -1,0 +1,163 @@
+# Keeps charts/sre-platform aligned with stable public SRE Platform releases.
+# A daily public-release poll is the backstop. repository_dispatch provides an
+# immediate path once the application release workflow sends it.
+name: Sync sre-platform release
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  repository_dispatch:
+    types: [sre-platform-released]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SRE Platform version without a leading v. Blank = latest release."
+        required: false
+
+concurrency:
+  group: sync-sre-platform
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    if: github.event_name == 'schedule' || github.actor == 'chrisleekr'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout helm-charts
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          persist-credentials: false
+
+      - name: Resolve and verify release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_VERSION: ${{ github.event.inputs.version || github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          version="${FORCE_VERSION:-$(gh api repos/chrisleekr/sre-platform/releases/latest --jq .tag_name | sed 's/^v//')}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::resolved version '$version' is not plain x.y.z"
+            exit 1
+          fi
+          release_tag=$(gh api "repos/chrisleekr/sre-platform/releases/tags/v$version" \
+            --jq 'select(.draft == false and .prerelease == false) | .tag_name')
+          if [ "$release_tag" != "v$version" ]; then
+            echo "::error::v$version is not a published stable SRE Platform release"
+            exit 1
+          fi
+
+          current=$(yq '.appVersion' charts/sre-platform/Chart.yaml | tr -d '"')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          if [ "$version" = "$current" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "chart already targets $version"
+            exit 0
+          fi
+          branch="chore/sre-platform-$version"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            open_prs=$(gh pr list --repo chrisleekr/helm-charts --head "$branch" --state open --json number --jq length)
+            if [ "$open_prs" -gt 0 ]; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "sync pull request already exists"
+              exit 0
+            fi
+            echo "::error::branch $branch exists without an open pull request; recover or remove it before retrying"
+            exit 1
+          fi
+
+          # Never open a chart PR before the versioned public image is pullable.
+          # The sre-platform-released dispatch fires at GitHub-release time, so the
+          # Docker Hub tag can legitimately lag it. That is a deferral, not a
+          # failure: --fail would end the run with a bare exit 22 and nothing would
+          # retry until the next scheduled poll. Any other status is still an error.
+          tag_url="https://hub.docker.com/v2/repositories/chrisleekr/sre-platform/tags/$version"
+          tag_body=$(mktemp)
+          tag_http=$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors \
+            -o "$tag_body" -w '%{http_code}' "$tag_url" || echo 000)
+          if [ "$tag_http" = 404 ]; then
+            echo "::notice::Docker Hub has no $version tag yet; deferring to the next scheduled poll"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$tag_http" != 200 ]; then
+            echo "::error::Docker Hub tag lookup for $version returned HTTP $tag_http"
+            exit 1
+          fi
+          digest=$(jq -r '.digest // empty' <"$tag_body")
+          if ! [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::Docker Hub did not return a valid OCI manifest digest for $version"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bump chart and changelog
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          IMAGE_DIGEST: ${{ steps.plan.outputs.digest }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          chart=charts/sre-platform/Chart.yaml
+          values=charts/sre-platform/values.yaml
+          current_chart=$(yq '.version' "$chart" | tr -d '"')
+          IFS=. read -r major minor patch <<<"$current_chart"
+          next_chart="$major.$minor.$((patch + 1))"
+          VERSION="$VERSION" NEXT_CHART="$next_chart" yq -i \
+            '.appVersion = strenv(VERSION) | .version = strenv(NEXT_CHART)' "$chart"
+          # Rewritten with sed, not yq: mikefarah yq preserves comments but drops
+          # blank lines between nodes, and values.yaml has 20 of them, so `yq -i`
+          # turned this one-line change into ~20 unrelated deletions and flattened
+          # the block separation permanently. Chart.yaml above has none, which is
+          # why the same pattern is safe there. The result is read back with yq so
+          # a failed substitution cannot pass as success.
+          sed -i -E "s|^(  releaseDigest: ).*|\\1\"$IMAGE_DIGEST\"|" "$values"
+          if [ "$(yq '.image.releaseDigest' "$values" | tr -d '\"')" != "$IMAGE_DIGEST" ]; then
+            echo "::error::failed to set image.releaseDigest in $values"
+            exit 1
+          fi
+          if [ "$(git diff --numstat -- "$values" | awk '{print $1+$2}')" != 2 ]; then
+            echo "::error::$values changed by more than the releaseDigest line"
+            git diff -- "$values"
+            exit 1
+          fi
+
+          description="Sync to SRE Platform $VERSION. Release notes: https://github.com/chrisleekr/sre-platform/releases/tag/v$VERSION"
+          DESCRIPTION="$description" yq -i \
+            '.annotations."artifacthub.io/changes" = "- kind: changed\n  description: \"" + strenv(DESCRIPTION) + "\"\n" + .annotations."artifacthub.io/changes"' \
+            "$chart"
+          yq -e '.annotations."artifacthub.io/changes" | from_yaml | .[0].kind == "changed"' "$chart" >/dev/null
+
+          git config user.name "chrisleekr-bot"
+          git config user.email "chrisleekr-bot@users.noreply.github.com"
+          git checkout -b "chore/sre-platform-$VERSION"
+          git add "$chart" "$values"
+          git commit -m "chore(sre-platform): sync chart to $VERSION"
+
+      - name: Push and open pull request
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          CURRENT: ${{ steps.plan.outputs.current }}
+        run: |
+          set -euo pipefail
+          branch="chore/sre-platform-$VERSION"
+          git push "https://x-access-token:${RELEASE_TOKEN}@github.com/chrisleekr/helm-charts.git" \
+            "HEAD:refs/heads/$branch"
+          gh pr create \
+            --repo chrisleekr/helm-charts \
+            --head "$branch" \
+            --base main \
+            --title "chore(sre-platform): sync chart to $VERSION" \
+            --body "Updates the chart from SRE Platform $CURRENT to $VERSION after verifying the versioned public Docker Hub tag and pinning its OCI manifest digest. Chart lint, render, and environment-parity gates remain authoritative."

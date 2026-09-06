@@ -1,0 +1,69 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "egress") }}
+  labels:
+    {{- include "sre-platform.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "sre-platform.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - api
+          - triage-worker
+  policyTypes:
+    - Egress
+  egress:
+    # DNS is selected by Pod identity rather than admitting the whole private
+    # address range that contains the cluster DNS Service.
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Public egress remains available for model providers, Slack, Auth0, and
+    # tenant connectors. The CIDRs below are excluded from CNI-observed egress;
+    # Kubernetes still exempts pod-localhost and resident-node traffic.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::/128
+              - ::1/128
+              # ::ffff:0:0/96, the IPv4-mapped range, is deliberately absent.
+              # KEP-4858 made the API server reject an IPv4-mapped IPv6 address
+              # in ipBlock.cidr and ipBlock.except, so naming it here makes the
+              # whole NetworkPolicy unadmittable and the workloads end up with no
+              # egress restriction at all. Traffic to ::ffff:10.0.0.1 is IPv4
+              # traffic and is already covered by the IPv4 exceptions above.
+              - 64:ff9b::/96
+              # 6to4 and Teredo both carry IPv6 to an IPv4 endpoint, so leaving
+              # either open reaches addresses the IPv4 except list above denies.
+              - 2002::/16
+              - 2001::/32
+              - fc00::/7
+              - fe80::/10
+              - fec0::/10
+    {{- with .Values.networkPolicy.privateEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
