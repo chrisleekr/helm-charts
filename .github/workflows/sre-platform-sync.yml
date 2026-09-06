@@ -75,9 +75,24 @@ jobs:
           fi
 
           # Never open a chart PR before the versioned public image is pullable.
+          # The sre-platform-released dispatch fires at GitHub-release time, so the
+          # Docker Hub tag can legitimately lag it. That is a deferral, not a
+          # failure: --fail would end the run with a bare exit 22 and nothing would
+          # retry until the next scheduled poll. Any other status is still an error.
           tag_url="https://hub.docker.com/v2/repositories/chrisleekr/sre-platform/tags/$version"
-          tag_json=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$tag_url")
-          digest=$(jq -r '.digest // empty' <<<"$tag_json")
+          tag_body=$(mktemp)
+          tag_http=$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors \
+            -o "$tag_body" -w '%{http_code}' "$tag_url" || echo 000)
+          if [ "$tag_http" = 404 ]; then
+            echo "::notice::Docker Hub has no $version tag yet; deferring to the next scheduled poll"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$tag_http" != 200 ]; then
+            echo "::error::Docker Hub tag lookup for $version returned HTTP $tag_http"
+            exit 1
+          fi
+          digest=$(jq -r '.digest // empty' <"$tag_body")
           if ! [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
             echo "::error::Docker Hub did not return a valid OCI manifest digest for $version"
             exit 1
@@ -99,8 +114,22 @@ jobs:
           next_chart="$major.$minor.$((patch + 1))"
           VERSION="$VERSION" NEXT_CHART="$next_chart" yq -i \
             '.appVersion = strenv(VERSION) | .version = strenv(NEXT_CHART)' "$chart"
-          IMAGE_DIGEST="$IMAGE_DIGEST" yq -i \
-            '.image.releaseDigest = strenv(IMAGE_DIGEST)' "$values"
+          # Rewritten with sed, not yq: mikefarah yq preserves comments but drops
+          # blank lines between nodes, and values.yaml has 20 of them, so `yq -i`
+          # turned this one-line change into ~20 unrelated deletions and flattened
+          # the block separation permanently. Chart.yaml above has none, which is
+          # why the same pattern is safe there. The result is read back with yq so
+          # a failed substitution cannot pass as success.
+          sed -i -E "s|^(  releaseDigest: ).*|\\1\"$IMAGE_DIGEST\"|" "$values"
+          if [ "$(yq '.image.releaseDigest' "$values" | tr -d '\"')" != "$IMAGE_DIGEST" ]; then
+            echo "::error::failed to set image.releaseDigest in $values"
+            exit 1
+          fi
+          if [ "$(git diff --numstat -- "$values" | awk '{print $1+$2}')" != 2 ]; then
+            echo "::error::$values changed by more than the releaseDigest line"
+            git diff -- "$values"
+            exit 1
+          fi
 
           description="Sync to SRE Platform $VERSION. Release notes: https://github.com/chrisleekr/sre-platform/releases/tag/v$VERSION"
           DESCRIPTION="$description" yq -i \

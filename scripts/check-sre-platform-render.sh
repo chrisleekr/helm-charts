@@ -446,6 +446,37 @@ if helm template sre "$chart" -f "$ci/ingress-values.yaml" --set public.apiUrl=h
 else
   want "$tmp/host.err" 'ingress.api.host must match' "ingress/public API host mismatch fails clearly"
 fi
+
+# An Ingress rules[].host is a DNS name, so an IP literal in the public URL
+# applies cleanly and is then refused by the API server. The bracketed IPv6 case
+# is here because a naive ":" split truncates "[2001:db8::10]" to "[2001".
+ip_ingress() { # <field> <url> <host>
+  helm template sre "$chart" -f "$ci/ingress-values.yaml" \
+    --set-string "public.$1=$2" \
+    --set-string "ingress.$3.host=$4" \
+    --set-string "ingress.$3.tls[0].secretName=ci-tls" \
+    --set-string "ingress.$3.tls[0].hosts[0]=$4"
+}
+for ip_case in "apiUrl https://192.0.2.10 api 192.0.2.10" \
+  "apiUrl https://[2001:db8::10] api [2001:db8::10]" \
+  "dashboardUrl https://198.51.100.7 dashboard 198.51.100.7"; do
+  # shellcheck disable=SC2086
+  set -- $ip_case
+  if ip_ingress "$1" "$2" "$3" "$4" >/dev/null 2>"$tmp/ip-host.err"; then
+    bad "IP literal in public.$1 with ingress.$3 enabled must fail"
+  else
+    # want() greps as an ERE, so the brackets of an IPv6 literal need escaping.
+    escaped=${4//./\\.}
+    escaped=${escaped//[/\\[}
+    escaped=${escaped//]/\\]}
+    want "$tmp/ip-host.err" "resolves to the IP address \"$escaped\"" \
+      "IP literal in public.$1 fails clearly"
+  fi
+done
+helm template sre "$chart" -f "$ci/ingress-values.yaml" \
+  --set-string public.apiUrl=https://api.sre.example.com:8443 >"$tmp/host-port.yaml"
+want "$tmp/host-port.yaml" '^    - host: "api.sre.example.com"$' \
+  "a port in the public URL is stripped from the ingress host"
 if helm template sre "$chart" -f "$ci/ct-values.yaml" --set embeddings.dim=1024.5 >/dev/null 2>"$tmp/dim.err"; then
   bad "wrong embedding dimension must fail"
 else

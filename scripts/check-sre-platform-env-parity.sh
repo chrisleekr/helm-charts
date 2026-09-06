@@ -84,10 +84,22 @@ render_chart_env "$chart" "$tmp/render.yaml"
 # keys, so this also sees credentials that are not string literals in templates.
 chart_keys=$(chart_env_keys "$tmp/render.yaml")
 contract_keys=$(jq -r '.[].env' "$contract_file" | sort -u)
-# `|| true` because grep exits 1 when the file holds only comments and blank
-# lines. Under pipefail that killed the assignment and set -e ended the run before
-# any comparison, so the job failed with no output at all.
-ignore=$(grep -vE '^[[:space:]]*(#|$)' "$chart/.env-contract-ignore" | tr -d ' ' | sort -u || true)
+ignore_file="$chart/.env-contract-ignore"
+if [ ! -r "$ignore_file" ]; then
+  echo "ERROR: $ignore_file is missing or unreadable" >&2
+  exit 1
+fi
+# grep exits 1 when the file holds only comments and blank lines, which is a valid
+# empty ignore list; under pipefail that killed the assignment and set -e ended the
+# run before any comparison, with no output at all. Only that status is tolerated:
+# a blanket `|| true` would let an unreadable file pass as "nothing is ignored",
+# which silently turns every ignored key into a gate the chart no longer has.
+ignore_status=0
+ignore=$(grep -vE '^[[:space:]]*(#|$)' "$ignore_file" | tr -d ' ' | sort -u) || ignore_status=$?
+if [ "$ignore_status" -gt 1 ]; then
+  echo "ERROR: reading $ignore_file failed with status $ignore_status" >&2
+  exit 1
+fi
 
 fail=0
 for key in $chart_keys; do

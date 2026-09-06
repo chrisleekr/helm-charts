@@ -4,7 +4,8 @@ description: >-
   A Helm chart for SRE Platform, an interactive incident investigation workspace
 type: application
 version: 0.1.9
-# The first public release will replace 0.0.0 before this chart is published.
+# 0.0.0 is the unpublished placeholder; sre-platform-sync.yml sets the released
+# version here, and release.yml withholds the chart while the placeholder stands.
 appVersion: "0.0.0"
 home: https://github.com/chrisleekr/sre-platform
 sources:

@@ -335,12 +335,7 @@ the invitation side already does. */ -}}
 {{- if .Values.ingress.api.enabled -}}
 {{- required "ingress.api.host is required when the API ingress is enabled." .Values.ingress.api.host -}}
 {{- $apiUrl := include "sre-platform.apiUrl" . -}}
-{{- /* Port stripped before comparing: public.apiUrl may carry one, while an
-Ingress rules[].host is a DNS name the API server rejects with a port attached.
-Comparing the authority instead refused a valid non-default-port deployment, and
-"fixing" that by putting the port in ingress.api.host rendered an Ingress the
-API server will not admit. */ -}}
-{{- $apiHost := regexReplaceAll "^https?://" $apiUrl "" | splitList ":" | first -}}
+{{- $apiHost := include "sre-platform.ingressHost" (dict "url" $apiUrl "field" "public.apiUrl" "ingress" "ingress.api") -}}
 {{- if ne $apiHost .Values.ingress.api.host -}}
 {{- fail (printf "ingress.api.host must match the host in public.apiUrl (%q). A port in public.apiUrl is ignored for this comparison, because an Ingress host cannot carry one." $apiHost) -}}
 {{- end -}}
@@ -351,7 +346,7 @@ API server will not admit. */ -}}
 {{- if .Values.ingress.dashboard.enabled -}}
 {{- required "ingress.dashboard.host is required when the dashboard ingress is enabled." .Values.ingress.dashboard.host -}}
 {{- $dashboardUrl := include "sre-platform.dashboardUrl" . -}}
-{{- $dashboardHost := regexReplaceAll "^https?://" $dashboardUrl "" | splitList ":" | first -}}
+{{- $dashboardHost := include "sre-platform.ingressHost" (dict "url" $dashboardUrl "field" "public.dashboardUrl" "ingress" "ingress.dashboard") -}}
 {{- if ne $dashboardHost .Values.ingress.dashboard.host -}}
 {{- fail (printf "ingress.dashboard.host must match the host in public.dashboardUrl (%q). A port in public.dashboardUrl is ignored for this comparison, because an Ingress host cannot carry one." $dashboardHost) -}}
 {{- end -}}
@@ -378,4 +373,29 @@ tolerations:
 topologySpreadConstraints:
   {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- end }}
+
+{{/*
+Host an Ingress may carry, taken from a public URL.
+
+An Ingress rules[].host is a DNS name: the API server rejects a port, and rejects
+an IP address outright. The public URL is allowed to be neither, so the port is
+stripped and an IP literal is refused here rather than at apply time. A bracketed
+IPv6 authority is matched whole first, because splitting it on ":" would truncate
+[2001:db8::10] to "[2001" and then compare that.
+
+Args (dict): url, field (the values path named in the error), ingress.
+*/}}
+{{- define "sre-platform.ingressHost" -}}
+{{- $authority := regexReplaceAll "^https?://" .url "" -}}
+{{- $host := "" -}}
+{{- if hasPrefix "[" $authority -}}
+{{- $host = regexFind "^\\[[^]]*\\]" $authority -}}
+{{- else -}}
+{{- $host = $authority | splitList ":" | first -}}
+{{- end -}}
+{{- if or (hasPrefix "[" $host) (regexMatch "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$" $host) -}}
+{{- fail (printf "%s resolves to the IP address %q, but %s is enabled and an Ingress rules[].host must be a DNS name. Kubernetes rejects an IP there, so this would apply cleanly in Helm and then be refused by the API server. Use a hostname, or disable that ingress and route to the Service yourself." .field $host .ingress) -}}
+{{- end -}}
+{{- $host -}}
 {{- end }}
