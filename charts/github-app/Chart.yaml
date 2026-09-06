@@ -13,12 +13,12 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.21.0
+version: 0.21.1
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.17.1"
+appVersion: "1.17.2"
 kubeVersion: ">= 1.31.0"
 maintainers:
   - name: Chris Lee
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: security
+      description: "Sync to github-app v1.17.2: **ci:** parse bun audit's real JSON shape and escape annotations (#299); **deps:** bump Bun to 1.4.1 and pin transitive CVE overrides (#298); **orchestrator:** extend runner startup lease while kubelet makes progress (#300). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.2"
     - kind: security
       description: "Reject a controller-Secret/app-Secret name collision from either direction. The guard previously only fired when `secrets.existingControllerSecret` named the app Secret; pointing `secrets.existingSecret` at the chart-managed `<fullname>-controller-secret` name reached the same collision unchecked, and because the app Secret is envFrom-mounted on every daemon pool, that rendered the workflow-runner capability signing root onto workers running agent-authored code. Both names are now resolved and compared unconditionally in `github-app.controllerSecretName`."
     - kind: security
