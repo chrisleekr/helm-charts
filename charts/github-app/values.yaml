@@ -61,6 +61,20 @@ workflowRunner:
     create: true                                # Role + RoleBinding in .namespace for the controller ServiceAccount.
   providerCredentials: []                       # Secret key names the runner may mount. Empty derives them from the inline secrets.*; required with secrets.existingSecret, which hides them.
   imagePullSecret: ""                           # Name of an existing dockerconfigjson Secret in .namespace that runner Pods may reference. The boundary pins it, so empty forbids every pull secret.
+  # Resource quantities for each per-attempt runner Pod. The boundary pins all six
+  # (isQuantity on the params, compareTo against the Pod's requests/limits and the
+  # workspace emptyDir sizeLimit), so they cannot be left to the app's compiled
+  # defaults: the chart has to name the value it writes into both halves. These
+  # repeat the app defaults at appVersion, and the controller env always carries
+  # them here, so the app never consults its own default and the two cannot drift.
+  # Only canonical spellings pass app startup validation: CPU as whole cores or
+  # millicores, memory and storage as Mi or Gi. Each request must be <= its limit.
+  cpuRequest: "500m"
+  memoryRequest: "1Gi"
+  storageRequest: "2Gi"
+  cpuLimit: "2"                                 # Exceeding throttles the runner rather than killing it.
+  memoryLimit: "4Gi"                            # Exceeding OOMKills the runner mid-attempt.
+  storageLimit: "10Gi"                          # Also the workspace emptyDir sizeLimit the boundary asserts.
   # Holds the daemon image warm in each runner node's container store. An attempt's
   # startup lease is claimed before its Pod exists, so a cold pull is charged to a
   # lease nothing can renew until the runner registers. The app extends that lease
@@ -490,6 +504,20 @@ config:
     nodeLabel: ""                               # Node label key the runner Pod's nodeSelector and NoSchedule toleration are both built from. Empty → app default (github-app.node-restriction.kubernetes.io/workflow-runner). Sets WORKFLOW_RUNNER_NODE_LABEL.
     nodeValue: ""                               # Value paired with nodeLabel. Empty → app default (true). Sets WORKFLOW_RUNNER_NODE_VALUE.
     imagePullSecret: ""                         # Name of an existing kubernetes.io/dockerconfigjson Secret in the runner namespace that runner Pods may reference. Empty emits no imagePullSecrets (anonymous-pull registries only). Sets WORKFLOW_RUNNER_IMAGE_PULL_SECRET.
+    # Kubernetes resource quantities for each per-attempt runner Pod. The app
+    # accepts only canonical spellings: CPU as whole cores or millicores (2,
+    # 500m); memory and storage as Mi or Gi (512Mi, 8Gi). Non-canonical forms
+    # (4G, 1.5, 512Ki, 8192Mi, 2000m, 1000) and a request above its matching
+    # limit are rejected at startup naming the variable. Empty inherits the app
+    # default. Same class as the four keys above: the runner admission boundary
+    # pins all six, so with workflowRunner.enabled=true these are refused when
+    # they disagree with the workflowRunner.* provisioning half.
+    cpuRequest: ""                              # CPU the runner Pod reserves. Empty → app default (500m). Sets WORKFLOW_RUNNER_CPU_REQUEST.
+    memoryRequest: ""                           # Memory the runner Pod reserves. Empty → app default (1Gi). Sets WORKFLOW_RUNNER_MEMORY_REQUEST.
+    storageRequest: ""                          # Ephemeral storage the runner Pod reserves. Empty → app default (2Gi). Sets WORKFLOW_RUNNER_STORAGE_REQUEST.
+    cpuLimit: ""                                # CPU ceiling; exceeding throttles the runner rather than killing it. Empty → app default (2). Must be >= cpuRequest. Sets WORKFLOW_RUNNER_CPU_LIMIT.
+    memoryLimit: ""                             # Memory ceiling; exceeding OOMKills the runner mid-attempt. Empty → app default (4Gi). Must be >= memoryRequest. Sets WORKFLOW_RUNNER_MEMORY_LIMIT.
+    storageLimit: ""                            # Ephemeral storage ceiling, and the workspace emptyDir sizeLimit. Empty → app default (10Gi). Must be >= storageRequest. Sets WORKFLOW_RUNNER_STORAGE_LIMIT.
 
   # --- 9. Triage (binary heavy classifier) ---
   triageEnabled: true                           # Kill-switch for the triage LLM call.

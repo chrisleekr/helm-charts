@@ -202,8 +202,8 @@ for forbidden in "$controller_secret" "$shared_secret"; do
   fi
 done
 
-# 11. Isolated workflow runners. The boundary ConfigMap must carry exactly the 13
-#     keys the policy asserts with size(params.data) == 13, and runnerImage must
+# 11. Isolated workflow runners. The boundary ConfigMap must carry exactly the 19
+#     keys the policy asserts with size(params.data) == 19, and runnerImage must
 #     equal the controller's DAEMON_IMAGE: a mismatch denies every runner Pod at
 #     admission time, which no amount of template validity would reveal.
 helm template contract "$chart" --values "$chart/ci/workflow-runner-values.yaml" > "$tmp/runners.yaml"
@@ -222,8 +222,8 @@ runner_ns=$(yq ea -r \
 binding_ns=$(yq ea -r \
   'select(.kind == "ValidatingAdmissionPolicyBinding") | .spec.paramRef.namespace' \
   "$tmp/runners.yaml")
-if [ "$boundary_keys" != "13" ]; then
-  echo "::error file=charts/github-app/templates/workflow-runner-boundary.yaml::boundary ConfigMap has $boundary_keys data keys; the policy asserts size(params.data) == 13 and denies every runner Pod otherwise" >&2
+if [ "$boundary_keys" != "19" ]; then
+  echo "::error file=charts/github-app/templates/workflow-runner-boundary.yaml::boundary ConfigMap has $boundary_keys data keys; the policy asserts size(params.data) == 19 and denies every runner Pod otherwise" >&2
   exit 1
 fi
 if [ "$runner_image" != "$daemon_image" ]; then
@@ -244,6 +244,31 @@ controller_pull_secret=$(yq ea -r \
   "$tmp/runners.yaml")
 if [ "$boundary_pull_secret" != "$controller_pull_secret" ]; then
   echo "boundary runnerImagePullSecret ($boundary_pull_secret) does not equal WORKFLOW_RUNNER_IMAGE_PULL_SECRET ($controller_pull_secret); admission would deny every runner Pod" >&2
+  exit 1
+fi
+# Same shape for the six runner quantities added at app v1.18.0. The policy runs
+# isQuantity on each param and compareTo against the Pod's requests, limits and
+# the workspace emptyDir sizeLimit, so a boundary value that disagrees with the
+# controller env denies every runner Pod with nothing visible in `helm template`.
+boundary_quantities=$(yq ea -o=json -I=0 \
+  'select(.kind == "ConfigMap" and .metadata.name == "workflow-runner-boundary") |
+     [.data.runnerCpuRequest, .data.runnerMemoryRequest, .data.runnerStorageRequest,
+      .data.runnerCpuLimit, .data.runnerMemoryLimit, .data.runnerStorageLimit]' \
+  "$tmp/runners.yaml")
+controller_quantities=$(yq ea -o=json -I=0 \
+  'select(.kind == "ConfigMap" and .metadata.name == "contract-github-app-config") |
+     [.data.WORKFLOW_RUNNER_CPU_REQUEST, .data.WORKFLOW_RUNNER_MEMORY_REQUEST,
+      .data.WORKFLOW_RUNNER_STORAGE_REQUEST, .data.WORKFLOW_RUNNER_CPU_LIMIT,
+      .data.WORKFLOW_RUNNER_MEMORY_LIMIT, .data.WORKFLOW_RUNNER_STORAGE_LIMIT]' \
+  "$tmp/runners.yaml")
+if [ "$boundary_quantities" != "$controller_quantities" ]; then
+  echo "boundary runner quantities $boundary_quantities do not equal the controller env $controller_quantities; admission would deny every runner Pod" >&2
+  exit 1
+fi
+# Equality above also holds when both halves render null. The boundary params must
+# carry real quantities, or isQuantity fails the params validation on every Pod.
+if printf '%s' "$boundary_quantities" | grep -q 'null\|""'; then
+  echo "boundary runner quantities $boundary_quantities contain an empty value; isQuantity would deny every runner Pod" >&2
   exit 1
 fi
 # A runner dials the wss:// front door, not the orchestrator Pod. When that host is
@@ -605,14 +630,22 @@ refuses configmap.yaml "conflicts with workflowRunner.nodeValue" \
   --set config.workflowRunner.nodeValue=definitely-not-true
 refuses configmap.yaml "conflicts with workflowRunner.imagePullSecret" \
   --set config.workflowRunner.imagePullSecret=some-other-registry-credentials
+#     The six quantities added at app v1.18.0 joined that class: the boundary pins
+#     them, so a passthrough override is the same deny-all trap.
+refuses configmap.yaml "conflicts with workflowRunner.memoryLimit" \
+  --set config.workflowRunner.memoryLimit=8Gi
+#     Emptying the provisioning half is the other way to reach a deny-all: the
+#     boundary would render a param isQuantity rejects.
+refuses workflow-runner-boundary.yaml "workflowRunner.cpuRequest must not be empty" \
+  --set workflowRunner.cpuRequest=
 # Equal values are not a disagreement; the guard must not be unconditionally strict.
 helm template contract "$chart" "${runner_on[@]}" \
   --set config.workflowRunner.imagePullSecret=runner-registry-credentials > /dev/null
 
-#     With the rail off, those four keys are the operator's way to point the
+#     With the rail off, those ten keys are the operator's way to point the
 #     controller at a rail they provisioned themselves. Empty must render nothing,
 #     so the app keeps ownership of its own defaults.
-if grep -qE '^\s+WORKFLOW_RUNNER_(NAMESPACE|NODE_LABEL|NODE_VALUE|IMAGE_PULL_SECRET):' "$tmp/default.yaml"; then
+if grep -qE '^\s+WORKFLOW_RUNNER_(NAMESPACE|NODE_LABEL|NODE_VALUE|IMAGE_PULL_SECRET|CPU_REQUEST|MEMORY_REQUEST|STORAGE_REQUEST|CPU_LIMIT|MEMORY_LIMIT|STORAGE_LIMIT):' "$tmp/default.yaml"; then
   echo "config.workflowRunner.* is empty but runner env still rendered; the app owns those defaults" >&2
   exit 1
 fi

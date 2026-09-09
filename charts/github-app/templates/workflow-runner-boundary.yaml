@@ -4,6 +4,11 @@
 {{- if not $c.model }}
 {{- fail "workflowRunner.admission.enabled requires config.model to be set explicitly. The boundary has to pin the model the runner will report, and the chart cannot track the app's compiled-in default without silently drifting into a deny-all." }}
 {{- end }}
+{{- range $k := list "cpuRequest" "memoryRequest" "storageRequest" "cpuLimit" "memoryLimit" "storageLimit" }}
+{{- if not (index $.Values.workflowRunner $k) }}
+{{- fail (printf "workflowRunner.%s must not be empty when workflowRunner.admission.enabled=true. The policy runs isQuantity on every runner quantity param, so an empty one denies every runner Pod at admission with nothing visible at render time." $k) }}
+{{- end }}
+{{- end }}
 {{- $bedrock := eq $c.provider "bedrock" }}
 {{- $creds := include "github-app.workflowRunner.providerCredentials" . }}
 {{- $chains := ternary (list "AWS_BEARER_TOKEN_BEDROCK" "AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY" "AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN") (list "ANTHROPIC_API_KEY" "CLAUDE_CODE_OAUTH_TOKEN") $bedrock }}
@@ -22,7 +27,7 @@ metadata:
   namespace: {{ .Values.workflowRunner.namespace }}
   labels:
     {{- include "github-app.labels" . | nindent 4 }}
-# Exactly 13 keys. The policy asserts size(params.data) == 13 and denies every
+# Exactly 19 keys. The policy asserts size(params.data) == 19 and denies every
 # runner Pod if that count changes, so nothing may be added here: no checksum
 # annotation content, no label passthrough. Metadata above is unconstrained.
 data:
@@ -51,4 +56,15 @@ data:
   # Pods are created by the controller, not rendered here, so they cannot inherit
   # the release's top-level imagePullSecrets.
   runnerImagePullSecret: {{ .Values.workflowRunner.imagePullSecret | quote }}
+  # The same values configmap.yaml writes into WORKFLOW_RUNNER_*_REQUEST/_LIMIT, so
+  # the quantities the controller stamps on the Pod and the ones the policy asserts
+  # are one source. The policy runs isQuantity on each, so an empty value here is a
+  # deny-all: configmap.yaml refuses a config.workflowRunner.* override that would
+  # change one half without the other.
+  runnerCpuRequest: {{ .Values.workflowRunner.cpuRequest | quote }}
+  runnerMemoryRequest: {{ .Values.workflowRunner.memoryRequest | quote }}
+  runnerStorageRequest: {{ .Values.workflowRunner.storageRequest | quote }}
+  runnerCpuLimit: {{ .Values.workflowRunner.cpuLimit | quote }}
+  runnerMemoryLimit: {{ .Values.workflowRunner.memoryLimit | quote }}
+  runnerStorageLimit: {{ .Values.workflowRunner.storageLimit | quote }}
 {{- end }}
