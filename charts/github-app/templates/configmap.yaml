@@ -147,6 +147,28 @@ data:
   WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $cr.imagePullSecret | quote }}
   {{- end }}
   {{- end }}
+  # Runner Pod resource quantities. Passthrough in both provisioning modes: the
+  # runner admission boundary is locked at 13 keys and never pins these, so there
+  # is no workflowRunner.* provisioning half to reconcile and no conflict to
+  # reject. Each empty value inherits the app default.
+  {{- if $cr.cpuRequest }}
+  WORKFLOW_RUNNER_CPU_REQUEST: {{ $cr.cpuRequest | quote }}
+  {{- end }}
+  {{- if $cr.memoryRequest }}
+  WORKFLOW_RUNNER_MEMORY_REQUEST: {{ $cr.memoryRequest | quote }}
+  {{- end }}
+  {{- if $cr.storageRequest }}
+  WORKFLOW_RUNNER_STORAGE_REQUEST: {{ $cr.storageRequest | quote }}
+  {{- end }}
+  {{- if $cr.cpuLimit }}
+  WORKFLOW_RUNNER_CPU_LIMIT: {{ $cr.cpuLimit | quote }}
+  {{- end }}
+  {{- if $cr.memoryLimit }}
+  WORKFLOW_RUNNER_MEMORY_LIMIT: {{ $cr.memoryLimit | quote }}
+  {{- end }}
+  {{- if $cr.storageLimit }}
+  WORKFLOW_RUNNER_STORAGE_LIMIT: {{ $cr.storageLimit | quote }}
+  {{- end }}
 
   # --- 9. Triage (binary heavy classifier) ---
   TRIAGE_ENABLED: {{ $c.triageEnabled | quote }}
