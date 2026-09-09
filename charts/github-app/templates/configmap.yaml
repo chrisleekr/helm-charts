@@ -102,7 +102,7 @@ data:
   {{- end }}
 
   # --- 8a. Isolated workflow runners (K8s-spawned per-attempt Pods) ---
-  # Two ways to reach the same four env vars, because the chart supports both
+  # Two ways to reach the same ten env vars, because the chart supports both
   # halves of the feature:
   #   workflowRunner.*        the chart provisions the rail (namespace, RBAC,
   #                           NetworkPolicy, admission policy) and must pin the
@@ -123,7 +123,7 @@ data:
   # the rail: the same .Values feed the runner boundary ConfigMap, and any
   # disagreement between controller env and the admission policy denies every
   # runner Pod. So reject a conflicting passthrough value rather than ignore it.
-  {{- range $k, $v := dict "namespace" $rn.namespace "nodeLabel" $rn.nodeLabel "nodeValue" $rn.nodeValue "imagePullSecret" $rn.imagePullSecret }}
+  {{- range $k, $v := dict "namespace" $rn.namespace "nodeLabel" $rn.nodeLabel "nodeValue" $rn.nodeValue "imagePullSecret" $rn.imagePullSecret "cpuRequest" $rn.cpuRequest "memoryRequest" $rn.memoryRequest "storageRequest" $rn.storageRequest "cpuLimit" $rn.cpuLimit "memoryLimit" $rn.memoryLimit "storageLimit" $rn.storageLimit }}
   {{- $override := index $cr $k }}
   {{- if and $override (ne ($override | toString) ($v | toString)) }}
   {{- fail (printf "config.workflowRunner.%s=%q conflicts with workflowRunner.%s=%q. With workflowRunner.enabled=true the chart pins the admission boundary from workflowRunner.*, so a differing config.workflowRunner.* value would make the controller and the policy disagree and every runner Pod would be denied at admission. Unset one of them." $k ($override | toString) $k ($v | toString)) }}
@@ -133,6 +133,15 @@ data:
   WORKFLOW_RUNNER_NODE_LABEL: {{ $rn.nodeLabel | quote }}
   WORKFLOW_RUNNER_NODE_VALUE: {{ $rn.nodeValue | quote }}
   WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $rn.imagePullSecret | quote }}
+  # Always emitted while the chart owns the rail, never left to the app default:
+  # the boundary asserts these exact quantities, so the controller has to be told
+  # the same six values the boundary ConfigMap was rendered from.
+  WORKFLOW_RUNNER_CPU_REQUEST: {{ $rn.cpuRequest | quote }}
+  WORKFLOW_RUNNER_MEMORY_REQUEST: {{ $rn.memoryRequest | quote }}
+  WORKFLOW_RUNNER_STORAGE_REQUEST: {{ $rn.storageRequest | quote }}
+  WORKFLOW_RUNNER_CPU_LIMIT: {{ $rn.cpuLimit | quote }}
+  WORKFLOW_RUNNER_MEMORY_LIMIT: {{ $rn.memoryLimit | quote }}
+  WORKFLOW_RUNNER_STORAGE_LIMIT: {{ $rn.storageLimit | quote }}
   {{- else }}
   {{- if $cr.namespace }}
   WORKFLOW_RUNNER_NAMESPACE: {{ $cr.namespace | quote }}
@@ -146,11 +155,6 @@ data:
   {{- if $cr.imagePullSecret }}
   WORKFLOW_RUNNER_IMAGE_PULL_SECRET: {{ $cr.imagePullSecret | quote }}
   {{- end }}
-  {{- end }}
-  # Runner Pod resource quantities. Passthrough in both provisioning modes: the
-  # runner admission boundary is locked at 13 keys and never pins these, so there
-  # is no workflowRunner.* provisioning half to reconcile and no conflict to
-  # reject. Each empty value inherits the app default.
   {{- if $cr.cpuRequest }}
   WORKFLOW_RUNNER_CPU_REQUEST: {{ $cr.cpuRequest | quote }}
   {{- end }}
@@ -168,6 +172,7 @@ data:
   {{- end }}
   {{- if $cr.storageLimit }}
   WORKFLOW_RUNNER_STORAGE_LIMIT: {{ $cr.storageLimit | quote }}
+  {{- end }}
   {{- end }}
 
   # --- 9. Triage (binary heavy classifier) ---
