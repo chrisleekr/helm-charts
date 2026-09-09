@@ -13,12 +13,12 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.21.1
+version: 0.22.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.17.2"
+appVersion: "1.18.0"
 kubeVersion: ">= 1.31.0"
 maintainers:
   - name: Chris Lee
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to github-app v1.18.0: **k8s:** make workflow-runner Pod resources configurable (#305); **orchestrator:** capture runner Pod post-mortem before cleanup (#306); **workflows:** route every mention through one classifier (#307). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.18.0"
     - kind: security
       description: "Sync to github-app v1.17.2: **ci:** parse bun audit's real JSON shape and escape annotations (#299); **deps:** bump Bun to 1.4.1 and pin transitive CVE overrides (#298); **orchestrator:** extend runner startup lease while kubelet makes progress (#300). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.2"
     - kind: security
@@ -126,4 +128,3 @@ annotations:
       description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
     - kind: changed
       description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
-  artifacthub.io/containsSecurityUpdates: "true"
