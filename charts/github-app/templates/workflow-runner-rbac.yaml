@@ -23,6 +23,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["create", "get", "delete"]
+  # Read-only post-mortem. Cleanup deletes a dead runner Pod within seconds of
+  # the attempt being terminalized, taking its container log with it, so this is
+  # the controller's only window to capture why the runner died. Without it the
+  # controller still records the terminated container status and reports a 403.
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
   # Created after the Pod so its ownerReference can carry the real pod UID.
   # Replaced only to rotate a stale capability on a 409 replay; deleted on cleanup.
   - apiGroups: [""]
