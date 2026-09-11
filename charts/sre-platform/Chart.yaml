@@ -3,7 +3,7 @@ name: sre-platform
 description: >-
   A Helm chart for SRE Platform, an interactive incident investigation workspace
 type: application
-version: 0.1.9
+version: 0.1.10
 # 0.0.0 is the unpublished placeholder; sre-platform-sync.yml sets the released
 # version here, and release.yml withholds the chart while the placeholder stands.
 appVersion: "0.0.0"
@@ -20,6 +20,10 @@ keywords:
   - kubernetes
 annotations:
   artifacthub.io/changes: |
+    - kind: removed
+      description: "Remove obsolete global Auth0 values and environment variables; staff identity is configured through bootstrap."
+    - kind: fixed
+      description: "Support confidential staff bootstrap with existing Secret references and an optional browser-independent API audience."
     - kind: added
       description: "Initial chart with separate API, dashboard, triage worker, surface worker, and migration workloads."
     - kind: changed

@@ -5,13 +5,6 @@ public:
   dashboardUrl: https://sre.example.com
   apiUrl: https://api.sre.example.com
 
-auth0:
-  issuer: https://tenant.example.auth0.com/
-  audience: https://api.sre.example.com/
-  domain: tenant.example.auth0.com
-  clientId: ci-public-client-id
-  jwksUri: https://tenant.example.auth0.com/.well-known/jwks.json
-
 embeddings:
   url: http://embeddings.default.svc.cluster.local:8080
 

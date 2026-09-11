@@ -11,10 +11,10 @@ The chart runs one versioned, digest-pinned image as four Deployments: API, dash
 - A separate runtime DSN for `app_user`. The API and workers reject a superuser or `BYPASSRLS` runtime role.
 - Valkey or Redis reachable from the workloads.
 - A text-embeddings-inference compatible endpoint returning 1024-dimensional vectors.
-- An Auth0 custom API and Single Page Application.
+- An OpenID Connect application for staff sign-in, configured by bootstrap below.
 - A pre-existing Kubernetes Secret described below.
 
-PostgreSQL, Valkey, embeddings, Auth0, and their lifecycle remain operator-owned. The chart does not install or upgrade them.
+PostgreSQL, Valkey, embeddings, the identity provider, and their lifecycle remain operator-owned. The chart does not install or upgrade them.
 
 The cluster CNI must enforce Kubernetes NetworkPolicy. The chart restricts API
 and triage-worker egress to public addresses while excluding private,
@@ -40,7 +40,8 @@ Create the Secret before installing the chart. It must contain:
 | `APP_DATABASE_URL` | API, workers | Restricted `app_user` PostgreSQL DSN |
 | `APP_DB_PASSWORD` | Migration | Password applied to the `app_user` role |
 | `VALKEY_URL` | API, workers | Valkey or Redis connection URL |
-| `SECRETS_MASTER_KEY` | API, workers | Base64-encoded 32-byte AES key |
+| `SECRETS_MASTER_KEY` | API, workers, confidential bootstrap | Base64-encoded 32-byte AES key |
+| `BOOTSTRAP_STAFF_CLIENT_SECRET` | Confidential bootstrap | Staff OIDC client secret, required for `client_secret_post` or `client_secret_basic` |
 
 For an environment-only bootstrap before Platform Settings is configured, the
 same Secret may also contain `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, or
@@ -85,12 +86,6 @@ public:
   termsUrl: https://www.example.com/legal/terms
   termsVersion: "2026-09-05"
 
-auth0:
-  issuer: https://tenant.example.auth0.com/
-  audience: https://api.sre.example.com/
-  domain: tenant.example.auth0.com
-  clientId: replace-with-public-spa-client-id
-
 embeddings:
   url: http://embeddings.ai.svc.cluster.local:8080
 
@@ -129,7 +124,7 @@ ingress:
 #   trustedProxyHops: 1
 ```
 
-Add the dashboard origin to the Auth0 SPA's callback, logout, and web-origin allowlists. Use the same `auth0.audience` as the custom API identifier.
+For a fresh installation, also enable the staff bootstrap declaration below. Register the exact dashboard `/auth/callback` URL with its OIDC application. The retired global `auth0` values and `AUTH0_*` environment are no longer rendered. Remove that block from downstream values; identity provider configuration lives in the database.
 
 If TLS terminates before the Kubernetes ingress, set `ingress.allowInsecure=true`. That acknowledges the ingress objects have no local TLS section; the public URLs must still use `https://` and `wss://` is derived automatically for dashboard WebSockets. Note that redirecting plaintext HTTP to HTTPS is controller or edge policy either way: a `tls` block tells the controller which certificate to serve, not what to do with a port-80 request. nginx redirects by default; confirm the behaviour of whichever class you set on both the API and dashboard hosts.
 
@@ -171,8 +166,8 @@ bootstrap:
   staffProvider:
     displayName: Staff sign-in
     issuer: "https://tenant.example.auth0.com/"
-    browserClientId: "replace-with-public-spa-client-id"
-    audience: "https://api.sre.example.com/"
+    browserClientId: "replace-with-web-client-id"
+    clientAuthentication: client_secret_post
     emailClaim: email
     # Optional. Omit to use OIDC discovery.
     jwksUri: "https://tenant.example.auth0.com/.well-known/jwks.json"
@@ -184,17 +179,21 @@ bootstrap:
     - email: "invited@example.com"
 ```
 
-The current runtime authenticates staff tokens through the `auth0` values. Set the bootstrap issuer, browser client ID, and audience to the same values as `auth0.issuer`, `auth0.clientId`, and `auth0.audience`. A separate staff provider becomes usable only with an application runtime that reads the installation provider from the database.
+For this confidential web application example, place `BOOTSTRAP_STAFF_CLIENT_SECRET` and the API's existing `SECRETS_MASTER_KEY` in `existingSecret` before syncing. The bootstrap Job references those keys without embedding their values. Missing keys prevent the Job from starting. Never generate a replacement encryption key for an existing installation.
+
+Match `clientAuthentication` to the directory registration: `client_secret_post`, `client_secret_basic`, or `none` for a public PKCE client. The default is `none`, which requires neither credential key in the bootstrap Job. Register the exact dashboard URL followed by `/auth/callback` in the directory, and enable the standard `openid`, `email`, and `profile` scopes. Staff browser sessions use the provider stored in the database. A custom API audience is optional and is not required for browser sign-in.
 
 The chart then renders a second `pre-install,pre-upgrade` hook Job at weight 1, after the migration Job at weight 0, because it writes to tables the migration creates. It uses the image's `ROLE=bootstrap` entrypoint and the administrative `DATABASE_URL`, and mounts no Kubernetes API token. A failed bootstrap Job fails the whole release, on upgrade as well as install. `bootstrap.activeDeadlineSeconds` bounds a failed attempt and `bootstrap.backoffLimit` bounds its retries; Helm's `--timeout` is a separate outer bound. With `migrations.enabled=false` there is no weight-0 hook, so the schema must already exist before this Job runs.
 
 When bootstrap is enabled, the chart hashes both declarations into the `sre-platform.io/bootstrap-revision` annotation on its ordinary ConfigMap. This does not expose the values or restart a workload. It gives GitOps controllers a non-hook desired-state change, because adding or changing only a hook may not mark an otherwise synced application out of sync and therefore may not start the hook operation.
 
-`issuer` and `subject` are the exact OIDC `iss` and `sub` claims. Read them from the provider rather than guessing. `browserClientId` is the public OAuth client identifier; `audience` is the API audience. `emailClaim` defaults to `email`. When `jwksUri` is empty, bootstrap fetches the issuer's OIDC discovery document and requires its issuer to match exactly.
+`issuer` and `subject` are the exact OIDC `iss` and `sub` claims. Read them from the provider rather than guessing. `browserClientId` is the OAuth client identifier; optional `audience` is the legacy API bearer audience. `emailClaim` defaults to `email`; browser sign-in requires the standard email claim and either verified email or mailbox verification. When `jwksUri` is empty, bootstrap discovers it from the issuer. For a new provider it also discovers the authorization and token endpoints even when `jwksUri` is explicit.
 
 Quote identifiers that YAML could coerce, especially numeric- or boolean-looking subjects. A subject entry may carry optional email metadata and grants the platform-operator record immediately. An email-only entry creates a pending invitation; accepting it is a separate application operation. The chart rejects unknown keys, wrong container types, non-string scalar values, empty identities, duplicate subjects, duplicate email-only invitations, and collisions between the two administrator forms before reaching the cluster.
 
-Bootstrap preserves an existing staff-provider row and performs no discovery or provider update on later runs. Repeated administrator entries are idempotent. Removing an entry revokes nothing, and a subject removed from the database is granted again on the next upgrade while it remains in the values. Provider changes, invitation acceptance, and revocation require explicit administrative operations; bootstrap never edits or revokes existing records.
+Bootstrap preserves an existing staff provider, except for a one-time discovery backfill of missing browser endpoints. Repeated administrator entries are idempotent. Removing an entry revokes nothing, and a subject removed from the database is granted again on the next upgrade while it remains in the values. An email-only invitation is accepted on a trusted matching sign-in through the installation provider.
+
+Changing Helm values does not change an existing provider's authentication method or rotate a stored client secret. Bootstrap can fill a missing secret only when the stored issuer, client ID, and authentication method match the declaration. An existing public client must be changed through platform administration before switching the declaration to confidential authentication. If no administrator can sign in, arrange an explicit administrative recovery; do not delete the provider or reset the database. Changing Secret contents alone also does not alter the bootstrap-revision annotation, so explicitly sync when a missing credential has been supplied.
 
 These fields are public identity metadata, not credentials, so they are ordinary values rather than Secret keys. Anyone who can read the rendered Job can read them. Anyone who can change them can control staff sign-in or grant the highest authorisation tier, so review changes as access-control changes.
 

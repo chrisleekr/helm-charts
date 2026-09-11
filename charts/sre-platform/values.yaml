@@ -62,13 +62,6 @@ public:
   termsUrl: ""
   termsVersion: ""
 
-auth0:
-  issuer: ""
-  audience: ""
-  domain: ""
-  clientId: ""
-  jwksUri: ""
-
 embeddings:
   url: ""
   dim: 1024
@@ -169,6 +162,10 @@ bootstrap:
     displayName: ""
     issuer: ""
     browserClientId: ""
+    # none for public PKCE clients; confidential web apps use client_secret_post
+    # or client_secret_basic and require credentials in existingSecret.
+    clientAuthentication: none
+    # Optional legacy API bearer audience, not required for browser sign-in.
     audience: ""
     emailClaim: email
     # Optional. When empty, bootstrap discovers it from the issuer.

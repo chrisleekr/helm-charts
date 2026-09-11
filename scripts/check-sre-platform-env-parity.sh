@@ -20,6 +20,7 @@ render_chart_env() {
     --set-string 'bootstrap.staffProvider.displayName=Staff sign-in' \
     --set-string 'bootstrap.staffProvider.issuer=https://idp.example.com/' \
     --set-string 'bootstrap.staffProvider.browserClientId=browser-client' \
+    --set-string 'bootstrap.staffProvider.clientAuthentication=client_secret_post' \
     --set-string 'bootstrap.staffProvider.audience=https://api.sre.example.com/' \
     --set-string 'bootstrap.platformAdmins[0].subject=directory|000000000000000000000001' \
     >>"$out"

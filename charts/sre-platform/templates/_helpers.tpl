@@ -83,14 +83,14 @@ and the chart passes the value through instead of composing one.
 {{- if not (kindIs "map" $provider) -}}
 {{- fail "bootstrap.staffProvider must be a YAML mapping." -}}
 {{- end -}}
-{{- $allowed := list "displayName" "issuer" "browserClientId" "audience" "emailClaim" "jwksUri" -}}
+{{- $allowed := list "displayName" "issuer" "browserClientId" "clientAuthentication" "audience" "emailClaim" "jwksUri" -}}
 {{- range $key, $value := $provider -}}
 {{- if not (has $key $allowed) -}}
 {{- fail (printf "bootstrap.staffProvider has unexpected key %s." $key) -}}
 {{- end -}}
 {{- end -}}
 {{- $result := dict -}}
-{{- range $key := list "displayName" "issuer" "browserClientId" "audience" -}}
+{{- range $key := list "displayName" "issuer" "browserClientId" -}}
 {{- $raw := index $provider $key -}}
 {{- if not (kindIs "string" $raw) -}}
 {{- fail (printf "bootstrap.staffProvider.%s must be a quoted string." $key) -}}
@@ -101,7 +101,7 @@ and the chart passes the value through instead of composing one.
 {{- end -}}
 {{- $_ := set $result $key $value -}}
 {{- end -}}
-{{- range $key := list "emailClaim" "jwksUri" -}}
+{{- range $key := list "audience" "emailClaim" "jwksUri" -}}
 {{- if hasKey $provider $key -}}
 {{- $raw := index $provider $key -}}
 {{- if not (kindIs "string" $raw) -}}
@@ -113,6 +113,17 @@ and the chart passes the value through instead of composing one.
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- $authentication := "none" -}}
+{{- if hasKey $provider "clientAuthentication" -}}
+{{- $authentication = index $provider "clientAuthentication" -}}
+{{- if not (kindIs "string" $authentication) -}}
+{{- fail "bootstrap.staffProvider.clientAuthentication must be a quoted string." -}}
+{{- end -}}
+{{- if not (has $authentication (list "none" "client_secret_post" "client_secret_basic")) -}}
+{{- fail "bootstrap.staffProvider.clientAuthentication must be none, client_secret_post, or client_secret_basic." -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $result "clientAuthentication" $authentication -}}
 {{- toJson $result -}}
 {{- end }}
 
@@ -276,10 +287,6 @@ the invitation side already does. */ -}}
 {{- if ne (empty $termsUrl) (empty $termsVersion) -}}
 {{- fail "public.termsUrl and public.termsVersion must be configured together." -}}
 {{- end -}}
-{{- required "auth0.issuer is required." .Values.auth0.issuer -}}
-{{- required "auth0.audience is required." .Values.auth0.audience -}}
-{{- required "auth0.domain is required." .Values.auth0.domain -}}
-{{- required "auth0.clientId is required." .Values.auth0.clientId -}}
 {{- required "embeddings.url is required." .Values.embeddings.url -}}
 {{- if ne (toString .Values.embeddings.dim) "1024" -}}
 {{- fail "embeddings.dim must be exactly 1024; the application schema is fixed to that dimension." -}}
