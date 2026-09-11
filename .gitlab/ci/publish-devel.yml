@@ -1,3 +1,18 @@
+devel-publish-test:
+  stage: lint
+  image:
+    name: alpine/helm:3.20.0
+    entrypoint: [""]
+  interruptible: true
+  rules:
+    - changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/publish-devel.yml
+        - scripts/check-devel-publish.sh
+        - charts/sre-platform/**/*
+  script:
+    - bash scripts/check-devel-publish.sh
+
 publish-devel:
   stage: publish
   image:
@@ -39,13 +54,13 @@ publish-devel:
       for name in $changed; do
         # A deleted chart still shows in the diff.
         [ -f "charts/$name/Chart.yaml" ] || continue
-        # Same rule as the "Withhold placeholder-appVersion charts" step in
-        # .github/workflows/release.yml. devel is a prerelease channel, but a
-        # chart whose appVersion is still the 0.0.0 bootstrap placeholder points
-        # at an image tag that does not exist, so it is uninstallable on either
-        # host. Its <name>-sync workflow replaces the placeholder on the first
-        # public release and publishing resumes.
         appversion=$(yq e '.appVersion' "charts/$name/Chart.yaml" | tr -d '"')
+        # This package-only development version is not a public image release.
+        # SRE Platform requires an explicit image override until public sync
+        # supplies a release digest. Leave the GitHub placeholder untouched.
+        if [ "$name" = "sre-platform" ] && [ "$appversion" = "0.0.0" ]; then
+          appversion="0.0.1"
+        fi
         if [ "$appversion" = "0.0.0" ]; then
           echo "withholding $name from devel: appVersion is the 0.0.0 placeholder"
           continue
@@ -59,7 +74,7 @@ publish-devel:
         # can be all digits, and SemVer rejects a numeric identifier with a
         # leading zero, which helm would refuse to package.
         devel="${version}-dev-${CI_COMMIT_SHORT_SHA}"
-        helm package "charts/$name" --version "$devel" --destination .
+        helm package "charts/$name" --version "$devel" --app-version "$appversion" --destination .
         # GitLab treats a channel as a separate repository, so "devel" can never
         # be resolved by anything pointed at stable. CI_JOB_TOKEN is accepted
         # here, which avoids installing the chartmuseum/helm-push plugin.
