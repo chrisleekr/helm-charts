@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.22.0
+version: 0.22.1
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "The workflow-runner Role now grants `get` on `pods/log`. v1.18.0 captures a dead runner Pod's container log before cleanup deletes it (#306), and without this verb that read returns 403 and the post-mortem is lost: the controller falls back to the terminated container status alone. Runner Pod creation and the admission boundary are unaffected, so this is a diagnostics-only recovery."
     - kind: changed
       description: "Sync to github-app v1.18.0: **k8s:** make workflow-runner Pod resources configurable (#305); **orchestrator:** capture runner Pod post-mortem before cleanup (#306); **workflows:** route every mention through one classifier (#307). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.18.0"
     - kind: added

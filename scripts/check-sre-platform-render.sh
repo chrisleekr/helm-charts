@@ -118,7 +118,7 @@ else
 fi
 want "$tmp/base.yaml" 'path: /readyz' "API readiness is rendered"
 want "$tmp/base.yaml" 'DASHBOARD_WS_BASE_URL: "wss://api\.sre\.example\.com"' "WebSocket origin derives from HTTPS API"
-want "$tmp/base.yaml" 'AUTH0_JWKS_URI: "https://tenant\.example\.auth0\.com/\.well-known/jwks\.json"' "optional JWKS override renders"
+want_not "$tmp/base.yaml" 'AUTH0_' "retired global Auth0 environment is absent"
 want "$tmp/base.yaml" 'helm\.sh/hook: pre-install,pre-upgrade' "migration blocks install and upgrade"
 want_count "$tmp/base.yaml" '^      automountServiceAccountToken: false$' 5 "all five workloads disable Kubernetes credential automounting"
 want_not "$tmp/base.yaml" '^      automountServiceAccountToken: true$' "no workload enables Kubernetes credential automounting"
@@ -236,13 +236,13 @@ fi
 # from known keys rather than passing values through. Pinning the exact string
 # keeps a silent shape change from reaching a release.
 want "$tmp/bootstrap-job.yaml" \
-  'value: "\{\\"audience\\":\\"https://api\.sre\.example\.com/\\",\\"browserClientId\\":\\"browser-client\\",\\"displayName\\":\\"Staff sign-in\\",\\"emailClaim\\":\\"email\\",\\"issuer\\":\\"https://idp\.example\.com/\\",\\"jwksUri\\":\\"https://idp\.example\.com/jwks\?version=1\\"\}"' \
+  'value: "\{\\"audience\\":\\"https://api\.sre\.example\.com/\\",\\"browserClientId\\":\\"browser-client\\",\\"clientAuthentication\\":\\"none\\",\\"displayName\\":\\"Staff sign-in\\",\\"emailClaim\\":\\"email\\",\\"issuer\\":\\"https://idp\.example\.com/\\",\\"jwksUri\\":\\"https://idp\.example\.com/jwks\?version=1\\"\}"' \
   "staff provider renders as the exact JSON contract"
 want "$tmp/bootstrap-job.yaml" \
   'value: "\[\{\\"email\\":\\"operator@example\.com\\",\\"subject\\":\\"directory\|000000000000000000000001\\"\},\{\\"email\\":\\"invited@example\.com\\"\}\]"' \
   "administrators render as the exact subject-plus-email and invitation JSON forms"
 want "$tmp/bootstrap-discovery-job.yaml" \
-  'value: "\{\\"audience\\":\\"https://api\.sre\.example\.com/\\",\\"browserClientId\\":\\"browser-client\\",\\"displayName\\":\\"Staff sign-in\\",\\"emailClaim\\":\\"email\\",\\"issuer\\":\\"https://idp\.example\.com/\\"\}"' \
+  'value: "\{\\"audience\\":\\"https://api\.sre\.example\.com/\\",\\"browserClientId\\":\\"browser-client\\",\\"clientAuthentication\\":\\"none\\",\\"displayName\\":\\"Staff sign-in\\",\\"emailClaim\\":\\"email\\",\\"issuer\\":\\"https://idp\.example\.com/\\"\}"' \
   "discovery-mode provider omits an empty JWKS URI"
 want_not "$tmp/bootstrap-discovery-job.yaml" 'jwksUri' "discovery-mode provider contains no empty JWKS key"
 want_count "$tmp/policy.yaml" '^[[:space:]]+- (api|triage-worker)$' 2 "egress policy selects API and triage only"
@@ -264,11 +264,11 @@ if helm template sre "$chart" -f "$ci/ct-values.yaml" --set existingSecret= >/de
 else
   want "$tmp/missing-secret.err" 'existingSecret is required' "missing existingSecret fails clearly"
 fi
-if helm template sre "$chart" -f "$ci/ct-values.yaml" --set auth0.clientId= >/dev/null 2>"$tmp/auth.err"; then
-  bad "missing Auth0 client ID must fail"
-else
-  want "$tmp/auth.err" 'auth0.clientId is required' "missing Auth0 client ID fails clearly"
-fi
+helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
+  --set-string bootstrap.staffProvider.audience= \
+  --set-string bootstrap.staffProvider.clientAuthentication=client_secret_post >"$tmp/no-legacy-auth.yaml"
+want_not "$tmp/no-legacy-auth.yaml" 'AUTH0_' "staff bootstrap requires no legacy Auth0 environment"
+want "$tmp/no-legacy-auth.yaml" 'key: BOOTSTRAP_STAFF_CLIENT_SECRET' "standalone staff bootstrap retains its confidential credential reference"
 if helm template sre "$chart" -f "$ci/ct-values.yaml" --set llm.provider=fake >/dev/null 2>"$tmp/provider.err"; then
   bad "unsupported LLM provider must fail"
 else
@@ -551,10 +551,40 @@ else
   want "$tmp/bootstrap-provider-key.err" 'unexpected key clientSecret' "unrecognised provider key fails clearly"
 fi
 if helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
-  --set-string 'bootstrap.staffProvider.audience=   ' >/dev/null 2>"$tmp/bootstrap-blank.err"; then
+  --set-string 'bootstrap.staffProvider.browserClientId=   ' >/dev/null 2>"$tmp/bootstrap-blank.err"; then
   bad "whitespace provider field must fail"
 else
-  want "$tmp/bootstrap-blank.err" 'bootstrap.staffProvider.audience is required' "whitespace provider field fails clearly"
+  want "$tmp/bootstrap-blank.err" 'bootstrap.staffProvider.browserClientId is required' "whitespace provider field fails clearly"
+fi
+for method in none client_secret_post client_secret_basic; do
+  helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
+    --set-string bootstrap.staffProvider.audience= \
+    --set-string "bootstrap.staffProvider.clientAuthentication=$method" >"$tmp/bootstrap-$method.yaml"
+  doc "$tmp/bootstrap-$method.yaml" Job sre-sre-platform-bootstrap "$tmp/bootstrap-$method-job.yaml"
+  want "$tmp/bootstrap-$method-job.yaml" "clientAuthentication.*$method" "bootstrap renders $method authentication"
+  want_not "$tmp/bootstrap-$method-job.yaml" 'audience' "browser-only bootstrap omits empty API audience"
+  if [ "$method" = none ]; then
+    want_not "$tmp/bootstrap-$method-job.yaml" 'BOOTSTRAP_STAFF_CLIENT_SECRET|SECRETS_MASTER_KEY' "public PKCE bootstrap needs no client credential"
+  else
+    want "$tmp/bootstrap-$method-job.yaml" 'key: BOOTSTRAP_STAFF_CLIENT_SECRET' "confidential bootstrap references the existing client secret"
+    want "$tmp/bootstrap-$method-job.yaml" 'key: SECRETS_MASTER_KEY' "confidential bootstrap references the existing encryption key"
+    want_count "$tmp/bootstrap-$method-job.yaml" 'secretKeyRef:' 3 "confidential bootstrap uses secret references for database and credentials"
+    want_not "$tmp/bootstrap-$method-job.yaml" 'optional: true' "missing confidential credentials fail closed"
+  fi
+done
+for method in unsupported ''; do
+  if helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
+    --set-string "bootstrap.staffProvider.clientAuthentication=$method" >/dev/null 2>"$tmp/bootstrap-auth.err"; then
+    bad "invalid bootstrap client authentication must fail"
+  else
+    want "$tmp/bootstrap-auth.err" 'clientAuthentication must be none' "invalid bootstrap authentication fails clearly"
+  fi
+done
+if helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
+  --set bootstrap.staffProvider.clientAuthentication=true >/dev/null 2>"$tmp/bootstrap-auth-type.err"; then
+  bad "non-string bootstrap client authentication must fail"
+else
+  want "$tmp/bootstrap-auth-type.err" 'clientAuthentication must be a quoted string' "non-string bootstrap authentication fails clearly"
 fi
 if helm template sre "$chart" -f "$ci/ct-values.yaml" "${bootstrap_on[@]}" \
   --set-string 'bootstrap.platformAdmins[1].subject=directory|000000000000000000000001' >/dev/null 2>"$tmp/bootstrap-dup.err"; then

@@ -11,13 +11,6 @@ metadata:
   {{- end }}
 data:
   NODE_ENV: "production"
-  AUTH0_ISSUER: {{ .Values.auth0.issuer | quote }}
-  AUTH0_AUDIENCE: {{ .Values.auth0.audience | quote }}
-  AUTH0_DOMAIN: {{ .Values.auth0.domain | quote }}
-  AUTH0_CLIENT_ID: {{ .Values.auth0.clientId | quote }}
-  {{- with .Values.auth0.jwksUri }}
-  AUTH0_JWKS_URI: {{ . | quote }}
-  {{- end }}
   CORS_ORIGINS: {{ include "sre-platform.dashboardUrl" . | quote }}
   DASHBOARD_BASE_URL: {{ include "sre-platform.dashboardUrl" . | quote }}
   DASHBOARD_API_BASE_URL: {{ include "sre-platform.apiUrl" . | quote }}

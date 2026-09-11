@@ -55,6 +55,19 @@ spec:
               value: {{ include "sre-platform.bootstrapStaffProvider" . | quote }}
             - name: BOOTSTRAP_PLATFORM_ADMINS
               value: {{ include "sre-platform.bootstrapPlatformAdmins" . | quote }}
+            {{- $provider := include "sre-platform.bootstrapStaffProvider" . | fromJson }}
+            {{- if ne $provider.clientAuthentication "none" }}
+            - name: BOOTSTRAP_STAFF_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" . }}
+                  key: BOOTSTRAP_STAFF_CLIENT_SECRET
+            - name: SECRETS_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sre-platform.secretName" . }}
+                  key: SECRETS_MASTER_KEY
+            {{- end }}
           resources:
             {{- toYaml .Values.bootstrap.resources | nindent 12 }}
           volumeMounts:

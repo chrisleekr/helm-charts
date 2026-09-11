@@ -1,3 +1,23 @@
+devel-publish-test:
+  stage: lint
+  image:
+    name: alpine/helm:3.20.0
+    entrypoint: [""]
+  interruptible: true
+  rules:
+    - changes:
+        paths:
+          - .gitlab-ci.yml
+          - .gitlab/ci/publish-devel.yml
+          - scripts/check-devel-publish.sh
+          - charts/sre-platform/**/*
+        # Without compare_to, a branch pipeline diffs against the previous commit
+        # on the branch, so a file touched in an earlier commit of the same push
+        # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
+        compare_to: refs/heads/main
+  script:
+    - bash scripts/check-devel-publish.sh
+
 publish-devel:
   stage: publish
   image:
@@ -39,14 +59,16 @@ publish-devel:
       for name in $changed; do
         # A deleted chart still shows in the diff.
         [ -f "charts/$name/Chart.yaml" ] || continue
-        # Same rule as the "Withhold placeholder-appVersion charts" step in
-        # .github/workflows/release.yml. devel is a prerelease channel, but a
-        # chart whose appVersion is still the 0.0.0 bootstrap placeholder points
-        # at an image tag that does not exist, so it is uninstallable on either
-        # host. Its <name>-sync workflow replaces the placeholder on the first
-        # public release and publishing resumes.
         appversion=$(yq e '.appVersion' "charts/$name/Chart.yaml" | tr -d '"')
-        if [ "$appversion" = "0.0.0" ]; then
+        # sre-platform is the one chart published to devel with the 0.0.0
+        # placeholder intact. Its templates key the bootstrap escape hatch on
+        # appVersion being exactly 0.0.0, so substituting any other value here
+        # flips that predicate off and the packaged chart fails at render under
+        # default values -- strictly worse than one that renders and asks for an
+        # explicit image.tag. No substitute tag exists on Docker Hub either way,
+        # so the rewrite buys nothing. scripts/check-devel-publish.sh renders the
+        # real packaged chart to hold this.
+        if [ "$appversion" = "0.0.0" ] && [ "$name" != "sre-platform" ]; then
           echo "withholding $name from devel: appVersion is the 0.0.0 placeholder"
           continue
         fi
