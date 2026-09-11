@@ -234,6 +234,18 @@ if [ "$runner_ns" != "$binding_ns" ]; then
   echo "controller WORKFLOW_RUNNER_NAMESPACE ($runner_ns) does not equal the binding paramRef namespace ($binding_ns)" >&2
   exit 1
 fi
+# The controller reads a dead runner Pod's container log before cleanup deletes
+# it. Nothing else in this gate reads the Role's rules, and the verb was missing
+# from this chart entirely until 0.22.1, so a sync that drops it again would show
+# up only as a 403 in the controller at runtime, never as a red gate here.
+runner_log_verbs=$(yq ea -r \
+  'select(.kind == "Role" and (.metadata.name | test("workflow-runner"))) |
+     .rules[] | select(.resources[] == "pods/log") | .verbs[]' \
+  "$tmp/runners.yaml" | sort -u | tr '\n' ' ' | sed 's/ $//')
+if [ "$runner_log_verbs" != "get" ]; then
+  echo "workflow-runner Role grants pods/log verbs [$runner_log_verbs], want [get]; runner post-mortem capture would 403" >&2
+  exit 1
+fi
 # The controller stamps imagePullSecrets onto the Pod while the policy pins the
 # allowed name from its own ConfigMap. Disagreement denies every runner Pod.
 boundary_pull_secret=$(yq ea -r \
