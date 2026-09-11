@@ -6,10 +6,15 @@ devel-publish-test:
   interruptible: true
   rules:
     - changes:
-        - .gitlab-ci.yml
-        - .gitlab/ci/publish-devel.yml
-        - scripts/check-devel-publish.sh
-        - charts/sre-platform/**/*
+        paths:
+          - .gitlab-ci.yml
+          - .gitlab/ci/publish-devel.yml
+          - scripts/check-devel-publish.sh
+          - charts/sre-platform/**/*
+        # Without compare_to, a branch pipeline diffs against the previous commit
+        # on the branch, so a file touched in an earlier commit of the same push
+        # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
+        compare_to: refs/heads/main
   script:
     - bash scripts/check-devel-publish.sh
 
@@ -55,13 +60,15 @@ publish-devel:
         # A deleted chart still shows in the diff.
         [ -f "charts/$name/Chart.yaml" ] || continue
         appversion=$(yq e '.appVersion' "charts/$name/Chart.yaml" | tr -d '"')
-        # This package-only development version is not a public image release.
-        # SRE Platform requires an explicit image override until public sync
-        # supplies a release digest. Leave the GitHub placeholder untouched.
-        if [ "$name" = "sre-platform" ] && [ "$appversion" = "0.0.0" ]; then
-          appversion="0.0.1"
-        fi
-        if [ "$appversion" = "0.0.0" ]; then
+        # sre-platform is the one chart published to devel with the 0.0.0
+        # placeholder intact. Its templates key the bootstrap escape hatch on
+        # appVersion being exactly 0.0.0, so substituting any other value here
+        # flips that predicate off and the packaged chart fails at render under
+        # default values -- strictly worse than one that renders and asks for an
+        # explicit image.tag. No substitute tag exists on Docker Hub either way,
+        # so the rewrite buys nothing. scripts/check-devel-publish.sh renders the
+        # real packaged chart to hold this.
+        if [ "$appversion" = "0.0.0" ] && [ "$name" != "sre-platform" ]; then
           echo "withholding $name from devel: appVersion is the 0.0.0 placeholder"
           continue
         fi
@@ -74,7 +81,7 @@ publish-devel:
         # can be all digits, and SemVer rejects a numeric identifier with a
         # leading zero, which helm would refuse to package.
         devel="${version}-dev-${CI_COMMIT_SHORT_SHA}"
-        helm package "charts/$name" --version "$devel" --app-version "$appversion" --destination .
+        helm package "charts/$name" --version "$devel" --destination .
         # GitLab treats a channel as a separate repository, so "devel" can never
         # be resolved by anything pointed at stable. CI_JOB_TOKEN is accepted
         # here, which avoids installing the chartmuseum/helm-push plugin.
