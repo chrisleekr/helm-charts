@@ -4,6 +4,52 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: "Bump bundled images: timescale/timescaledb 2.29.2-pg17 to 2.30.0-pg17, otel/opentelemetry-collector-contrib 0.158.0 to 0.161.0."
+        - kind: removed
+          description: "BREAKING: networking.k8s.io Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed; TLS moves to the Gateway listener (extraObjects). webOrigin is now required. ingress.allowInsecure becomes route.allowInsecure; with route.enabled a non-https:// webOrigin fails the render unless it is set. An upgrade deletes the existing Ingress."
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.5.0: **risk:** add loss-streak and drawdown entry breakers beside daily loss (#777); **web:** rebuild trade history around fee-valued statistics (#779); **worker:** add a replace-order decision backed by Binance cancelReplace (#775); **worker:** alert when a held position has no protective stop resting (#778); **strategy:** judge the exchange minimum at the stop's own price (#776); **worker:** prove who placed an order before adopting its fill (#774). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.5.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.4.0: **trading:** pin bindings, drop the always-hold reserve, and record fee basis (#765). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.4.0"
+        - kind: added
+          description: "Preload pg_stat_statements in the bundled Postgres. The app's migration creates the extension, but the module only records once preloaded, so the view errored on every read. shared_preload_libraries replaces postgresql.conf rather than appending, so timescaledb is now named explicitly alongside it. Adds a commented pg_stat_statements.track_planning toggle."
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.3.0: **discovery:** surface asset-policy aborts to the operator (#755); **observability:** alert on the new counters and unit-test the rules (#757); **archive:** recover the real exit reason on backfilled cycles (#756); clear position-scoped state fields on every position close (#761); **worker:** flatten sub-notional dust instead of stranding the position (#754). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.3.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.2.0: **discovery:** exclude stablecoins and fiat using Binance's own classification (#750); **api,db,web:** bound pool checkouts and statements, scope archive sums by quote (#749). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.2.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.1.0: archive cost-basis integrity, symbol permissions, dust cancel, discovery admission (#735); **binance:** add a per-account ORDERS rate governor and deferrable order intents (#734); **db:** store open conditions in condition_states and harden scoped repo binding (#731); **profile:** add on-demand profile diagnosis and discovery funnel (#736); **retention:** move log retention into a config table and add the log surfaces (#733); **strategy:** add the price-outside-exchange-band protective-stop blocker (#737); **strategy:** clamp or natively trail a protective stop Binance's price band refuses (#741); **ci:** resolve audit and release formatting drift (#745); **technicals:** align the rating window and vote rules with TradingView (#739); **web:** hold scroll position while loading and polling, and gate phantom alert metrics (#716); **web:** reserve height for every loading branch, gate regressions in CI (#718); **worker,contracts,web:** harden diagnosis ladder, discovery funnel, and signal panel (#744); **worker,contracts:** alert when a protective stop never reaches the exchange (#740); **worker:** break the retry loop on an order Binance keeps refusing (#742). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.1.0"
+        - kind: added
+          description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
+    apiVersion: v2
+    appVersion: v1.5.0
+    created: "2026-09-19T10:42:34.989820489Z"
+    description: A Helm chart for Binance Trading Bot - a self-hosted automated crypto
+      trading bot
+    digest: 28b3aca9644bd2e4c788fb8405b89ac460196cc466a5f4f185637953283b43e0
+    keywords:
+    - bot
+    - trading-bot
+    - cryptocurrency
+    - binance
+    - binance-api
+    - crypto-trading
+    - grid-trading
+    - binance-trading-bot
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: binance-trading-bot
+    sources:
+    - https://github.com/chrisleekr/binance-trading-bot
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-2.0.0/binance-trading-bot-2.0.0.tgz
+    version: 2.0.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: "Sync to binance-trading-bot v1.5.0: **risk:** add loss-streak and drawdown entry breakers beside daily loss (#777); **web:** rebuild trade history around fee-valued statistics (#779); **worker:** add a replace-order decision backed by Binance cancelReplace (#775); **worker:** alert when a held position has no protective stop resting (#778); **strategy:** judge the exchange minimum at the stop's own price (#776); **worker:** prove who placed an order before adopting its fill (#774). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.5.0"
         - kind: changed
           description: "Sync to binance-trading-bot v1.4.0: **trading:** pin bindings, drop the always-hold reserve, and record fee basis (#765). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.4.0"
@@ -438,6 +484,131 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-0.1.0/binance-trading-bot-0.1.0.tgz
     version: 0.1.0
   github-app:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: the Ingress is removed. `ingress.*` and the workflow-runner Ingress (`workflowRunner.ingress.*`) are replaced by a Gateway API HTTPRoute under `route.*` and `workflowRunner.route.*`; the runner front door is a separate `<fullname>-ws` HTTPRoute on the orchestratorPublicUrl host only. TLS moves to the Gateway listener, so set `sectionName` in `route.parentRefs` to the HTTPS listener. `helm upgrade` deletes the existing Ingress, so provision the Gateway first. See the UPGRADING to 0.23.0 section in NOTES.txt."
+        - kind: fixed
+          description: "The workflow-runner Role now grants `get` on `pods/log`. v1.18.0 captures a dead runner Pod's container log before cleanup deletes it (#306), and without this verb that read returns 403 and the post-mortem is lost: the controller falls back to the terminated container status alone. Runner Pod creation and the admission boundary are unaffected, so this is a diagnostics-only recovery."
+        - kind: changed
+          description: "Sync to github-app v1.18.0: **k8s:** make workflow-runner Pod resources configurable (#305); **orchestrator:** capture runner Pod post-mortem before cleanup (#306); **workflows:** route every mention through one classifier (#307). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.18.0"
+        - kind: added
+          description: "Runner Pod resource quantities are now a provisioning half: `workflowRunner.cpuRequest`/`memoryRequest`/`storageRequest`/`cpuLimit`/`memoryLimit`/`storageLimit` feed both the controller env and the runner admission boundary, which at v1.18.0 grew from 13 to 19 params and asserts these six against the Pod's requests, limits and workspace `emptyDir.sizeLimit`. With `workflowRunner.enabled=true` a `config.workflowRunner.*` passthrough that disagrees is now refused at render instead of denying every runner Pod at admission."
+        - kind: security
+          description: "Sync to github-app v1.17.2: **ci:** parse bun audit's real JSON shape and escape annotations (#299); **deps:** bump Bun to 1.4.1 and pin transitive CVE overrides (#298); **orchestrator:** extend runner startup lease while kubelet makes progress (#300). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.2"
+        - kind: security
+          description: "Reject a controller-Secret/app-Secret name collision from either direction. The guard previously only fired when `secrets.existingControllerSecret` named the app Secret; pointing `secrets.existingSecret` at the chart-managed `<fullname>-controller-secret` name reached the same collision unchecked, and because the app Secret is envFrom-mounted on every daemon pool, that rendered the workflow-runner capability signing root onto workers running agent-authored code. Both names are now resolved and compared unconditionally in `github-app.controllerSecretName`."
+        - kind: security
+          description: "Refuse three further misconfigurations that previously rendered clean: `config.ephemeralDaemon.secretName` naming the chart's own app or controller Secret, which envFrom-mounts it onto agent-authored Pods; a capability root equal to a daemon-auth root, which the controller rejects at boot and which would let a daemon-auth holder mint runner capabilities; and `secrets.existingControllerSecret` set alongside an inline `workflowRunnerCapabilitySecret[Previous]`, which was silently discarded and surfaced only as rejected capabilities mid-rotation."
+        - kind: fixed
+          description: "Resolve the runner namespace through one `github-app.runnerNamespace` helper. The collision guard in `workflow-runner-namespace.yaml` hardcoded the app default when the rail was off, so it ignored `config.workflowRunner.namespace`: it refused valid installs with a message naming a namespace the controller never sees, and missed real collisions reached through the passthrough."
+        - kind: added
+          description: "Provision the isolated workflow-runner rail behind the new top-level `workflowRunner.enabled`: dedicated namespace, controller RBAC, egress NetworkPolicy, boundary ConfigMap, a fail-closed ValidatingAdmissionPolicy and an optional TLS ingress for the WS listener. Requires Kubernetes 1.31+, the chart's own `kubeVersion` floor, and cluster-admin, since the policy and its binding are cluster-scoped. Off by default."
+        - kind: added
+          description: "Optional `workflowRunner.imageWarmer` DaemonSet that holds the daemon image warm on each runner node. An attempt claims its startup lease before its Pod exists, so a cold pull is charged to a lease nothing can renew; the warmer removes the multi-minute first-attempt stall after a daemon image bump. Runs in the release namespace, not the runner namespace, whose admission policy admits only exact attempt Pods."
+        - kind: fixed
+          description: "Set `NODE_EXTRA_CA_CERTS` on the orchestrator to the projected service-account CA. Bun does not apply the CA that the Kubernetes client reads via loadFromCluster, so every API call failed with UNABLE_TO_VERIFY_LEAF_SIGNATURE and neither ephemeral daemons nor workflow runners could be spawned."
+        - kind: changed
+          description: "Default `config.llmOutputScannerModel` flipped from `sonnet-4-6` to `haiku-4-5` and `config.llmOutputScannerTimeoutMs` from 3000 to 30000, matching upstream's own v1.17.1 defaults. The timeout is sized for the isolated-runner RPC path, which treats a slow scan as a rejection rather than failing open, so the old 3s cap discarded completed runs. Operators who want the stronger scanner on obfuscated or encoded secrets must now set `config.llmOutputScannerModel` explicitly."
+        - kind: changed
+          description: "`config.workflowRunner.*` stays the published app-env passthrough for operators who provisioned the rail themselves. When `workflowRunner.enabled` is true the chart pins the admission boundary from `workflowRunner.*` instead, and a conflicting `config.workflowRunner.*` value is now rejected at render time rather than silently ignored, because a controller/policy disagreement denies every runner Pod at admission."
+        - kind: security
+          description: "Sync to github-app v1.17.1: **deps:** clear the orchestrator image's HIGH CVE findings (#295); **ci:** retry bun audit, close the signal fail-open, and skip on outage (#296). No env-surface change: the v1.17.1 contract is identical to v1.17.0. Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.1"
+        - kind: changed
+          description: "Documented the ephemeral-daemon Secret prerequisite in `values.yaml` and NOTES.txt. `config.ephemeralDaemon.secretName` names a Secret the chart never renders, defaulting to the app's own `daemon-secrets`; upstream's spawner mounts it with a non-optional `envFrom`, so every spawned Pod stalls in `CreateContainerConfigError` until an operator creates it in the ephemeral-daemon namespace. The notes give its minimum contents. Documentation only, no template or values-schema change."
+        - kind: changed
+          description: "Sync to github-app v1.17.0: **core:** extract HTTP router and add output-safety primitives (#285); **repo-config:** add per-repo .github-app.yaml control surface (#286); **runner:** add the config surface and process boundary (#290); **runner:** isolate structured workflows in one-attempt Kubernetes Pods (#292); **runner:** move structured workflows onto a leased, durable run rail (#291). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.17.0"
+        - kind: security
+          description: "Move `secrets.workflowRunnerCapabilitySecret[Previous]` out of the shared app Secret (envFrom-mounted on every daemon pool) into a new `<fullname>-controller-secret` mounted on the orchestrator only, per upstream's K8s Secret split. The capability root is required on the v1.17.0 controller, so it is auto-generated and persisted across upgrades (same `lookup` treatment as `DAEMON_AUTH_TOKEN`) when `secrets.workflowRunnerCapabilitySecret` is empty. Adds `secrets.existingControllerSecret` for externally managed Secrets, rejected at render time when it names the app Secret. Render fails when the runner and ephemeral-daemon namespaces collide, which upstream refuses at boot."
+        - kind: fixed
+          description: "`config.repoConfigFile` and the deprecated `config.schedulerConfigFile` now default to empty and render only when set, so a pre-1.17 `schedulerConfigFile` override keeps reading the same file after upgrade instead of being shadowed by a chart-default `REPO_CONFIG_FILE`."
+        - kind: security
+          description: "Sync to github-app v1.16.1: **deps:** pin transitive adm-zip to 0.6.0 for CVE-2026-39244 (#268). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.16.1"
+        - kind: security
+          description: "Sync to github-app v1.15.0: add env-var contract + CI gate for helm-charts sync (#258); patch three HIGH CVEs blocking orchestrator Trivy scan (#254). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.15.0"
+        - kind: added
+          description: "CI: added an env-parity gate (`scripts/check-env-parity.sh`, run in `lint.yml`) that fails when the chart's ConfigMap/Secret env surface drifts from github-app's published `env-contract.json`, and a `Sync github-app release` workflow that polls github-app releases and opens a chart-bump PR (reconciling env-var changes via claude-code-action only when the env surface changed). No runtime chart, values, env var, or template surface changes."
+        - kind: changed
+          description: "Renamed chart `github-app-playground` to `github-app` and image repository `chrisleekr/github-app-playground` to `chrisleekr/github-app` (upstream repository rename). Bumped appVersion to 1.14.0 so the default image tag resolves in the new registry, which has no historical tags. WARNING: `app.kubernetes.io/name` derives from the chart name, so the selector label changes; live deployments need a resource recreate (delete old Deployments/StatefulSets), not an in-place upgrade, because selectors are immutable."
+        - kind: added
+          description: "Bumped appVersion to 1.13.0. Exposes 8 new optional config keys mirroring src/config.ts: `config.digestModel` (group 9, comment-aware workflows digest model), `config.promptCacheLayout` (group 12a, prompt cache layout selector — chart default flipped to `cacheable` to opt into cache hits), and group 14 scheduled-actions tunables (`config.schedulerEnabled` — chart default `true`, `config.schedulerScanIntervalMs`, `config.schedulerAllowAutoMerge`, `config.schedulerConfigFile`, `config.reviewLearningsEnabled`, `config.reviewLearningsRagEnabled` — chart default `true`)."
+        - kind: added
+          description: "Scheduled actions via `.github-app.yaml` (upstream #159): scheduler walks installed repos on a cron and enqueues per-repo declarative actions. Chart default ON via `config.schedulerEnabled: true`; `config.schedulerAllowAutoMerge` left OFF (privilege gate for the `merge_readiness` MCP tool — opt-in per deployment)."
+        - kind: added
+          description: "Persistent review-learnings (upstream #160/#161/#162): per-repo review-policy directives saved via `@bot remember` or autonomous capture, replayed into prompts. Chart default ON via `config.reviewLearningsEnabled: true`. Stage 2 RAG path (`config.reviewLearningsRagEnabled: true`) enabled by chart default — requires Postgres migration 015 (pgvector extension) to be applied; if missing, falls back to legacy file-glob filter."
+        - kind: added
+          description: "Comment-aware structured workflows (upstream #148): LLM digest distills issue/PR comment threads into guidance for structured workflows. Model selected via new `config.digestModel` (default `sonnet-4-6`)."
+        - kind: added
+          description: "Opt-in cacheable system/user prompt split (upstream #135): lifts static prompt scaffolding into `systemPrompt.append` with `excludeDynamicSections: true` so the Anthropic prompt cache hits across jobs. Chart default flipped to `cacheable`. Operators should verify non-zero `cacheReadInputTokens` in executor logs after rollout."
+        - kind: fixed
+          description: "Bumped appVersion to 1.13.0. Webhook subscribes `issue_comment.edited`/`.deleted` (upstream #131) and write-through populates `target_cache` on `issues`/`pull_request` events (upstream #130/#132). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.13.0. Dependency bumps: `@anthropic-ai/bedrock-sdk` ^0.29.0 (upstream #147) and `@anthropic-ai/claude-agent-sdk` ^0.3.0 (upstream #154). Internal updates only — no chart surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.2. Bundles all stdio MCP servers (`github_comment`, `github_inline_comment`, `github_state`, `repo_memory`) and resolves their script paths from any bundle layout via a shared resolver (upstream #125). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: security
+          description: "Bumped appVersion to 1.12.2. Closes a cross-session prompt-injection vector via `repo_memory`: sanitizes attacker-controlled content before it is stored or replayed into prompts, and adds a backfill migration for existing rows (upstream #124). Internal hardening only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.1. Restores per-line inline review comments on PRs by resolving `github_comment` and `github_inline_comment` MCP server scripts via `import.meta.url` so the SDK can spawn them from the cloned-repo workDir, and disallows `ToolSearch` so the model trusts the eager tool list (upstream #123). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.12.0. Exposes 5 new optional config keys mirroring src/config.ts: `config.triageToolsEnabled` (group 10, kill-switch for tool-driven triage classifier) and group 10a chat-thread executor tunables (`config.chatThreadExecuteThreshold`, `config.chatThreadProposalTtlHours`, `config.chatThreadMaxTurns`, `config.chatThreadToolsEnabled`)."
+        - kind: added
+          description: "Tool-driven LLM with a new in-process `github-state` MCP server (upstream #117/#118): triage and chat-thread agents now fetch fresh PR state on demand instead of relying on a snapshot. Internal architecture only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Chat-thread executor (upstream #113): conversational scoped intent path with structured-output chokepoint and OAuth gate fix. Default ON via the new `config.chatThread*` tunables."
+        - kind: added
+          description: "Defense layer 5 (upstream #121): hardens bot against prompt-injection comment attacks. Adds Unicode TAG-block stripping, nonced spotlight tags, and routes every remaining Phase-2 GitHub write path through `safePostToGitHub`. Internal hardening only — no chart values or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.0. Sanitizes attacker-controlled filenames in `formatChangedFiles` (upstream #110). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.12.0. Reroutes iteration-0 terminal-bad ship verdicts to chat-thread (upstream #119/#120). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.11.1. Tracking-mirror setState is now idempotent via embedded run markers and orphan adoption, eliminating duplicate tracking comments caused by octokit retry on transient 5xx (upstream #109/#111). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.11.0. Resolve workflow now gates handler success on post-fix CI state (upstream #107). Internal logic only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.11.0. Implement workflow now matches PR author by login in PAT mode (upstream #108). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.10.2. Executor drops the `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` flag that was blocking Claude CLI startup (upstream #106). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: fixed
+          description: "Bumped appVersion to 1.10.1. Executor now captures Claude CLI stderr via SDK callback so failures surface in logs instead of being swallowed (upstream #105). Internal fix only — no chart values, env vars, or template surface changes."
+        - kind: added
+          description: "Bumped appVersion to 1.10.0. Exposes 5 new optional env vars mirroring src/config.ts: `secrets.githubPersonalAccessToken` (group 3, PAT override — single-tenant only, app hard-fails unless `config.allowedOwners` has exactly one owner), `secrets.daemonAuthTokenPrevious` (group 8, rotation-window predecessor for orchestrator-side daemon Bearer auth), and group 10b LLM output-scanner tunables (`config.llmOutputScannerEnabled`, `config.llmOutputScannerModel`, `config.llmOutputScannerTimeoutMs`)."
+        - kind: added
+          description: "Defense layer 4: optional second-pass LLM scan on every agent-generated body before posting to GitHub, catching encoded/obfuscated secrets the regex pass misses (upstream #104). Default ON, fail-open on outage."
+        - kind: added
+          description: "Optional `GITHUB_PERSONAL_ACCESS_TOKEN` override of GitHub App installation token; commit author/committer metadata still pinned to `chrisleekr-bot[bot]` (upstream #104)."
+        - kind: added
+          description: "Rolling-rotation support for `DAEMON_AUTH_TOKEN`: orchestrator accepts EITHER the primary or `DAEMON_AUTH_TOKEN_PREVIOUS` (constant-time) until the rotation window closes (upstream #103)."
+        - kind: changed
+          description: "Orchestrator bearer-token check is now constant-time across all branches (upstream #76, #103)."
+        - kind: changed
+          description: "Default `config.triageModel` flipped from `haiku-4-5` to `sonnet-4-6` to align with upstream's new Zod default. Operators pinning to a Haiku alias for cost reasons must now set `config.triageModel` explicitly."
+    apiVersion: v2
+    appVersion: 1.18.0
+    created: "2026-09-19T10:42:35.102263894Z"
+    description: A Helm chart for GitHub App that responds to @chrisleekr-bot mentions
+      on PRs and issues, using Claude Agent SDK with MCP servers for GitHub interactions.
+    digest: 1d6a92963275a6c01e451b255827d2e6f64b049ebd561e28e97b1885721d1439
+    home: https://github.com/chrisleekr/github-app
+    keywords:
+    - github-app
+    - claude
+    - ai
+    - bot
+    - webhook
+    - mcp
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: github-app
+    sources:
+    - https://github.com/chrisleekr/github-app
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/github-app-0.23.0/github-app-0.23.0.tgz
+    version: 0.23.0
   - annotations:
       artifacthub.io/changes: |
         - kind: fixed
@@ -2547,6 +2718,32 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/github-app-playground-0.2.0/github-app-playground-0.2.0.tgz
     version: 0.2.0
   ip-lookup:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed and ingress was previously enabled by default, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
+    apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-09-19T10:42:35.20788696Z"
+    description: A Helm chart for IP lookup service built with TypeScript and Fastify,
+      supporting MaxMind offline database and ipinfo.io.
+    digest: d7f1f81612e577c36b58ba07f488c54f7509523871b3a5e9ddf536801deabfe7
+    home: https://github.com/chrisleekr/ip-lookup
+    keywords:
+    - ip-lookup
+    - geolocation
+    - maxmind
+    - ipinfo
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: ip-lookup
+    sources:
+    - https://github.com/chrisleekr/ip-lookup
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/ip-lookup-0.2.0/ip-lookup-0.2.0.tgz
+    version: 0.2.0
   - apiVersion: v2
     appVersion: 1.0.0
     created: "2026-02-19T10:15:51.636535788Z"
@@ -2713,6 +2910,37 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-boilerplate-0.0.1/mcp-server-boilerplate-0.0.1.tgz
     version: 0.0.1
   mcp-server-playground:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed and ingress was previously enabled by default, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
+    apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-09-19T10:42:35.317672741Z"
+    description: A Helm chart for Model Context Protocol (MCP) server boilerplate
+      built with TypeScript and Streamable HTTP transport with an OAuth Proxy for
+      3rd party authorization servers like Auth0
+    digest: e84fb8a1ad3b99dd3a619af9392559e8de255ec5e34819e90a7be179bc0d2340
+    home: https://github.com/chrisleekr/mcp-server-playground
+    keywords:
+    - mcp
+    - server
+    - playground
+    - typescript
+    - streamable
+    - http
+    - oauth
+    - auth0
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: mcp-server-playground
+    sources:
+    - https://github.com/chrisleekr/mcp-server-playground
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-playground-0.1.0/mcp-server-playground-0.1.0.tgz
+    version: 0.1.0
   - apiVersion: v2
     appVersion: 1.0.0
     created: "2026-07-22T12:06:09.310044583Z"
@@ -2795,6 +3023,22 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/mcp-server-playground-0.0.3/mcp-server-playground-0.0.3.tgz
     version: 0.0.3
   n8n:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
+    apiVersion: v2
+    appVersion: 1.100.1
+    created: "2026-09-19T10:42:35.435354523Z"
+    description: A Helm chart for n8n - Workflow Automation for Technical People
+    digest: c2df9bfea79a88c4164b0ff86cbe25dbe4ea82aac308f7aa48a82acbc1bca835
+    home: https://n8n.io/
+    icon: https://avatars.githubusercontent.com/u/45487711?s=48&v=4
+    name: n8n
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/n8n-0.1.0/n8n-0.1.0.tgz
+    version: 0.1.0
   - apiVersion: v2
     appVersion: 1.100.1
     created: "2026-02-19T10:15:51.951721277Z"
@@ -2820,6 +3064,38 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/n8n-0.0.1/n8n-0.0.1.tgz
     version: 0.0.1
   omniroute:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed, so upgrading deletes any existing Ingress. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
+    apiVersion: v2
+    appVersion: 3.8.50
+    created: "2026-09-19T10:42:35.548963982Z"
+    description: A Helm chart for OmniRoute - a self-hostable AI gateway
+    digest: 5d52e7be4a501a1a5e835a87947ca8a015abbbdcbf8c1a143d4c0a128b6c8e23
+    home: https://omniroute.online
+    icon: https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/public/icon-512.png
+    keywords:
+    - ai
+    - ai-gateway
+    - llm
+    - llm-gateway
+    - llm-router
+    - proxy
+    - openai
+    - anthropic
+    - omniroute
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: omniroute
+    sources:
+    - https://github.com/diegosouzapw/OmniRoute
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/omniroute-0.3.0/omniroute-0.3.0.tgz
+    version: 0.3.0
   - apiVersion: v2
     appVersion: 3.8.50
     created: "2026-08-30T17:53:10.024603882Z"
@@ -2961,6 +3237,30 @@ entries:
     - https://github.com/chrisleekr/helm-charts/releases/download/omniroute-0.1.0/omniroute-0.1.0.tgz
     version: 0.1.0
   woodle-map:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed and ingress was previously enabled by default, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
+    apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-09-19T10:42:35.64546016Z"
+    description: A Helm chart for Woodle Map service
+    digest: e002c995ab03b14f46af43191743ae3ae7568d27f9a71e8a1e0362d2761e74e7
+    home: https://github.com/chrisleekr/woodle-map
+    keywords:
+    - woodle-map
+    - map
+    - geolocation
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: woodle-map
+    sources:
+    - https://github.com/chrisleekr/woodle-map
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.1.0/woodle-map-0.1.0.tgz
+    version: 0.1.0
   - apiVersion: v2
     appVersion: 1.0.0
     created: "2026-02-19T10:15:52.118591649Z"
@@ -3001,4 +3301,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-09-11T23:45:34.699879496Z"
+generated: "2026-09-19T10:42:35.64578634Z"
