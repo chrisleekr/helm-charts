@@ -38,4 +38,4 @@ annotations:
   # Changelog shown on Artifact Hub: https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
     - kind: removed
-      description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed and ingress was previously enabled by default, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled, route.parentRefs and route.hostnames. TLS moves to the Gateway listener (extraObjects)."
+      description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed and ingress was previously enabled by default, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
