@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.0.5
+version: 0.1.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -34,3 +34,8 @@ keywords:
 home: https://github.com/chrisleekr/mcp-server-playground
 sources:
   - https://github.com/chrisleekr/mcp-server-playground
+annotations:
+  # Changelog shown on Artifact Hub: https://artifacthub.io/docs/topics/annotations/helm/
+  artifacthub.io/changes: |
+    - kind: removed
+      description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed and ingress was previously enabled by default, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."

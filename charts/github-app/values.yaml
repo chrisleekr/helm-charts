@@ -108,21 +108,14 @@ workflowRunner:
     extraEgressCidrs: []
     # Pod-selected destinations reachable on 443, as NetworkPolicy peers
     # (namespaceSelector and/or podSelector). REQUIRED when the wss:// front door is
-    # a private VIP: select the ingress controller Pods it resolves to, or a runner
+    # a private VIP: select the gateway data-plane Pods it resolves to, or a runner
     # hangs silently until its 4200s deadline.
     extraEgressSelectors: []
-  ingress:
-    enabled: false                              # TLS front door for the WS listener. Not needed when runners dial the orchestrator Service directly over a cluster-local ws:// origin.
-    path: /ws                                   # Prefix match, covers /ws and /ws/workflow-runner/<run>/<attempt>.
-    # Set proxy read/send timeouts here if config.heartbeatIntervalMs exceeds the
-    # proxy's idle timeout. ingress.annotations are inherited so an IP allowlist or
-    # WAF on the release Ingress also guards this one, EXCEPT the route- and
-    # certificate-scoped keys (kubernetes.io/tls-acme, cert-manager.io/*,
-    # nginx rewrite-target and app-root): both Ingresses name the same tls
-    # secretName, so a second certificate claim fights over one Certificate, and a
-    # rewrite would collapse /ws/workflow-runner/<run>/<attempt> to /. Set any of
-    # those here to apply them to this Ingress deliberately. Keys set here win.
-    annotations: {}
+  route:
+    enabled: false                              # Publishes the WS listener as a separate <fullname>-ws HTTPRoute on the orchestratorPublicUrl host only. Not needed when runners dial the orchestrator Service directly over a cluster-local ws:// origin.
+    path: /ws                                   # PathPrefix match, covers /ws and /ws/workflow-runner/<run>/<attempt>.
+    # Idle timeout for this socket is gateway policy, not a route field: set it
+    # on the Gateway or backend, above config.heartbeatIntervalMs.
 
 podAnnotations: {}
 podLabels: {}
@@ -145,21 +138,26 @@ service:
   type: ClusterIP
   port: 80
 
-ingress:
+# Gateway API route, replacing the removed Ingress. HTTPRoute is portable across
+# conformant gateways, so nothing here names an implementation.
+route:
+  # Off by default: a route needs a parentRef naming a Gateway, or a ListenerSet
+  # on Gateway API v1.5.0 and later, that already exists in the cluster, and no
+  # chart can guess one. Enabling without it fails the render deliberately.
   enabled: false
-  className: ""
+  # Omitting sectionName attaches the route to every listener on the Gateway,
+  # a plain-HTTP one included. Set it to the HTTPS listener.
+  parentRefs: []
+  hostnames: []
   annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local                 # Replace with your real host in the consumer values file.
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  # Empty renders a catch-all to this chart's Service. The WebSocket prefix is
+  # never here: workflowRunner.route renders it as the separate -ws route.
+  rules: []
+
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
+# Certificate for the listener, an authorization policy, a ListenerSet. A literal
+# `{{` must be escaped, e.g. {{ "{{" }}.
+extraObjects: []
 
 # Resource recommendations scale with config.maxConcurrentRequests (~512Mi per session).
 resources:

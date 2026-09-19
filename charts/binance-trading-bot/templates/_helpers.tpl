@@ -122,18 +122,15 @@ Roles to render a Deployment for, as a space-separated string.
 {{- end }}
 
 {{/*
-WEB_ORIGIN. Explicit value wins, then the first ingress host. Failing the render
+WEB_ORIGIN, from webOrigin only. Failing the render when it is unset
 beats emitting a guess: the app accepts no wildcards and a wrong origin breaks
 CORS, CSRF and the WebSocket upgrade only once a browser connects.
 */}}
 {{- define "binance-trading-bot.webOrigin" -}}
 {{- if .Values.webOrigin }}
 {{- .Values.webOrigin }}
-{{- else if and .Values.ingress.enabled .Values.ingress.hosts (first .Values.ingress.hosts).host }}
-{{- $scheme := ternary "https" "http" (gt (len .Values.ingress.tls) 0) }}
-{{- printf "%s://%s" $scheme (first .Values.ingress.hosts).host }}
 {{- else }}
-{{- fail "webOrigin could not be resolved. Set webOrigin to the exact browser origin (scheme://host[:port]), or enable ingress with a host to derive it. WEB_ORIGIN accepts no wildcards and gates CORS, Better Auth CSRF and the WebSocket upgrade." }}
+{{- fail "webOrigin is required. It was previously derived from the first ingress host, reading the scheme off ingress.tls; an HTTPRoute carries no TLS, so there is nothing left to derive a scheme from and a guess would be wrong half the time. Set webOrigin to the exact browser origin (scheme://host[:port]). WEB_ORIGIN accepts no wildcards and gates CORS, Better Auth CSRF and the WebSocket upgrade." }}
 {{- end }}
 {{- end }}
 

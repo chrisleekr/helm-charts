@@ -17,7 +17,7 @@ keywords:
 #
 # 1.0.0 is a full rewrite of the chart for upstream v1.0.0, which replaced the
 # application the 0.x chart deployed. There is no in-place upgrade path from 0.x.
-version: 1.3.3
+version: 2.0.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -36,6 +36,10 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Bump bundled images: timescale/timescaledb 2.29.2-pg17 to 2.30.0-pg17, otel/opentelemetry-collector-contrib 0.158.0 to 0.161.0."
+    - kind: removed
+      description: "BREAKING: networking.k8s.io Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed; TLS moves to the Gateway listener (extraObjects). webOrigin is now required. ingress.allowInsecure becomes route.allowInsecure; with route.enabled a non-https:// webOrigin fails the render unless it is set. An upgrade deletes the existing Ingress."
     - kind: changed
       description: "Sync to binance-trading-bot v1.5.0: **risk:** add loss-streak and drawdown entry breakers beside daily loss (#777); **web:** rebuild trade history around fee-valued statistics (#779); **worker:** add a replace-order decision backed by Binance cancelReplace (#775); **worker:** alert when a held position has no protective stop resting (#778); **strategy:** judge the exchange minimum at the stop's own price (#776); **worker:** prove who placed an order before adopting its fill (#774). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.5.0"
     - kind: changed

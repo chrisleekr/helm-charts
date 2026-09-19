@@ -58,10 +58,12 @@ ISOLATED WORKFLOW RUNNERS (workflowRunner.enabled):
       with `serviceaccounts "<name>" not found`, and replicas sit at 0 with only a
       ReplicaSet event to say why.
 
-  workflowRunner.ingress.enabled publishes workflowRunner.ingress.path as a Prefix, which
-  covers both /ws/workflow-runner/<run>/<attempt> and the shared-daemon /ws
-  endpoint. Both are bearer-authenticated, but the daemon endpoint becomes
-  reachable wherever that host is.
+  workflowRunner.route.enabled renders a separate <fullname>-ws HTTPRoute that
+  publishes workflowRunner.route.path as a PathPrefix on the
+  config.ephemeralDaemon.orchestratorPublicUrl host only, not on every
+  route.hostnames entry. The prefix covers both /ws/workflow-runner/<run>/<attempt>
+  and the shared-daemon /ws endpoint. Both are bearer-authenticated, but the
+  daemon endpoint becomes reachable wherever that host is.
 
   The boundary is fail-closed. If its parameters and the Pod the controller builds
   disagree on the image digest, orchestrator origin, provider chain or node
@@ -94,6 +96,21 @@ ISOLATED WORKFLOW RUNNERS (workflowRunner.enabled):
   Both retained objects also survive `helm uninstall`, so they outlive the release
   that created them. Remove the NetworkPolicy and the namespace by hand once the
   namespace is empty.
+
+UPGRADING to chart 0.23.0 (BREAKING: Ingress replaced by Gateway API HTTPRoute):
+  The chart no longer renders an Ingress. ingress.* and workflowRunner.ingress.*
+  are removed; set route.* instead (route.enabled, route.parentRefs, route.hostnames)
+  and workflowRunner.route.* for the wss:// front door, which now renders as a
+  separate <fullname>-ws HTTPRoute on the orchestratorPublicUrl host only.
+  Requires the Gateway API CRDs and an existing Gateway to name in route.parentRefs.
+
+  TLS moves to the Gateway listener: ingress.tls has no route equivalent, so put
+  the certificate on the HTTPS listener (a cert-manager Certificate can go through
+  extraObjects) and set sectionName in route.parentRefs to that listener.
+
+  `helm upgrade` deletes the existing Ingress objects, so the ingress controller
+  stops serving these hosts at that moment. Provision the Gateway listener first,
+  then upgrade, confirm the HTTPRoute is Accepted, and point DNS at the Gateway.
 
 UPGRADING to chart 0.17.0 (BREAKING: chart renamed github-app-playground to github-app):
   The chart and its Docker image were renamed to match the upstream repo rename
@@ -184,14 +201,18 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   new verbs scope — `helm upgrade` applies the swap automatically.
   See Chart.yaml artifacthub.io/changes annotation for the full list.
 
-1. Get the application URL by running these commands:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
+{{ if .Values.route.enabled -}}
+1. Hostnames served by this route (scheme follows the listener):
+{{- range .Values.route.hostnames }}
+  {{ . }}
+{{- else }}
+  This route inherits its hostname from the parent listener. The scheme follows
+  that listener too, https wherever it terminates TLS:
+  kubectl get httproute --namespace {{ $.Release.Namespace }} {{ include "github-app.fullname" $ }}
 {{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
+{{- else -}}
+1. Get the application URL by running these commands:
+{{- if contains "NodePort" .Values.service.type }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "github-app.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
@@ -205,9 +226,10 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:{{ .Values.config.port }}
   echo "Visit http://127.0.0.1:8080"
 {{- end }}
+{{- end }}
 
 2. Configure your GitHub App webhook to POST to:
-   <your-ingress-host>/api/github/webhooks
+   <your-route-hostname>/api/github/webhooks
 
 3. Dispatch: daemon-only. The orchestrator enqueues jobs and dispatches them
    to the persistent daemon pool; on heavy/overflow signals it spawns

@@ -1,0 +1,93 @@
+{{- /*
+Gateway API replacement for the two removed Ingresses.
+
+The WebSocket front door is its own HTTPRoute, <fullname>-ws, carrying only the
+orchestratorPublicUrl host. A rule on the release route would inherit every
+route.hostnames entry and expose the bearer-authenticated shared-daemon /ws on
+hosts that may sit behind different network controls, and a custom route.rules
+would drop it. Both routes share parentRefs; for one hostname Gateway API
+matches the longest path prefix across routes, so /ws still beats the catch-all.
+
+TLS belongs to the listener, so no scheme is derived here and the old
+tls-coverage guard has no route-level equivalent. Objects outside Gateway API,
+a Certificate for that listener among them, go through extraObjects.
+*/ -}}
+{{- if and .Values.workflowRunner.enabled .Values.workflowRunner.route.enabled (not .Values.route.enabled) }}
+{{- fail "workflowRunner.route.enabled is true but route.enabled is false. The runner route reuses route.parentRefs, so with the route off it would render nothing at all and every runner would hang until its deadline with no object to point at. Set route.enabled=true, or terminate the wss:// front door elsewhere and leave workflowRunner.route.enabled=false." }}
+{{- end }}
+{{- if .Values.route.enabled -}}
+{{- if not .Values.route.parentRefs }}
+{{- fail "route.parentRefs is empty. The API server accepts a parentless HTTPRoute and it then serves nothing, so this fails at render instead. Name the Gateway, or the ListenerSet on Gateway API v1.5.0 and later, whose listener carries this host." }}
+{{- end }}
+{{- $wsHost := "" }}
+{{- if and .Values.workflowRunner.enabled .Values.workflowRunner.route.enabled }}
+{{- if not .Values.route.hostnames }}
+{{- fail "workflowRunner.route.enabled is true but route.hostnames is empty. The runner route reuses a release host rather than introducing a second one, so there is nothing for it to attach to. Set route.hostnames, or point config.ephemeralDaemon.orchestratorPublicUrl at a wss:// front door you terminate elsewhere and leave workflowRunner.route.enabled=false." }}
+{{- end }}
+{{- $origin := include "github-app.workflowRunner.orchestratorOrigin" . }}
+{{- if not (hasPrefix "wss://" $origin) }}
+{{- fail (printf "workflowRunner.route.enabled is true but config.ephemeralDaemon.orchestratorPublicUrl=%q is plaintext, so runners dial the orchestrator Service in-cluster and never traverse the gateway. This route would publish the WebSocket endpoints for nothing. Set workflowRunner.route.enabled=false." .Values.config.ephemeralDaemon.orchestratorPublicUrl) }}
+{{- end }}
+{{- $authority := $origin | trimPrefix "wss://" }}
+{{- $wsHost = $authority | splitList ":" | first }}
+{{- if ne $authority $wsHost }}
+{{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl carries an explicit port (%q) but a gateway listener here only ever serves 443, so runners would dial a port nothing publishes. Drop the port, or leave workflowRunner.route.enabled=false." $authority) }}
+{{- end }}
+{{- $hostnames := list }}
+{{- range .Values.route.hostnames }}{{- $hostnames = append $hostnames (lower .) }}{{- end }}
+{{- if not (has $wsHost $hostnames) }}
+{{- fail (printf "config.ephemeralDaemon.orchestratorPublicUrl host %q is not in route.hostnames, so the runner route would attach to a host the release does not serve. Add it to route.hostnames, or leave workflowRunner.route.enabled=false." $wsHost) }}
+{{- end }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "github-app.fullname" . }}
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.route.parentRefs | nindent 4 }}
+  {{- with .Values.route.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if .Values.route.rules }}
+    {{- toYaml .Values.route.rules | nindent 4 }}
+    {{- else }}
+    - backendRefs:
+        - name: {{ include "github-app.fullname" . }}
+          port: {{ .Values.service.port }}
+    {{- end }}
+{{- if $wsHost }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "github-app.fullname" . }}-ws
+  labels:
+    {{- include "github-app.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.route.parentRefs | nindent 4 }}
+  hostnames:
+    - {{ $wsHost | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.workflowRunner.route.path }}
+      backendRefs:
+        - name: {{ include "github-app.fullname" . }}
+          port: {{ .Values.config.wsPort }}
+{{- end }}
+{{- end }}

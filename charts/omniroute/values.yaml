@@ -69,7 +69,7 @@ config:
   # value. Issue #53 measured 368.8Mi of heap in use against the old 384 cap.
   OMNIROUTE_MEMORY_MB: "1024"
   # SECURITY: "false" lets any client that can reach the proxy spend the
-  # configured provider keys. When ingress.enabled=true, front OmniRoute with
+  # configured provider keys. When route.enabled=true, front OmniRoute with
   # oauth2-proxy / forward-auth, or set this to "true" to require an API key on
   # /v1 calls.
   REQUIRE_API_KEY: "false"
@@ -107,19 +107,29 @@ service:
   port: 20128
   annotations: {}
 
-ingress:
+# Gateway API route, replacing the removed Ingress. HTTPRoute is portable across
+# conformant gateways, so nothing here names an implementation.
+route:
+  # Off by default: a route needs a parentRef naming a Gateway, or a ListenerSet
+  # on Gateway API v1.5.0 and later, that already exists in the cluster, and no
+  # chart can guess one. Enabling without it fails the render deliberately.
+  # A parentRef without sectionName attaches to every listener, plain HTTP :80
+  # included, so the proxy is also served in cleartext; set sectionName to the
+  # HTTPS listener.
   enabled: false
-  className: ""
+  parentRefs: []
+  # Optional. An empty list inherits the parent listener's hostname, which is
+  # correct when that listener already serves exactly this host.
+  hostnames: []
   annotations: {}
-  hosts:
-    - host: omniroute.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-  #  - secretName: omniroute-tls
-  #    hosts:
-  #      - omniroute.example.com
+  # Empty renders one catch-all rule to this chart's Service. Set it to take
+  # full control; matches and filters pass through verbatim.
+  rules: []
+
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
+# Certificate for the listener, an authorization policy, a ListenerSet. A literal
+# `{{` must be escaped, e.g. {{ "{{" }}.
+extraObjects: []
 
 serviceAccount:
   create: true

@@ -1,11 +1,13 @@
 OmniRoute is deployed.
 
 1. Reach the dashboard and API:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
+{{- if .Values.route.enabled }}
+{{- range .Values.route.hostnames }}
+  {{ . }}
+{{- else }}
+  This route inherits its hostname from the parent listener. The scheme follows
+  that listener too, https wherever it terminates TLS:
+  kubectl get httproute --namespace {{ $.Release.Namespace }} {{ include "omniroute.fullname" $ }}
 {{- end }}
 {{- else }}
   export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "omniroute.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
@@ -30,9 +32,9 @@ OmniRoute is deployed.
    Do NOT rotate API_KEY_SECRET or STORAGE_ENCRYPTION_KEY on an existing install:
    rotating them makes stored provider keys / the encrypted database unreadable.
 {{- end }}
-{{- if and .Values.ingress.enabled (ne (toString (.Values.config.REQUIRE_API_KEY | default "false")) "true") }}
+{{- if and .Values.route.enabled (ne (toString (.Values.config.REQUIRE_API_KEY | default "false")) "true") }}
 
-WARNING: ingress.enabled=true but config.REQUIRE_API_KEY is not "true". OmniRoute
+WARNING: route.enabled=true but config.REQUIRE_API_KEY is not "true". OmniRoute
 is now reachable from outside the cluster with no API-key check, so any caller can
 spend your configured provider keys. Front it with oauth2-proxy / forward-auth, or
 set config.REQUIRE_API_KEY="true".

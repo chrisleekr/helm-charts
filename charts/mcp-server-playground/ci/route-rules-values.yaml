@@ -1,0 +1,46 @@
+# Renders explicit route.rules with CORS and header filters plus a cert-manager
+# Certificate through extraObjects, the shape a real deployment uses.
+route:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - mcp.ci.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: CORS
+          cors:
+            allowOrigins:
+              - "*"
+            allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+            allowHeaders: ["Content-Type", "Authorization", "Mcp-Protocol-Version"]
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: Strict-Transport-Security
+                value: max-age=63072000
+      backendRefs:
+        # Follows the schema gate's release name, schema-check. Under another
+        # release name, set this to <fullname>-service from `helm template`.
+        - name: schema-check-mcp-server-playground-service
+          port: 80
+extraObjects:
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: mcp-ci-tls
+    spec:
+      secretName: mcp-ci-tls
+      dnsNames:
+        - mcp.ci.example.com
+      issuerRef:
+        kind: ClusterIssuer
+        name: letsencrypt-ci

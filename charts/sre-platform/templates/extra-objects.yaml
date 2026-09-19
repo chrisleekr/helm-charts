@@ -1,0 +1,12 @@
+{{- /*
+Manifests passed through tpl, for objects outside Gateway API that a given
+gateway needs: a cert-manager Certificate for each listener, an authorization
+policy, a ListenerSet. Keeping them here rather than as chart templates is what
+lets one chart serve more than one gateway. Each entry is a map and can
+reference .Values and the release.
+A literal {{ must be escaped, e.g. {{ "{{" }}.
+*/ -}}
+{{- range .Values.extraObjects }}
+---
+{{ tpl (toYaml .) $ }}
+{{- end }}

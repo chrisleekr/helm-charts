@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.22.1
+version: 0.23.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: removed
+      description: "BREAKING: the Ingress is removed. `ingress.*` and the workflow-runner Ingress (`workflowRunner.ingress.*`) are replaced by a Gateway API HTTPRoute under `route.*` and `workflowRunner.route.*`; the runner front door is a separate `<fullname>-ws` HTTPRoute on the orchestratorPublicUrl host only. TLS moves to the Gateway listener, so set `sectionName` in `route.parentRefs` to the HTTPS listener. `helm upgrade` deletes the existing Ingress, so provision the Gateway first. See the UPGRADING to 0.23.0 section in NOTES.txt."
     - kind: fixed
       description: "The workflow-runner Role now grants `get` on `pods/log`. v1.18.0 captures a dead runner Pod's container log before cleanup deletes it (#306), and without this verb that read returns 403 and the post-mortem is lost: the controller falls back to the terminated container status alone. Runner Pod creation and the admission boundary are unaffected, so this is a diagnostics-only recovery."
     - kind: changed

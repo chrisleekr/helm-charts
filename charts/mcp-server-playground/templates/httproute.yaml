@@ -1,0 +1,40 @@
+{{- /*
+Gateway API replacement for the removed Ingress.
+
+HTTPRoute is gateway.networking.k8s.io/v1, served by every conformant gateway,
+so nothing here names an implementation. TLS is not a route concern: it belongs
+to the listener, which is why no scheme is derived anywhere in this chart.
+Objects outside Gateway API go through extraObjects.
+*/ -}}
+{{- if .Values.route.enabled -}}
+{{- if not .Values.route.parentRefs }}
+{{- fail "route.parentRefs is empty. The API server accepts a parentless HTTPRoute and it then serves nothing, so this fails at render instead. Name the Gateway, or the ListenerSet on Gateway API v1.5.0 and later, whose listener carries this host." }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "mcp-server-playground.fullname" . }}
+  labels:
+    {{- include "mcp-server-playground.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.route.parentRefs | nindent 4 }}
+  {{- with .Values.route.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if .Values.route.rules }}
+    {{- toYaml .Values.route.rules | nindent 4 }}
+    {{- else }}
+    - backendRefs:
+        {{- /* This chart's Service is <fullname>-service, so the default rule
+        must match service.yaml or it resolves to nothing and the gateway 500s. */}}
+        - name: {{ include "mcp-server-playground.fullname" . }}-service
+          port: {{ .Values.service.port }}
+    {{- end }}
+{{- end }}

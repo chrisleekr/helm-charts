@@ -34,8 +34,8 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # Public application port, reachable from anywhere the ingress controller
-    # or another workload sits. A NetworkPolicy port is the port on the target
+    # Public application port, reachable from the gateway data plane and any
+    # other workload. A NetworkPolicy port is the port on the target
     # pod, not the Service port, so this is the container port and stays 3000
     # regardless of what service.port is remapped to.
     - ports:

@@ -3,3 +3,17 @@
 # succeed in CI without a real secret. Not for production use.
 auth:
   initialPassword: "ci-test-password-do-not-use"
+
+# Gateway API surface, folded in rather than shipped as its own fixture: this
+# chart fails to render without the auth values above, and the schema gate
+# renders every ci fixture on its own.
+route:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - omniroute.ci.example.com

@@ -1,0 +1,46 @@
+{{- /*
+Gateway API replacement for the two removed Ingresses.
+
+Two routes, because the API and the dashboard are separate origins on separate
+hosts and the application enforces that they differ. HTTPRoute is portable
+across conformant gateways, so nothing here names an implementation.
+
+TLS belongs to the listener, so the old "enabled ingresses require TLS" guard
+and ingress.allowInsecure have no route-level equivalent and are gone. The
+host-match, https and IP-literal guards survive in _helpers.tpl: a Gateway API
+hostname is a DNS name too, so an IP there is still refused.
+*/ -}}
+{{- range $name, $cfg := dict "api" .Values.route.api "dashboard" .Values.route.dashboard }}
+{{- if $cfg.enabled }}
+{{- if not $cfg.parentRefs }}
+{{- fail (printf "route.%s.parentRefs is empty. The API server accepts a parentless HTTPRoute and it then serves nothing, so this fails at render instead. Name the Gateway, or the ListenerSet on Gateway API v1.5.0 and later, whose listener carries this host." $name) }}
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "sre-platform.componentName" (dict "ctx" $ "suffix" $name) }}
+  labels:
+    {{- include "sre-platform.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+  {{- with $cfg.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml $cfg.parentRefs | nindent 4 }}
+  {{- with $cfg.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if $cfg.rules }}
+    {{- toYaml $cfg.rules | nindent 4 }}
+    {{- else }}
+    - backendRefs:
+        - name: {{ include "sre-platform.componentName" (dict "ctx" $ "suffix" $name) }}
+          port: {{ index $.Values.service $name "port" }}
+    {{- end }}
+{{- end }}
+{{- end }}

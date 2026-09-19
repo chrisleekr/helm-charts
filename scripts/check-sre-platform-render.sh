@@ -66,10 +66,9 @@ render smtp -f "$ci/ct-values.yaml" \
   --set smtp.secure=true \
   --set-string smtp.from=alerts@example.com \
   --set-string smtp.username=mailer
-render ingress -f "$ci/ingress-values.yaml"
+render route -f "$ci/route-values.yaml"
 render no-migrate -f "$ci/ct-values.yaml" --set migrations.enabled=false
 render lean -f "$ci/ct-values.yaml" --set serviceAccount.create=false --set serviceAccount.name=sre-runtime
-render edge-tls -f "$ci/ingress-values.yaml" --set ingress.allowInsecure=true --set ingress.api.tls=null --set ingress.dashboard.tls=null
 # One valid provider, reused with different administrator cases below.
 bootstrap_provider=(
   --set-string 'bootstrap.staffProvider.displayName=Staff sign-in'
@@ -140,7 +139,6 @@ want_count "$tmp/bootstrap.yaml" '^kind: Job$' 2 "first-run bootstrap adds a sec
 want_count "$tmp/bootstrap.yaml" '^      automountServiceAccountToken: false$' 6 "the bootstrap Job also disables credential automounting"
 want_not "$tmp/lean.yaml" '^kind: ServiceAccount$' "pre-existing ServiceAccount mode omits creation"
 want "$tmp/lean.yaml" 'serviceAccountName: sre-runtime' "pre-existing ServiceAccount is selected"
-want_count "$tmp/edge-tls.yaml" '^kind: Ingress$' 2 "external TLS termination branch renders"
 
 doc "$tmp/base.yaml" NetworkPolicy sre-sre-platform-egress "$tmp/policy.yaml"
 doc "$tmp/base.yaml" ConfigMap sre-sre-platform "$tmp/base-config.yaml"
@@ -254,10 +252,16 @@ want "$tmp/policy.yaml" 'kubernetes\.io/metadata\.name: ai' "private egress name
 want "$tmp/policy.yaml" 'app\.kubernetes\.io/name: embeddings-ci' "private egress pod selector renders"
 want "$tmp/policy.yaml" 'port: 8080' "private egress port renders"
 
-want_count "$tmp/ingress.yaml" '^kind: Ingress$' 2 "TLS branch renders both ingresses"
-want_count "$tmp/ingress.yaml" '^  tls:$' 2 "both ingresses carry TLS"
-want "$tmp/ingress.yaml" 'host: "api\.sre\.example\.com"' "API ingress host"
-want "$tmp/ingress.yaml" 'host: "sre\.example\.com"' "dashboard ingress host"
+want_count "$tmp/route.yaml" '^kind: HTTPRoute$' 2 "both routes render"
+want "$tmp/route.yaml" '^    - api\.sre\.example\.com$' "API route hostname"
+want "$tmp/route.yaml" '^    - sre\.example\.com$' "dashboard route hostname"
+# Default rule: each route targets its own component Service on service.<name>.port.
+for component in api dashboard; do
+  port=$(yq ".service.$component.port" "$chart/values.yaml")
+  doc "$tmp/route.yaml" HTTPRoute "sre-sre-platform-$component" "$tmp/route-$component.yaml"
+  want "$tmp/route-$component.yaml" "^        - name: sre-sre-platform-$component\$" "$component route targets the $component Service"
+  want "$tmp/route-$component.yaml" "^          port: $port\$" "$component route targets service.$component.port"
+done
 
 if helm template sre "$chart" -f "$ci/ct-values.yaml" --set existingSecret= >/dev/null 2>"$tmp/missing-secret.err"; then
   bad "missing existingSecret must fail"
@@ -436,34 +440,27 @@ if helm template sre "$chart" -f "$ci/ct-values.yaml" --set public.dashboardUrl=
 else
   want "$tmp/same-origin.err" 'must be different origins' "identical public origins fail clearly"
 fi
-if helm template sre "$chart" -f "$ci/ingress-values.yaml" --set ingress.api.tls=null >/dev/null 2>"$tmp/tls.err"; then
-  bad "cleartext ingress must fail"
+if helm template sre "$chart" -f "$ci/route-values.yaml" --set public.apiUrl=https://different.example.com >/dev/null 2>"$tmp/host.err"; then
+  bad "route/public API host mismatch must fail"
 else
-  want "$tmp/tls.err" 'enabled ingresses require TLS' "cleartext ingress fails clearly"
-fi
-if helm template sre "$chart" -f "$ci/ingress-values.yaml" --set public.apiUrl=https://different.example.com >/dev/null 2>"$tmp/host.err"; then
-  bad "ingress/public API host mismatch must fail"
-else
-  want "$tmp/host.err" 'ingress.api.host must match' "ingress/public API host mismatch fails clearly"
+  want "$tmp/host.err" 'route.api.hostnames must contain' "route/public API host mismatch fails clearly"
 fi
 
-# An Ingress rules[].host is a DNS name, so an IP literal in the public URL
+# A Gateway API hostname is a DNS name, so an IP literal in the public URL
 # applies cleanly and is then refused by the API server. The bracketed IPv6 case
 # is here because a naive ":" split truncates "[2001:db8::10]" to "[2001".
-ip_ingress() { # <field> <url> <host>
-  helm template sre "$chart" -f "$ci/ingress-values.yaml" \
+ip_route() { # <field> <url> <host>
+  helm template sre "$chart" -f "$ci/route-values.yaml" \
     --set-string "public.$1=$2" \
-    --set-string "ingress.$3.host=$4" \
-    --set-string "ingress.$3.tls[0].secretName=ci-tls" \
-    --set-string "ingress.$3.tls[0].hosts[0]=$4"
+    --set-string "route.$3.hostnames[0]=$4"
 }
 for ip_case in "apiUrl https://192.0.2.10 api 192.0.2.10" \
   "apiUrl https://[2001:db8::10] api [2001:db8::10]" \
   "dashboardUrl https://198.51.100.7 dashboard 198.51.100.7"; do
   # shellcheck disable=SC2086
   set -- $ip_case
-  if ip_ingress "$1" "$2" "$3" "$4" >/dev/null 2>"$tmp/ip-host.err"; then
-    bad "IP literal in public.$1 with ingress.$3 enabled must fail"
+  if ip_route "$1" "$2" "$3" "$4" >/dev/null 2>"$tmp/ip-host.err"; then
+    bad "IP literal in public.$1 with route.$3 enabled must fail"
   else
     # want() greps as an ERE, so the brackets of an IPv6 literal need escaping.
     escaped=${4//./\\.}
@@ -473,10 +470,50 @@ for ip_case in "apiUrl https://192.0.2.10 api 192.0.2.10" \
       "IP literal in public.$1 fails clearly"
   fi
 done
-helm template sre "$chart" -f "$ci/ingress-values.yaml" \
-  --set-string public.apiUrl=https://api.sre.example.com:8443 >"$tmp/host-port.yaml"
-want "$tmp/host-port.yaml" '^    - host: "api.sre.example.com"$' \
-  "a port in the public URL is stripped from the ingress host"
+# The render succeeding is the proof: the helper fails when host:port is not in
+# route.api.hostnames, so no output grep is needed.
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set-string public.apiUrl=https://api.sre.example.com:8443 >/dev/null 2>"$tmp/host-port.err"; then
+  pass "a port in the public URL is stripped before the hostname comparison"
+else
+  bad "a port in the public URL is stripped before the hostname comparison: $(tr '\n' ' ' <"$tmp/host-port.err")"
+fi
+# URL hosts are case-insensitive but Gateway API hostnames are lowercase only,
+# so an uppercase public host must match the lowercase route hostname.
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set-string public.apiUrl=https://API.sre.example.com >/dev/null 2>"$tmp/host-case.err"; then
+  pass "public URL host is lowercased before the hostname comparison"
+else
+  bad "public URL host is lowercased before the hostname comparison: $(tr '\n' ' ' <"$tmp/host-case.err")"
+fi
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set route.dashboard.hostnames=null >/dev/null 2>"$tmp/route-hostnames.err"; then
+  bad "enabled route without hostnames must fail"
+else
+  want "$tmp/route-hostnames.err" 'route\.dashboard\.hostnames is required' \
+    "enabled route without hostnames fails clearly"
+fi
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set route.api.parentRefs=null >/dev/null 2>"$tmp/route-parents.err"; then
+  bad "enabled route without parentRefs must fail"
+else
+  want "$tmp/route-parents.err" 'route\.api\.parentRefs is empty' \
+    "enabled route without parentRefs fails clearly"
+fi
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set-string public.dashboardUrl=http://sre.example.com >/dev/null 2>"$tmp/route-https.err"; then
+  bad "http:// public URL with its route enabled must fail"
+else
+  want "$tmp/route-https.err" 'public\.dashboardUrl must use https://' \
+    "http:// public URL with its route enabled fails clearly"
+fi
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set-string public.dashboardUrl=https://other.example.com >/dev/null 2>"$tmp/route-host.err"; then
+  bad "public URL host missing from route hostnames must fail"
+else
+  want "$tmp/route-host.err" 'route\.dashboard\.hostnames must contain' \
+    "public URL host missing from route hostnames fails clearly"
+fi
 if helm template sre "$chart" -f "$ci/ct-values.yaml" --set embeddings.dim=1024.5 >/dev/null 2>"$tmp/dim.err"; then
   bad "wrong embedding dimension must fail"
 else
@@ -671,7 +708,7 @@ want "$tmp/long.yaml" '^  name: .*-triage-worker$' "long role names retain their
 
 # The chart is public. Personal infrastructure must not enter its source or render.
 forbidden='gitlab\.chrislee\.kr|registry\.chrislee\.kr|(^|[^A-Za-z])chrislee\.kr|homelab|smee\.io'
-if grep -rEi "$forbidden" "$chart" "$tmp/base.yaml" "$tmp/ingress.yaml" >/dev/null; then
+if grep -rEi "$forbidden" "$chart" "$tmp/base.yaml" "$tmp/route.yaml" >/dev/null; then
   bad "private infrastructure reference found"
 else
   pass "no private infrastructure references"

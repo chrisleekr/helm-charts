@@ -3,7 +3,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-# Renovate does not manage any of the four pins below: renovate.json sets
+# Renovate does not manage any of the five pins below: renovate.json sets
 # enabledManagers to custom.regex with managers only for the omniroute appVersion
 # and the binance-trading-bot images. Bump them by hand. The two checksums belong
 # to kubeconform_version and must be re-derived together whenever it moves.
@@ -11,6 +11,16 @@ kubeconform_version="v0.8.0"
 kubernetes_version="1.31.0"
 schema_revision="14355cdd490a43d21e05985668815a36a6f97da6"
 schema_location="https://raw.githubusercontent.com/yannh/kubernetes-json-schema/$schema_revision/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json"
+# Second location, consulted only when a kind is absent from the core catalog
+# above. The charts render Gateway API HTTPRoutes, and through extraObjects the
+# cert-manager and gateway-specific objects a cluster needs. Validating those
+# here rather than adding each to skip_kinds keeps -strict live on their spec: a
+# misspelled hostnames or backendRefs is refused instead of applying cleanly and
+# then routing nothing. Pinned to a commit, not main and not a tag: the catalog's
+# newest tag is v0.0.12 from 2023 and predates every Gateway API schema, while
+# main would let an upstream edit reject a chart that had not moved.
+crd_schema_revision="ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2"
+crd_schema_location="https://raw.githubusercontent.com/datreeio/CRDs-catalog/$crd_schema_revision/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 # Kinds with no schema in the pinned catalog above. Listed explicitly rather than
 # passing -ignore-missing-schemas, which would also swallow a typo in a core
 # apiVersion. Their shape is asserted by check-binance-trading-bot-render.sh
@@ -125,5 +135,6 @@ printf 'Rendered %s fixtures\n' "$fixtures"
   -summary \
   -kubernetes-version "$kubernetes_version" \
   -schema-location "$schema_location" \
+  -schema-location "$crd_schema_location" \
   -skip "$skip_kinds" \
   "$rendered"

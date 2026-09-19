@@ -22,11 +22,12 @@ jobs:
           persist-credentials: false
 
       - name: Render matrix
-        # Renders every conditional branch of the chart (ingress, TLS,
-        # existingSecret, persistence off, serviceAccount.create=false) and
-        # asserts the extraConfig merge. Ran on GitLab only until the two CIs
-        # were brought to parity, so a branch that failed to render here merged
-        # and broke on the other host.
+        # Renders every conditional branch of the chart (route on and off,
+        # custom route rules, existingSecret, persistence off,
+        # serviceAccount.create=false, extraObjects tpl), asserts the
+        # extraConfig merge, and checks an empty route.parentRefs fails. Ran on
+        # GitLab only until the two CIs were brought to parity, so a branch that
+        # failed to render here merged and broke on the other host.
         run: bash scripts/check-omniroute-render.sh
 
       - name: Memory invariant

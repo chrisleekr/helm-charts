@@ -3,7 +3,7 @@ name: sre-platform
 description: >-
   A Helm chart for SRE Platform, an interactive incident investigation workspace
 type: application
-version: 0.1.10
+version: 0.2.0
 # 0.0.0 is the unpublished placeholder; sre-platform-sync.yml sets the released
 # version here, and release.yml withholds the chart while the placeholder stands.
 appVersion: "0.0.0"
@@ -20,6 +20,8 @@ keywords:
   - kubernetes
 annotations:
   artifacthub.io/changes: |
+    - kind: removed
+      description: "BREAKING: Replace the Ingresses with Gateway API HTTPRoutes configured under route.api and route.dashboard, and remove the ingress.* values. TLS moves to the Gateway listener. Upgrading deletes the existing Ingresses."
     - kind: removed
       description: "Remove obsolete global Auth0 values and environment variables; staff identity is configured through bootstrap."
     - kind: fixed
