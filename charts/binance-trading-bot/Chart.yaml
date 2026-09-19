@@ -36,6 +36,8 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Bump bundled images: timescale/timescaledb 2.29.2-pg17 to 2.30.0-pg17, otel/opentelemetry-collector-contrib 0.158.0 to 0.161.0."
     - kind: removed
       description: "BREAKING: networking.k8s.io Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed; TLS moves to the Gateway listener (extraObjects). webOrigin is now required. ingress.allowInsecure becomes route.allowInsecure; with route.enabled a non-https:// webOrigin fails the render unless it is set. An upgrade deletes the existing Ingress."
     - kind: changed
