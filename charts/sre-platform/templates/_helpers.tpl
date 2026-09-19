@@ -343,7 +343,7 @@ the invitation side already does. */ -}}
 {{- $url := include (printf "sre-platform.%sUrl" $name) $ -}}
 {{- $host := include "sre-platform.routeHost" (dict "url" $url "field" (printf "public.%sUrl" $name) "route" (printf "route.%s" $name)) -}}
 {{- if not (has $host $cfg.hostnames) -}}
-{{- fail (printf "route.%s.hostnames must contain the host in public.%sUrl (%q). A port in the public URL is ignored for this comparison, because a Gateway API hostname cannot carry one." $name $name $host) -}}
+{{- fail (printf "route.%s.hostnames must contain the host in public.%sUrl (%q). A port in the public URL is ignored for this comparison, because a Gateway API hostname cannot carry one. Wildcards are not accepted here: list the exact host." $name $name $host) -}}
 {{- end -}}
 {{- if not (hasPrefix "https://" $url) -}}
 {{- fail (printf "public.%sUrl must use https:// when route.%s is enabled." $name $name) -}}
@@ -378,7 +378,8 @@ A Gateway API hostname is a DNS name: the API server rejects a port, and rejects
 an IP address outright. The public URL is allowed to be neither, so the port is
 stripped and an IP literal is refused here rather than at apply time. A bracketed
 IPv6 authority is matched whole first, because splitting it on ":" would truncate
-[2001:db8::10] to "[2001" and then compare that.
+[2001:db8::10] to "[2001" and then compare that. The host is lowercased
+because Gateway API hostnames are lowercase only and URL hosts are case-insensitive.
 
 Args (dict): url, field (the values path named in the error), route.
 */}}
@@ -393,5 +394,5 @@ Args (dict): url, field (the values path named in the error), route.
 {{- if or (hasPrefix "[" $host) (regexMatch "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$" $host) -}}
 {{- fail (printf "%s resolves to the IP address %q, but %s is enabled and a Gateway API hostname must be a DNS name. The API server rejects an IP there, so this would apply cleanly in Helm and then be refused. Use a hostname, or disable that route and reach the Service yourself." .field $host .route) -}}
 {{- end -}}
-{{- $host -}}
+{{- lower $host -}}
 {{- end }}

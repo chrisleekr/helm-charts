@@ -219,8 +219,9 @@ route:
     annotations: {}
     rules: []
 
-# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
 # Certificate per listener, an authorization policy, a ListenerSet.
+# A literal {{ must be escaped, e.g. {{ "{{" }}.
 extraObjects: []
 
 # The application validates connector URLs before use, but DNS can change

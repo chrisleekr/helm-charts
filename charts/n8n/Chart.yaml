@@ -21,3 +21,8 @@ version: 0.1.0
 appVersion: "1.100.1"
 home: https://n8n.io/
 icon: https://avatars.githubusercontent.com/u/45487711?s=48&v=4
+annotations:
+  # Changelog shown on Artifact Hub: https://artifacthub.io/docs/topics/annotations/helm/
+  artifacthub.io/changes: |
+    - kind: removed
+      description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*), off by default. ingress.* values are removed, so upgrading with unchanged values deletes the Ingress and removes external access. Set route.enabled, route.parentRefs and route.hostnames. TLS moves to the Gateway listener (extraObjects)."

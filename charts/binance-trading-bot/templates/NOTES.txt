@@ -4,11 +4,7 @@ Topology: {{ .Values.topology }} ({{ include "binance-trading-bot.roles" . }})
 Web origin: {{ include "binance-trading-bot.webOrigin" . }}
 
 Reach the dashboard:
-{{- if and .Values.route.enabled .Values.route.hostnames }}
-{{- range .Values.route.hostnames }}
-  {{ . }}
-{{- end }}
-{{- else if .Values.route.enabled }}
+{{- if .Values.route.enabled }}
   {{ include "binance-trading-bot.webOrigin" . }}
 {{- else }}
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "binance-trading-bot.fullname" . }} 3000:{{ .Values.service.port }}

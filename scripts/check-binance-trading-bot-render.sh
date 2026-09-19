@@ -44,6 +44,8 @@
 #   R23 NEGATIVE     route on with an http:// webOrigin -> must FAIL
 #   R24 insecure     R23 + route.allowInsecure=true renders
 #   R25 NEGATIVE     route on with empty parentRefs -> must FAIL
+#   R26 NEGATIVE     route.hostnames without the webOrigin host -> must FAIL
+#   R27 host match   route.hostnames holds the host of an uppercase webOrigin
 #
 # Resource-name contract asserted below (release "btb", fullname
 # "btb-binance-trading-bot"). Workloads are always role-suffixed so the range
@@ -407,6 +409,20 @@ else
   r25_rc=$?
 fi
 
+# R26 proves a route serving a host WEB_ORIGIN rejects fails at render. R27
+# proves the comparison ignores case and the port, as browsers do for origins.
+if helm template "$release" "$chart" -f "$ci/ct-values.yaml" "${route_on[@]}" \
+  --set-string webOrigin=https://btb.ci.example.com \
+  --set 'route.hostnames[0]=other.ci.example.com' >/dev/null 2>"$tmp/r26.err"; then
+  r26_rc=0
+else
+  r26_rc=$?
+fi
+render r27 -f "$ci/ct-values.yaml" "${route_on[@]}" \
+  --set-string webOrigin=https://BTB.CI.Example.com:8443 \
+  --set 'route.hostnames[0]=other.ci.example.com' \
+  --set 'route.hostnames[1]=btb.ci.example.com'
+
 if helm lint "$chart" -f "$ci/ct-values.yaml" >"$tmp/lint.out" 2>&1; then
   lint_rc=0
 else
@@ -470,6 +486,7 @@ r16="$tmp/r16.yaml"
 r17="$tmp/r17.yaml"
 r22="$tmp/r22.yaml"
 r24="$tmp/r24.yaml"
+r27="$tmp/r27.yaml"
 readme="$chart/README.md"
 
 # ----------------------------------------------------------------- assertions -
@@ -1149,14 +1166,26 @@ elif ! grep -q 'parentRefs' "$tmp/r25.err"; then
 fi
 check C32 "a route with empty parentRefs fails the render with an actionable message"
 
+# C33 - WEB_ORIGIN is an exact-origin allowlist, so a route host outside it
+# renders and then fails CORS, CSRF and the WebSocket upgrade in the browser.
+if [ "$r26_rc" -eq 0 ]; then
+  note "R26: route.hostnames without the webOrigin host rendered instead of failing"
+elif ! grep -q 'is not in route.hostnames' "$tmp/r26.err"; then
+  note "R26: render failed but stderr never names route.hostnames: $(tr '\n' ' ' <"$tmp/r26.err" | cut -c1-200)"
+fi
+if get_doc "$r27" HTTPRoute "$fullname" "R27"; then
+  want "$DOC" '^[[:space:]]*- btb\.ci\.example\.com$' "R27 route"
+fi
+check C33 "route.hostnames must contain the webOrigin host, compared case-insensitively without the port"
+
 # -------------------------------------------------------------------- summary -
 
 total=$((passed + failed))
 printf '\n%s/%s assertions failed\n' "$failed" "$total"
 # A criterion deleted rather than fixed still leaves "0 failed" behind, so pin
-# the count: the acceptance list is exactly 32 and the gate covers all of them.
-if [ "$total" -ne 32 ]; then
-  printf 'FAIL gate: expected 32 criteria, ran %s\n' "$total" >&2
+# the count: the acceptance list is exactly 33 and the gate covers all of them.
+if [ "$total" -ne 33 ]; then
+  printf 'FAIL gate: expected 33 criteria, ran %s\n' "$total" >&2
   exit 1
 fi
 [ "$failed" -eq 0 ]

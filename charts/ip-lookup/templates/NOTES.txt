@@ -1,4 +1,4 @@
-1. Get the application URL by running these commands:
+1. {{ if .Values.route.enabled }}Hostnames served by this route (scheme follows the listener):{{ else }}Get the application URL by running these commands:{{ end }}
 {{- if .Values.route.enabled }}
 {{- range .Values.route.hostnames }}
   {{ . }}

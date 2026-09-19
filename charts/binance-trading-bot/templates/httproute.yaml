@@ -20,6 +20,20 @@ hatch for a deliberate plain-HTTP deployment, such as a private network.
 {{- if and (not (hasPrefix "https://" (include "binance-trading-bot.webOrigin" .))) (not .Values.route.allowInsecure) }}
 {{- fail "webOrigin is not https://, so the dashboard and its session cookie would be served over cleartext HTTP. Attach the route to an HTTPS listener and set webOrigin to the https:// origin, or set route.allowInsecure=true to accept plain HTTP." }}
 {{- end }}
+{{- /*
+WEB_ORIGIN is an exact-origin allowlist, so a route serving a host other than
+the webOrigin host renders fine and then fails CORS, CSRF and the WebSocket
+upgrade in the browser. Empty hostnames inherit the listener's and are allowed.
+*/ -}}
+{{- with .Values.route.hostnames }}
+{{- $webOrigin := include "binance-trading-bot.webOrigin" $ }}
+{{- $webHost := regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://" $webOrigin "" | splitList "/" | first | splitList ":" | first | lower }}
+{{- $hostnames := list }}
+{{- range . }}{{- $hostnames = append $hostnames (lower .) }}{{- end }}
+{{- if not (has $webHost $hostnames) }}
+{{- fail (printf "webOrigin host %q is not in route.hostnames %v, so the browser would reach the dashboard on a host WEB_ORIGIN rejects, failing CORS, Better Auth CSRF and the WebSocket upgrade. Add %q to route.hostnames, or set webOrigin to a host the route serves." $webHost $hostnames $webHost) }}
+{{- end }}
+{{- end }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

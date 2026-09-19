@@ -75,8 +75,9 @@ route:
   # full control; matches and filters pass through verbatim.
   rules: []
 
-# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
 # Certificate for the listener, an Istio AuthorizationPolicy, a ListenerSet.
+# A literal `{{` must be escaped, e.g. {{ "{{" }}.
 extraObjects: []
 
 resources:

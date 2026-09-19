@@ -478,6 +478,14 @@ if helm template sre "$chart" -f "$ci/route-values.yaml" \
 else
   bad "a port in the public URL is stripped before the hostname comparison: $(tr '\n' ' ' <"$tmp/host-port.err")"
 fi
+# URL hosts are case-insensitive but Gateway API hostnames are lowercase only,
+# so an uppercase public host must match the lowercase route hostname.
+if helm template sre "$chart" -f "$ci/route-values.yaml" \
+  --set-string public.apiUrl=https://API.sre.example.com >/dev/null 2>"$tmp/host-case.err"; then
+  pass "public URL host is lowercased before the hostname comparison"
+else
+  bad "public URL host is lowercased before the hostname comparison: $(tr '\n' ' ' <"$tmp/host-case.err")"
+fi
 if helm template sre "$chart" -f "$ci/route-values.yaml" \
   --set route.dashboard.hostnames=null >/dev/null 2>"$tmp/route-hostnames.err"; then
   bad "enabled route without hostnames must fail"

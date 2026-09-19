@@ -154,8 +154,9 @@ route:
   # never here: workflowRunner.route renders it as the separate -ws route.
   rules: []
 
-# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
-# Certificate for the listener, an authorization policy, a ListenerSet.
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
+# Certificate for the listener, an authorization policy, a ListenerSet. A literal
+# `{{` must be escaped, e.g. {{ "{{" }}.
 extraObjects: []
 
 # Resource recommendations scale with config.maxConcurrentRequests (~512Mi per session).

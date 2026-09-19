@@ -247,6 +247,9 @@ route:
   # - name: public
   #   namespace: gateway-system
   #   sectionName: https
+  # Empty inherits the listener's hostname, making this dashboard the catch-all
+  # for that listener. When set, it must contain the webOrigin host or the
+  # render fails, because WEB_ORIGIN rejects any other host.
   hostnames: []
   annotations: {}
   # Empty renders one catch-all rule to this chart's Service. Set it to take

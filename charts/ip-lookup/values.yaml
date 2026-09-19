@@ -97,8 +97,9 @@ route:
   #               value: "0"
   rules: []
 
-# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
 # Certificate for the listener, an authorization policy, a ListenerSet.
+# A literal `{{` must be escaped, e.g. {{ "{{" }}.
 extraObjects: []
 
 resources:

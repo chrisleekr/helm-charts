@@ -201,8 +201,8 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   new verbs scope — `helm upgrade` applies the swap automatically.
   See Chart.yaml artifacthub.io/changes annotation for the full list.
 
-1. Get the application URL by running these commands:
-{{- if .Values.route.enabled }}
+{{ if .Values.route.enabled -}}
+1. Hostnames served by this route (scheme follows the listener):
 {{- range .Values.route.hostnames }}
   {{ . }}
 {{- else }}
@@ -210,7 +210,9 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   that listener too, https wherever it terminates TLS:
   kubectl get httproute --namespace {{ $.Release.Namespace }} {{ include "github-app.fullname" $ }}
 {{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
+{{- else -}}
+1. Get the application URL by running these commands:
+{{- if contains "NodePort" .Values.service.type }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "github-app.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
@@ -223,6 +225,7 @@ UPGRADING from chart 0.5.x to 0.6.0 (BREAKING):
   export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "github-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:{{ .Values.config.port }}
   echo "Visit http://127.0.0.1:8080"
+{{- end }}
 {{- end }}
 
 2. Configure your GitHub App webhook to POST to:
