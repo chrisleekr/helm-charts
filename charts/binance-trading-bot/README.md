@@ -12,7 +12,7 @@ helm install btb chrisleekr/binance-trading-bot \
   --set webOrigin=https://bot.example.com
 ```
 
-`webOrigin` is the only value with no usable default. Upstream's `WEB_ORIGIN` is an exact-origin allowlist with no wildcard support, and it gates CORS, Better Auth CSRF and the WebSocket upgrade. Get it wrong and the app installs cleanly but the dashboard never connects. Leave it empty and the chart takes the first `ingress.hosts` entry; with neither, the render fails rather than guessing.
+`webOrigin` is the only value with no usable default. Upstream's `WEB_ORIGIN` is an exact-origin allowlist with no wildcard support, and it gates CORS, Better Auth CSRF and the WebSocket upgrade. Get it wrong and the app installs cleanly but the dashboard never connects. It has no fallback: an HTTPRoute carries no TLS block, so there is no scheme to derive and the render fails rather than guessing.
 
 Binance API keys are not chart configuration. They are stored per account through the dashboard after you log in.
 
@@ -35,7 +35,7 @@ In `split` mode the api and the worker mount the same `BACKUP_DIR` claim: the wo
 
 | Port | Exposure | Serves |
 | --- | --- | --- |
-| 3000 | primary Service, ingress | API, dashboard, WebSocket, `/healthz` |
+| 3000 | primary Service, route | API, dashboard, WebSocket, `/healthz` |
 | 9100 | none by default | api admin: `/healthz`, `/readyz`, `/metrics` |
 | 9101 | none by default | worker admin: same three paths |
 
@@ -56,7 +56,9 @@ The policy selects the application pods only. The bundled Postgres and Valkey ar
 
 The bundled OTel Collector gets its own policy, keyed on `otelCollector.enabled` rather than on `networkPolicy.enabled`: its OTLP receivers accept spans from anyone and it forwards them with your vendor token, so turning the Collector on protects it either way. It admits 4317/4318 from this release's own pods and nothing else.
 
-Enabling `ingress` with an empty `ingress.tls` fails the render. Without a certificate on the rule the dashboard and its session cookie go over cleartext HTTP, and the derived `webOrigin` would be `http://`. If TLS terminates in front of this ingress, set `ingress.allowInsecure=true` to acknowledge it — and set `webOrigin` to the `https://` origin yourself, because the fallback reads the scheme from `ingress.tls` and would still give you `http://`.
+The chart previously set two nginx annotations by default: a 3600s proxy read and send timeout, because the dashboard event stream is a long-lived WebSocket that a 60s idle default tears down every minute, and `proxy-body-size: 512m`, because database restores upload a dump through the same host. Neither has a Gateway API equivalent. `rules[].timeouts` is a request timeout and would cut the WebSocket rather than keep it alive, and there is no body-size field at all, so both are now listener or backend policy in whichever gateway you run. Carry them there, or through `extraObjects`, before moving a deployment that relies on either.
+
+TLS is no longer a chart concern. An HTTPRoute terminates nothing, so `ingress.tls` and `ingress.allowInsecure` are gone. The certificate belongs to the listener the route attaches to, which you supply through `extraObjects` or manage outside the chart. Set `sectionName` on the parentRef to that HTTPS listener: without it the route attaches to every listener on the Gateway, including a plain-HTTP one. Because the scheme can no longer be inferred, `webOrigin` must state it: set the `https://` origin explicitly, or the dashboard's session cookie, CORS and WebSocket upgrade all fail against the wrong origin. With the route enabled, a non-`https://` `webOrigin` fails the render, since the dashboard takes a password and Binance API keys; set `route.allowInsecure=true` only for a deliberate plain-HTTP deployment.
 
 ## Migrations
 

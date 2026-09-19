@@ -6,17 +6,17 @@ SRE Platform is configured for these public origins:
 The release uses the pre-existing Secret "{{ include "sre-platform.secretName" . }}".
 Helm does not create, display, or rotate that Secret.
 
-{{- if .Values.ingress.dashboard.enabled }}
-Dashboard ingress: https://{{ .Values.ingress.dashboard.host }}{{ .Values.ingress.dashboard.path }}
+{{- if .Values.route.dashboard.enabled }}
+Dashboard route: {{ include "sre-platform.dashboardUrl" . }}
 {{- else }}
-Dashboard ingress is disabled. Route {{ include "sre-platform.dashboardUrl" . }} to Service
+Dashboard route is disabled. Route {{ include "sre-platform.dashboardUrl" . }} to Service
 {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "dashboard") }}:{{ .Values.service.dashboard.port }}.
 {{- end }}
 
-{{- if .Values.ingress.api.enabled }}
-API ingress: https://{{ .Values.ingress.api.host }}{{ .Values.ingress.api.path }}
+{{- if .Values.route.api.enabled }}
+API route: {{ include "sre-platform.apiUrl" . }}
 {{- else }}
-API ingress is disabled. Route {{ include "sre-platform.apiUrl" . }} to Service
+API route is disabled. Route {{ include "sre-platform.apiUrl" . }} to Service
 {{ include "sre-platform.componentName" (dict "ctx" . "suffix" "api") }}:{{ .Values.service.api.port }}.
 {{- end }}
 

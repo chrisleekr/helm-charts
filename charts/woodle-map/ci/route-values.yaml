@@ -1,0 +1,14 @@
+# Renders the Gateway API surface so the schema gate and ct actually validate an
+# HTTPRoute. Without a fixture this chart would only ever be rendered with
+# defaults, where the route is off and nothing would be checked. Leaving rules
+# unset on purpose: it is the default catch-all backendRef that needs proving.
+route:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - woodle-map.ci.example.com

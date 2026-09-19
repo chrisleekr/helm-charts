@@ -1,0 +1,11 @@
+{{- /*
+Manifests rendered verbatim, for objects outside Gateway API that a given
+gateway needs: a cert-manager Certificate for the listener, an Istio
+AuthorizationPolicy, a ListenerSet. Keeping them here rather than as chart
+templates is what lets one chart serve more than one gateway. Each entry is a
+map and is run through tpl, so it can reference .Values and the release.
+*/ -}}
+{{- range .Values.extraObjects }}
+---
+{{ tpl (toYaml .) $ }}
+{{- end }}

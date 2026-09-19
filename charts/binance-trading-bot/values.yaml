@@ -34,8 +34,9 @@ roles:
 # ──────────────────────────────── IDENTITY ────────────────────────────────
 # Exact browser origin, "scheme://host[:port]". Upstream's WEB_ORIGIN is an
 # allowlist with no wildcard support and gates CORS, Better Auth CSRF and the
-# WebSocket upgrade, so a wrong value fails at runtime, not at install. Left
-# empty it falls back to the first ingress host; with neither, the render fails.
+# WebSocket upgrade, so a wrong value fails at runtime, not at install.
+# Required: the render fails when it is empty, since an HTTPRoute carries no
+# TLS to derive a scheme from.
 webOrigin: ""
 # Advertised base URL for links the app generates. Defaults to webOrigin.
 publicWebUrl: ""
@@ -232,33 +233,41 @@ service:
   type: ClusterIP
   port: 3000
 
-ingress:
+# Gateway API route, replacing the removed Ingress. HTTPRoute is portable across
+# conformant gateways, so nothing here names an implementation. TLS is the
+# listener's concern, so webOrigin above must be set explicitly.
+route:
+  # Off by default: a route needs a parentRef naming a Gateway, or a ListenerSet
+  # on Gateway API v1.5.0 and later, that already exists in the cluster, and no
+  # chart can guess one. Enabling without it fails the render deliberately.
   enabled: false
-  className: ""
-  # Enabling the ingress with an empty tls list fails the render. Set this only
-  # when TLS terminates in front of the ingress controller, and set webOrigin to
-  # the https:// origin yourself, because the fallback derives the scheme from
-  # ingress.tls and would give you http://.
+  # Omitting sectionName attaches the route to every listener on the Gateway,
+  # including a plain-HTTP one. Set it to the HTTPS listener's name.
+  parentRefs: []
+  # - name: public
+  #   namespace: gateway-system
+  #   sectionName: https
+  hostnames: []
+  annotations: {}
+  # Empty renders one catch-all rule to this chart's Service. Set it to take
+  # full control; matches and filters pass through verbatim.
+  rules: []
+  # The render fails when webOrigin is not https://, because the dashboard's
+  # password, Binance API keys and session cookie would cross the wire in clear.
+  # Set true only for a deliberate plain-HTTP deployment.
   allowInsecure: false
-  annotations:
-    # The event stream is a long-lived WebSocket; the nginx default 60s read
-    # timeout tears it down every minute.
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    # Database dump restores are uploaded through this path. The annotation is
-    # per-Ingress, not per-path, so this raises the limit on every URL on the
-    # host, and nginx buffers the body before the app sees it. Lower it if you
-    # do not use restore; the controller default is 1m.
-    nginx.ingress.kubernetes.io/proxy-body-size: 512m
-  hosts:
-    - host: chart-example.local                 # Replace with your real host.
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-  #  - secretName: binance-trading-bot-tls
-  #    hosts:
-  #      - chart-example.local
+
+# Manifests passed through tpl, for anything outside Gateway API: a cert-manager
+# Certificate for the listener, an authorization policy, a ListenerSet.
+#
+# Two protections that used to be chart defaults belong here now, because neither
+# is expressible on an HTTPRoute. The dashboard event stream is a long-lived
+# WebSocket that a 60s proxy idle timeout tears down every minute, and database
+# restores upload a dump through the same host, which the old ingress raised to
+# 512m. Gateway API rules[].timeouts is a REQUEST timeout and would cut the
+# WebSocket rather than protect it, so both are listener or backend policy in
+# whichever gateway you run.
+extraObjects: []
 
 # Ports 9100/9101 serve /metrics and /readyz with no authentication, and a
 # Service is not a firewall. This policy is the only thing keeping them off the

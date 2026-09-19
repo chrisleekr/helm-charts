@@ -9,6 +9,7 @@
     "healthz",
     "interruptible",
     "isready",
+    "letsencrypt",
     "nindent",
     "omniroute",
     "PGDATA",

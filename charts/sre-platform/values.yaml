@@ -194,24 +194,34 @@ service:
     type: ClusterIP
     port: 8080
 
-ingress:
-  allowInsecure: false
+# Gateway API routes, replacing the removed Ingresses. HTTPRoute is portable
+# across conformant gateways, so nothing here names an implementation. TLS is the
+# listener's concern: there is no tls or allowInsecure key any more, and
+# public.apiUrl / public.dashboardUrl must state https:// themselves.
+route:
   api:
+    # Off by default: a route needs a parentRef naming a Gateway, or a
+    # ListenerSet on Gateway API v1.5.0 and later, that already exists in the
+    # cluster, and no chart can guess one. A parentRef without sectionName
+    # attaches to every listener, plain HTTP :80 included, so the app is also
+    # served in cleartext; set sectionName to the HTTPS listener.
     enabled: false
-    className: ""
+    parentRefs: []
+    # Must contain the host in public.apiUrl, which the chart checks.
+    hostnames: []
     annotations: {}
-    host: ""
-    path: /
-    pathType: Prefix
-    tls: []
+    rules: []
   dashboard:
     enabled: false
-    className: ""
+    parentRefs: []
+    # Must contain the host in public.dashboardUrl, which the chart checks.
+    hostnames: []
     annotations: {}
-    host: ""
-    path: /
-    pathType: Prefix
-    tls: []
+    rules: []
+
+# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
+# Certificate per listener, an authorization policy, a ListenerSet.
+extraObjects: []
 
 # The application validates connector URLs before use, but DNS can change
 # between validation and fetch. This policy restricts CNI-observed egress into

@@ -18,7 +18,7 @@ jobs:
 
       - name: Render gate
         # Renders the chart across every conditional branch (default, split
-        # topology, external datastores, ingress + NetworkPolicy, observability,
+        # topology, external datastores, route + NetworkPolicy, observability,
         # external OTLP, persistence off) and asserts the behaviour each branch
         # is supposed to produce. helm lint and a single template run cannot see
         # a branch that renders the wrong thing, only one that fails to render.

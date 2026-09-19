@@ -291,7 +291,7 @@ fi
 egress_selector=$(yq ea -r \
   'select(.kind == "NetworkPolicy") | [.spec.egress[] | select([.ports[].port] | contains([443])) | .to[] | select(has("podSelector")) | .podSelector.matchLabels["app.kubernetes.io/name"]] | join(",")' \
   "$tmp/runners.yaml")
-if [ "$egress_selector" != "ingress-nginx" ]; then
+if [ "$egress_selector" != "istio-ingressgateway" ]; then
   echo "::error file=charts/github-app/templates/workflow-runner-networkpolicy.yaml::extraEgressSelectors rendered no HTTPS peer (got '$egress_selector'); a runner dialling a private VIP would hang until its deadline" >&2
   exit 1
 fi
@@ -310,9 +310,9 @@ for pair in \
   "wss://github.example.com/ws|wss://github.example.com" \
   "wss://github.example.com:443/ws|wss://github.example.com" \
   "wss://GitHub.Example.com/ws|wss://github.example.com" \
-  "wss://github.example.com:3002/ws|wss://github.example.com:3002|--set=workflowRunner.ingress.enabled=false" \
-  "ws://github-app.github-app.svc.cluster.local:3002/ws|ws://github-app.github-app.svc.cluster.local:3002|--set=workflowRunner.ingress.enabled=false" \
-  "ws://github-app.github-app.svc:80/ws|ws://github-app.github-app.svc|--set=workflowRunner.ingress.enabled=false"; do
+  "wss://github.example.com:3002/ws|wss://github.example.com:3002|--set=workflowRunner.route.enabled=false" \
+  "ws://github-app.github-app.svc.cluster.local:3002/ws|ws://github-app.github-app.svc.cluster.local:3002|--set=workflowRunner.route.enabled=false" \
+  "ws://github-app.github-app.svc:80/ws|ws://github-app.github-app.svc|--set=workflowRunner.route.enabled=false"; do
   IFS='|' read -r url want extra <<<"$pair"
   # shellcheck disable=SC2086  # deliberate word split: a single static flag or empty
   got=$(helm template contract "$chart" --values "$chart/ci/workflow-runner-values.yaml" \
@@ -391,6 +391,38 @@ done <<'BEDROCK'
 --set secrets.awsAccessKeyId=a --set secrets.awsSecretAccessKey=b --set secrets.awsSessionToken=c|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN
 BEDROCK
 
+# 11c. Runner front door. /ws must be its own HTTPRoute on the orchestratorPublicUrl
+#      host only: a rule on the release route would publish the bearer-authenticated
+#      shared-daemon /ws on every route.hostnames entry, and a custom route.rules
+#      would drop it.
+ws_path=$(yq -r '.workflowRunner.route.path' "$chart/values.yaml")
+ws_port=$(yq -r '.config.wsPort' "$chart/values.yaml")
+ws_route=$(yq ea -o=json -I=0 \
+  'select(.kind == "HTTPRoute" and .metadata.name == "contract-github-app-ws") |
+    [.spec.hostnames, .spec.rules[0].matches[0].path.type, .spec.rules[0].matches[0].path.value,
+     .spec.rules[0].backendRefs[0].port, (.spec.rules | length), .spec.parentRefs[0].sectionName]' \
+  "$tmp/runners.yaml")
+want="[[\"github.example.com\"],\"PathPrefix\",\"$ws_path\",$ws_port,1,\"https\"]"
+if [ "$ws_route" != "$want" ]; then
+  echo "runner HTTPRoute rendered $ws_route, want $want" >&2
+  exit 1
+fi
+main_ws=$(yq ea -r \
+  'select(.kind == "HTTPRoute" and .metadata.name == "contract-github-app") |
+    .spec.rules[] | select(.matches) | .matches[].path.value' "$tmp/runners.yaml")
+if [ -n "$main_ws" ]; then
+  echo "release HTTPRoute carries a path rule ($main_ws); /ws belongs only on the -ws route" >&2
+  exit 1
+fi
+custom_rules=$(helm template contract "$chart" --values "$chart/ci/workflow-runner-values.yaml" \
+  --set route.hostnames[1]=other.example.com \
+  --set route.rules[0].backendRefs[0].name=custom --set route.rules[0].backendRefs[0].port=80 |
+  yq ea -o=json -I=0 'select(.kind == "HTTPRoute" and .metadata.name == "contract-github-app-ws") | .spec.hostnames')
+if [ "$custom_rules" != '["github.example.com"]' ]; then
+  echo "runner HTTPRoute with custom route.rules and a second hostname rendered hostnames=$custom_rules, want [\"github.example.com\"]" >&2
+  exit 1
+fi
+
 # 12. Runner feature off is the default, and turning it off renders none of it.
 leaked=$(yq ea -r '
   select(
@@ -436,11 +468,11 @@ refuses workflow-runner-validate.yaml "is neither wss:// plus a plain DNS host" 
 # Plaintext is confined to a name that cannot resolve outside the cluster, so a
 # public host must still be refused however well-formed it is.
 refuses _helpers.tpl "is neither wss:// plus a plain DNS host" \
-  --set workflowRunner.ingress.enabled=false \
+  --set workflowRunner.route.enabled=false \
   --set 'config.ephemeralDaemon.orchestratorPublicUrl=ws://orchestrator.example.com:3002/ws'
-# The runner Ingress publishes the wss:// front door; a cluster-local dial-back
+# The runner rule publishes the wss:// front door; a cluster-local dial-back
 # never traverses it, so the combination is a misconfiguration, not dead weight.
-refuses workflow-runner-ingress.yaml "is plaintext" \
+refuses httproute.yaml "is plaintext" \
   --set 'config.ephemeralDaemon.orchestratorPublicUrl=ws://github-app.github-app.svc.cluster.local:3002/ws'
 refuses _helpers.tpl "is neither wss:// plus a plain DNS host" \
   --set 'config.ephemeralDaemon.orchestratorPublicUrl=wss://[2001:db8::1]/ws'
@@ -481,54 +513,28 @@ refuses workflow-runner-namespace.yaml "which equals the ephemeral-daemon namesp
 refuses workflow-runner-namespace.yaml "equals the release namespace" \
   --namespace collide --set workflowRunner.namespace=collide \
   --set config.ephemeralDaemon.namespace=elsewhere
-refuses workflow-runner-ingress.yaml "ingress.hosts is empty" --set ingress.hosts=null
-refuses workflow-runner-ingress.yaml "ingress.tls is empty" --set ingress.tls=null
-refuses workflow-runner-ingress.yaml "but ingress.enabled is false" --set ingress.enabled=false
+refuses httproute.yaml "route.hostnames is empty" --set route.hostnames=null
+refuses httproute.yaml "but route.enabled is false" --set route.enabled=false
+refuses httproute.yaml "route.parentRefs is empty" --set route.parentRefs=null
 # NOTES.txt is discarded by `helm template`, so an ArgoCD operator would never see
 # a warning; disabling a boundary has to be refused at render instead.
 refuses workflow-runner-validate.yaml "admission.enabled=false" --set workflowRunner.admission.enabled=false
 refuses workflow-runner-validate.yaml "networkPolicy.enabled=false" --set workflowRunner.networkPolicy.enabled=false
-refuses workflow-runner-ingress.yaml "is not in ingress.hosts" \
+refuses httproute.yaml "is not in route.hostnames" \
   --set config.ephemeralDaemon.orchestratorPublicUrl=wss://elsewhere.example.com/ws
+# A gateway listener here serves 443 only, so a runner dialling :8443 hangs.
+refuses httproute.yaml "carries an explicit port" \
+  --set config.ephemeralDaemon.orchestratorPublicUrl=wss://github.example.com:8443/ws
 # An empty node label or value renders runnerNodeLabel: "" into the boundary, which
 # the policy's own second validation asserts against, so every runner Pod is denied.
 # With the warmer on it instead surfaced as a raw YAML parse error from a bare
 # `: "true"` mapping, which names neither the value nor the fix.
 refuses workflow-runner-validate.yaml "workflowRunner.nodeLabel is empty" --set workflowRunner.nodeLabel=
 refuses workflow-runner-validate.yaml "workflowRunner.nodeValue is empty" --set workflowRunner.nodeValue=
-# A wildcard certificate is the common single-cert layout and DOES cover one label
-# under its parent, so refusing it would reject a working front door. The guard has
-# to keep refusing a name too deep for the wildcard.
-if ! helm template contract "$chart" "${runner_on[@]}" \
-  --set 'ingress.tls[0].hosts[0]=*.example.com' >/dev/null 2>&1; then
-  echo "::error file=charts/github-app/templates/workflow-runner-ingress.yaml::wildcard TLS host refused; *.example.com covers github.example.com" >&2
-  exit 1
-fi
-refuses workflow-runner-ingress.yaml "covered by no ingress.tls entry" \
-  --set config.ephemeralDaemon.orchestratorPublicUrl=wss://a.b.example.com/ws \
-  --set 'ingress.hosts[0].host=a.b.example.com' \
-  --set 'ingress.tls[0].hosts[0]=*.example.com'
 # A port is a 16-bit field. The URL patterns bound it to five digits, so 65536
 # rendered here and then failed new URL(publicUrl) in the runner at startup.
 refuses _helpers.tpl "is above 65535" \
   --set-string config.ephemeralDaemon.orchestratorPublicUrl=wss://github.example.com:65536/ws
-# Route- and certificate-scoped annotations must NOT be inherited onto the ws
-# Ingress, while the allowlist/WAF ones this inheritance exists for must be.
-ann=$(helm template contract "$chart" "${runner_on[@]}" \
-  --set 'ingress.annotations.kubernetes\.io/tls-acme=true' \
-  --set 'ingress.annotations.nginx\.ingress\.kubernetes\.io/rewrite-target=/' \
-  --set 'ingress.annotations.nginx\.ingress\.kubernetes\.io/whitelist-source-range=10.0.0.0/8' |
-  yq ea 'select(.kind == "Ingress" and (.metadata.name | test("-ws$"))) | .metadata.annotations | keys | .[]')
-for key in kubernetes.io/tls-acme nginx.ingress.kubernetes.io/rewrite-target; do
-  if printf '%s\n' "$ann" | grep -qx "$key"; then
-    echo "::error file=charts/github-app/templates/workflow-runner-ingress.yaml::ws Ingress inherited route/cert-scoped annotation $key" >&2
-    exit 1
-  fi
-done
-if ! printf '%s\n' "$ann" | grep -qx nginx.ingress.kubernetes.io/whitelist-source-range; then
-  echo "::error file=charts/github-app/templates/workflow-runner-ingress.yaml::ws Ingress dropped the allowlist annotation inheritance exists for" >&2
-  exit 1
-fi
 # A chart-managed daemon identity must not depend on the controller SA also being
 # chart-managed: workflow-runner-rbac.yaml pushes operators onto exactly that path.
 sa=$(helm template contract "$chart" "${runner_on[@]}" --values "$chart/ci/daemon-pools-values.yaml" \

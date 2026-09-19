@@ -22,7 +22,7 @@ main:
   image:
     repository: n8nio/n8n
     pullPolicy: IfNotPresent
-    tag: "" # Defaults to chart appVersion
+    tag: ""  # Defaults to chart appVersion
 
   # Environment variables
   env: []
@@ -72,7 +72,7 @@ worker:
   image:
     repository: n8nio/n8n
     pullPolicy: IfNotPresent
-    tag: "" # Defaults to chart appVersion
+    tag: ""  # Defaults to chart appVersion
 
   # Environment variables
   env: []
@@ -103,7 +103,7 @@ webhook:
   image:
     repository: n8nio/n8n
     pullPolicy: IfNotPresent
-    tag: "" # Defaults to chart appVersion
+    tag: ""  # Defaults to chart appVersion
 
   # Environment variables
   env: []
@@ -233,20 +233,29 @@ service:
   port: 5678
   annotations: {}
 
-# Ingress configuration
-ingress:
+# Gateway API route, replacing the removed Ingress. HTTPRoute is portable across
+# conformant gateways, so nothing here names an implementation.
+route:
+  # Off by default: a route needs a parentRef naming a Gateway, or a ListenerSet
+  # on Gateway API v1.5.0 and later, that already exists in the cluster, and no
+  # chart can guess one. Enabling without it fails the render deliberately.
   enabled: false
-  className: ""
+  # Set sectionName to the HTTPS listener. Without it the route attaches to
+  # every listener on the Gateway, plain HTTP included.
+  parentRefs: []
+  # Optional. An empty list inherits the parent listener's hostname, which is
+  # correct when that listener already serves exactly this host.
+  hostnames: []
+  # Metadata only. nginx.ingress.kubernetes.io/* annotations have no effect on
+  # an HTTPRoute; express headers, redirects and rewrites as rules[].filters.
   annotations: {}
-  hosts:
-    - host: n8n.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-  #  - secretName: n8n-tls
-  #    hosts:
-  #      - n8n.example.com
+  # Empty renders one catch-all rule to this chart's Service. Set it to take
+  # full control; matches and filters pass through verbatim.
+  rules: []
+
+# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
+# Certificate for the listener, an authorization policy, a ListenerSet.
+extraObjects: []
 
 # Persistence for n8n data
 persistence:

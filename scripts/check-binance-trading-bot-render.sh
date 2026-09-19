@@ -24,17 +24,15 @@
 #   R1 default       -f ci/ct-values.yaml
 #   R2 split         -f ci/split-values.yaml
 #   R3 external      -f ci/external-values.yaml
-#   R4 ingress+netpol  ct-values + ingress on, webOrigin cleared (derive from host)
+#   R4 route+netpol   ct-values + route on, webOrigin explicit
 #   R5 observability -f ci/observability-values.yaml
 #   R6 external OTLP ct-values + otlp.endpoint, no bundled Collector
-#   R7 NEGATIVE      ct-values with webOrigin cleared and no ingress -> must FAIL
+#   R7 NEGATIVE      ct-values with webOrigin cleared -> must FAIL
 #   R8 lean          ct-values + persistence off + serviceAccount.create=false
 #   R9 NEGATIVE      split + roles.worker.replicaCount=2 -> must FAIL
-#   R10 ingress+TLS  R4 with ingress.tls set (the https half of webOrigin)
 #   R11 explicit pw  ct-values + postgres.auth.password set
 #   R12 NEGATIVE     ct-values + a reserved character in that password -> must FAIL
 #   R13 NEGATIVE     ct-values + topology=splitt -> must FAIL
-#   R14 NEGATIVE     ingress on, no tls, no allowInsecure -> must FAIL
 #   R15 paused       split + roles.worker.replicaCount=0 (0 is honoured, not defaulted)
 #   R16 byo secret   ct-values + existingSecret (chart Secret suppressed)
 #   R17 no migrate   ct-values + migrations.enabled=false
@@ -43,6 +41,9 @@
 #   R20 NEGATIVE     prometheusRule on, serviceMonitor off -> must FAIL
 #   R21 long release  50-character release name, exhausts the 63-char budget
 #   R22 override     observability-values + fullnameOverride=ci-bot
+#   R23 NEGATIVE     route on with an http:// webOrigin -> must FAIL
+#   R24 insecure     R23 + route.allowInsecure=true renders
+#   R25 NEGATIVE     route on with empty parentRefs -> must FAIL
 #
 # Resource-name contract asserted below (release "btb", fullname
 # "btb-binance-trading-bot"). Workloads are always role-suffixed so the range
@@ -56,7 +57,7 @@
 #   PVC             <fullname>-backups
 #   StatefulSet     <fullname>-postgres / <fullname>-valkey
 #   Deployment/Service/ConfigMap  <fullname>-otel-collector
-#   Ingress / NetworkPolicy / ServiceMonitor / PrometheusRule   <fullname>
+#   HTTPRoute / NetworkPolicy / ServiceMonitor / PrometheusRule <fullname>
 # Probes reference admin ports numerically (9100 api-side, 9101 worker-side).
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -127,10 +128,10 @@ want_count() { # <file> <ere> <n> <label>
 # Counts occurrences of a reference key and how many carry a matching name:.
 #
 # The name: is found by scanning forward inside the reference block rather than
-# by taking the literal next line. helm renders template comments into the
-# stream (templates/ingress.yaml puts three between path: and pathType:), and a
-# sibling field can sort ahead of name: in a secretKeyRef, both of which would
-# otherwise report a naming regression on a correct chart. Indentation bounds the
+# by taking the literal next line. A YAML comment in a template or a value can
+# land between the key and name:, and a sibling field can sort ahead of name:
+# in a secretKeyRef, both of which would otherwise report a naming regression on
+# a correct chart. Indentation bounds the
 # scan, so a block with no name: at all cannot borrow the next block's.
 #
 # The comparison is on the parsed field, not a substring of the line: every
@@ -273,25 +274,14 @@ render r1 -f "$ci/ct-values.yaml"
 render r2 -f "$ci/split-values.yaml"
 render r3 -f "$ci/external-values.yaml"
 render r4 -f "$ci/ct-values.yaml" \
-  --set webOrigin="" \
-  --set ingress.enabled=true \
-  --set ingress.className=nginx \
-  --set 'ingress.hosts[0].host=btb.ci.example.com' \
-  --set 'ingress.hosts[0].paths[0].path=/' \
-  --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
-  --set ingress.allowInsecure=true \
+  --set-string webOrigin=https://btb.ci.example.com \
+  --set route.enabled=true \
+  --set 'route.parentRefs[0].name=public' \
+  --set 'route.parentRefs[0].namespace=gateway-system' \
+  --set 'route.parentRefs[0].sectionName=https' \
+  --set 'route.hostnames[0]=btb.ci.example.com' \
   --set networkPolicy.enabled=true \
   --set-json 'networkPolicy.adminFrom=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"monitoring"}}}]'
-# R10 is R4 with TLS, so the other half of the webOrigin scheme ternary is
-# covered. Without it the scheme could be hardcoded and C17 would not notice.
-render r10 -f "$ci/ct-values.yaml" \
-  --set webOrigin="" \
-  --set ingress.enabled=true \
-  --set 'ingress.hosts[0].host=btb.ci.example.com' \
-  --set 'ingress.hosts[0].paths[0].path=/' \
-  --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
-  --set 'ingress.tls[0].secretName=btb-tls' \
-  --set 'ingress.tls[0].hosts[0]=btb.ci.example.com'
 # R5 carries a backend and two headers so the collector's otlphttp exporter, the
 # header env-substitution and the headers Secret are all actually rendered.
 render r5 -f "$ci/observability-values.yaml" \
@@ -302,8 +292,11 @@ render r5 -f "$ci/observability-values.yaml" \
 # checked from one render.
 render r22 -f "$ci/observability-values.yaml" \
   --set fullnameOverride="$override_fullname" \
-  --set ingress.enabled=true \
-  --set ingress.allowInsecure=true \
+  --set-string webOrigin=https://btb.ci.example.com \
+  --set route.enabled=true \
+  --set 'route.parentRefs[0].name=public' \
+  --set 'route.parentRefs[0].namespace=gateway-system' \
+  --set 'route.parentRefs[0].sectionName=https' \
   --set otlp.endpoint=https://otlp.vendor.example:4318 \
   --set 'otlp.headers=authorization=Bearer ci-token\,x-tenant=acme'
 # R11 renders the explicit-password branch of the DSN, which no fixture reaches.
@@ -382,20 +375,7 @@ helm template a-very-long-release-name-that-eats-the-budget-here \
   "$chart" -f "$ci/ct-values.yaml" >"$render_long" 2>"$tmp/r21.err" ||
   printf 'RENDER FAILED r21: %s\n' "$(tr '\n' ' ' <"$tmp/r21.err" | cut -c1-300)" >&2
 
-# R14 proves the cleartext-ingress guard fires: enabling ingress with no TLS and
-# no explicit acknowledgement must not quietly derive an http:// WEB_ORIGIN.
-if helm template "$release" "$chart" -f "$ci/ct-values.yaml" \
-  --set webOrigin="" --set ingress.enabled=true \
-  --set 'ingress.hosts[0].host=btb.ci.example.com' \
-  --set 'ingress.hosts[0].paths[0].path=/' \
-  --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
-  >/dev/null 2>"$tmp/r14.err"; then
-  r14_rc=0
-else
-  r14_rc=$?
-fi
-
-# R7 is the negative render: no explicit webOrigin and no ingress to derive one
+# R7 is the negative render: no explicit webOrigin, and nothing to derive one
 # from. A chart that emits a broken origin here ships a silently dead WebSocket
 # and a silently dead CSRF check, so the render must fail loudly instead.
 if helm template "$release" "$chart" -f "$ci/ct-values.yaml" --set webOrigin="" \
@@ -403,6 +383,28 @@ if helm template "$release" "$chart" -f "$ci/ct-values.yaml" --set webOrigin="" 
   r7_rc=0
 else
   r7_rc=$?
+fi
+
+# R23-R25 prove the two route guards. R23 keeps the fixture's http:// origin, so
+# a route that would carry the password and session cookie in clear must fail;
+# R24 proves allowInsecure is the only thing that lets it through. R25 proves a
+# parentless route, which the API server accepts and which then serves nothing,
+# fails at render.
+route_on=(--set route.enabled=true --set 'route.parentRefs[0].name=public'
+  --set 'route.parentRefs[0].sectionName=https')
+if helm template "$release" "$chart" -f "$ci/ct-values.yaml" "${route_on[@]}" \
+  >/dev/null 2>"$tmp/r23.err"; then
+  r23_rc=0
+else
+  r23_rc=$?
+fi
+render r24 -f "$ci/ct-values.yaml" "${route_on[@]}" --set route.allowInsecure=true
+if helm template "$release" "$chart" -f "$ci/ct-values.yaml" \
+  --set-string webOrigin=https://btb.ci.example.com \
+  --set route.enabled=true >/dev/null 2>"$tmp/r25.err"; then
+  r25_rc=0
+else
+  r25_rc=$?
 fi
 
 if helm lint "$chart" -f "$ci/ct-values.yaml" >"$tmp/lint.out" 2>&1; then
@@ -462,12 +464,12 @@ r4="$tmp/r4.yaml"
 r5="$tmp/r5.yaml"
 r6="$tmp/r6.yaml"
 r8="$tmp/r8.yaml"
-r10="$tmp/r10.yaml"
 r11="$tmp/r11.yaml"
 r15="$tmp/r15.yaml"
 r16="$tmp/r16.yaml"
 r17="$tmp/r17.yaml"
 r22="$tmp/r22.yaml"
+r24="$tmp/r24.yaml"
 readme="$chart/README.md"
 
 # ----------------------------------------------------------------- assertions -
@@ -712,30 +714,23 @@ else
 fi
 check C15 "no chrislee.kr host anywhere, default image is chrisleekr/binance-trading-bot, docs point at the public repo"
 
-# C16 - the event stream is a long-lived WebSocket, so the proxy timeouts matter.
-if get_doc "$r4" Ingress "$fullname" "R4"; then
-  want "$DOC" '^[[:space:]]*number: 3000$' "R4 ingress"
-  want_not "$DOC" '9100' "R4 ingress"
-  want_not "$DOC" '9101' "R4 ingress"
-  want "$DOC" 'proxy-read-timeout' "R4 ingress"
-  want "$DOC" 'proxy-send-timeout' "R4 ingress"
+# C16 - the route must reach the app port and nothing else. The WebSocket idle
+# timeout and the 512m restore-upload limit used to ride on this object as nginx
+# annotations; neither is expressible on an HTTPRoute, so they are now the
+# listener's policy and are asserted wherever that policy lives, not here.
+if get_doc "$r4" HTTPRoute "$fullname" "R4"; then
+  want "$DOC" '^[[:space:]]*port: 3000$' "R4 route"
+  want_not "$DOC" '9100' "R4 route"
+  want_not "$DOC" '9101' "R4 route"
 fi
-check C16 "ingress routes only to Service port 3000 with WebSocket-safe timeouts"
+check C16 "route sends only to Service port 3000, never 9100/9101"
 
-# C17 - R4 proves the fallback resolves from the ingress host; R7 proves the
-# unresolvable case fails loudly instead of emitting a broken origin.
-# Scheme pinned per branch: R4 has no TLS so it must derive http, R10 has TLS so
-# it must derive https. `https?` would have passed either way and left the whole
-# ternary uncovered.
-want "$r4" 'WEB_ORIGIN: "?http://btb\.ci\.example\.com"?' "R4"
-want "$r10" 'WEB_ORIGIN: "?https://btb\.ci\.example\.com"?' "R10"
-if [ "$r14_rc" -eq 0 ]; then
-  note "R14: ingress with no TLS rendered instead of failing; the cleartext guard is cosmetic"
-elif ! grep -qi 'cleartext' "$tmp/r14.err"; then
-  note "R14: render failed but stderr never mentions cleartext: $(tr '\n' ' ' <"$tmp/r14.err")"
-fi
+# C17 - webOrigin has no fallback now: an HTTPRoute carries no TLS, so there is
+# no scheme to derive. R4 proves an explicit origin reaches WEB_ORIGIN verbatim
+# and R7 proves the empty case fails loudly instead of emitting a broken origin.
+want "$r4" 'WEB_ORIGIN: "?https://btb\.ci\.example\.com"?' "R4"
 if [ "$r7_rc" -eq 0 ]; then
-  note "R7: render succeeded with no webOrigin and no ingress; expected a non-zero exit"
+  note "R7: render succeeded with no webOrigin; expected a non-zero exit"
 elif ! grep -qi 'weborigin' "$tmp/r7.err"; then
   note "R7: render failed but stderr never mentions webOrigin: $(tr '\n' ' ' <"$tmp/r7.err")"
 fi
@@ -1087,7 +1082,7 @@ NetworkPolicy $override_fullname
 NetworkPolicy $override_fullname-otel-collector
 ServiceMonitor $override_fullname
 PrometheusRule $override_fullname
-Ingress $override_fullname
+HTTPRoute $override_fullname
 EOF
 want_not "$r22" "$fullname" "R22 override"
 want_envfrom "$r22" "$override_fullname-all" "R22 all" "$override_fullname"
@@ -1095,8 +1090,8 @@ if get_doc "$r22" Deployment "$override_fullname-all" "R22"; then
   want "$DOC" "^[[:space:]]*serviceAccountName: $override_fullname\$" "R22 all"
   want "$DOC" "^[[:space:]]*claimName: $override_fullname-backups\$" "R22 all"
 fi
-if get_doc "$r22" Ingress "$override_fullname" "R22"; then
-  want_named_refs "$DOC" service "$override_fullname" 1 "R22 ingress"
+if get_doc "$r22" HTTPRoute "$override_fullname" "R22"; then
+  want "$DOC" "^[[:space:]]*- name: $override_fullname\$" "R22 route backendRef"
 fi
 if get_doc "$r22" Job "$override_fullname-migrate" "R22"; then
   want_named_refs "$DOC" secretRef "$override_fullname" 2 "R22 migrate"
@@ -1133,14 +1128,35 @@ elif [ "$instance_correct" -ne "$instance_total" ]; then
 fi
 check C30 "fullnameOverride consistently names resources and internal references while instance labels retain the Helm release"
 
+# C31 - an http:// origin behind a route fails closed unless the operator opts
+# in. The dashboard takes a password and Binance API keys, so cleartext must be
+# a deliberate choice, not a default reached by omission.
+if [ "$r23_rc" -eq 0 ]; then
+  note "R23: route with an http:// webOrigin rendered instead of failing"
+elif ! grep -q 'allowInsecure' "$tmp/r23.err"; then
+  note "R23: render failed but stderr never names allowInsecure: $(tr '\n' ' ' <"$tmp/r23.err" | cut -c1-200)"
+fi
+if get_doc "$r24" HTTPRoute "$fullname" "R24"; then
+  want "$DOC" '^[[:space:]]*sectionName: https$' "R24 route"
+fi
+check C31 "a route with an http:// webOrigin fails the render unless route.allowInsecure=true"
+
+# C32 - a route with no parentRefs attaches to nothing and serves nothing.
+if [ "$r25_rc" -eq 0 ]; then
+  note "R25: route with empty parentRefs rendered instead of failing"
+elif ! grep -q 'parentRefs' "$tmp/r25.err"; then
+  note "R25: render failed but stderr never names parentRefs: $(tr '\n' ' ' <"$tmp/r25.err" | cut -c1-200)"
+fi
+check C32 "a route with empty parentRefs fails the render with an actionable message"
+
 # -------------------------------------------------------------------- summary -
 
 total=$((passed + failed))
 printf '\n%s/%s assertions failed\n' "$failed" "$total"
 # A criterion deleted rather than fixed still leaves "0 failed" behind, so pin
-# the count: the acceptance list is exactly 30 and the gate covers all of them.
-if [ "$total" -ne 30 ]; then
-  printf 'FAIL gate: expected 30 criteria, ran %s\n' "$total" >&2
+# the count: the acceptance list is exactly 32 and the gate covers all of them.
+if [ "$total" -ne 32 ]; then
+  printf 'FAIL gate: expected 32 criteria, ran %s\n' "$total" >&2
   exit 1
 fi
 [ "$failed" -eq 0 ]

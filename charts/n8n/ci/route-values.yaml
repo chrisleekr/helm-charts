@@ -1,0 +1,15 @@
+# Renders the Gateway API surface so the schema gate and ct actually validate an
+# HTTPRoute. webhook is on so the three webhook prefix rules and their second
+# backend Service are covered, not just the catch-all.
+route:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - n8n.ci.example.com
+webhook:
+  enabled: true

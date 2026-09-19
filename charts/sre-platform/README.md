@@ -6,7 +6,7 @@ The chart runs one versioned, digest-pinned image as four Deployments: API, dash
 
 ## Prerequisites
 
-- Kubernetes with an ingress controller if this chart should create the public routes.
+- Kubernetes with a Gateway API implementation, and a Gateway whose listeners carry the API and dashboard hosts, if this chart should create the public routes. HTTPRoute is `gateway.networking.k8s.io/v1`; a ListenerSet parent needs Gateway API v1.5.0 or later.
 - PostgreSQL with the `vector` extension available. The migration account must be able to create the extension, create or alter the `app_user` login role, grant schema privileges, and apply row-level-security policy changes.
 - A separate runtime DSN for `app_user`. The API and workers reject a superuser or `BYPASSRLS` runtime role.
 - Valkey or Redis reachable from the workloads.
@@ -102,21 +102,25 @@ networkPolicy:
         - protocol: TCP
           port: 8080
 
-ingress:
+route:
   api:
     enabled: true
-    className: nginx
-    host: api.sre.example.com
-    tls:
-      - secretName: api-sre-example-tls
-        hosts: [api.sre.example.com]
+    parentRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: public
+        namespace: gateway-system
+        sectionName: https
+    hostnames: [api.sre.example.com]
   dashboard:
     enabled: true
-    className: nginx
-    host: sre.example.com
-    tls:
-      - secretName: sre-example-tls
-        hosts: [sre.example.com]
+    parentRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: public
+        namespace: gateway-system
+        sectionName: https
+    hostnames: [sre.example.com]
 
 # Set the trusted right-most forwarded entries only when the edge sanitizes
 # incoming forwarding data and the API cannot bypass the trusted proxy chain.
@@ -126,7 +130,7 @@ ingress:
 
 For a fresh installation, also enable the staff bootstrap declaration below. Register the exact dashboard `/auth/callback` URL with its OIDC application. The retired global `auth0` values and `AUTH0_*` environment are no longer rendered. Remove that block from downstream values; identity provider configuration lives in the database.
 
-If TLS terminates before the Kubernetes ingress, set `ingress.allowInsecure=true`. That acknowledges the ingress objects have no local TLS section; the public URLs must still use `https://` and `wss://` is derived automatically for dashboard WebSockets. Note that redirecting plaintext HTTP to HTTPS is controller or edge policy either way: a `tls` block tells the controller which certificate to serve, not what to do with a port-80 request. nginx redirects by default; confirm the behaviour of whichever class you set on both the API and dashboard hosts.
+TLS is not a route concern, so `ingress.allowInsecure` and the per-route `tls` blocks are gone; the certificate belongs to the listener each route attaches to, supplied through `extraObjects` or managed outside the chart. The public URLs must still use `https://`, which the chart enforces, and `wss://` is still derived automatically for dashboard WebSockets. Redirecting plaintext HTTP to HTTPS remains gateway or edge policy either way: a listener's certificate says what to serve on 443, not what to do with a port-80 request.
 
 ## Install and upgrade
 
@@ -210,7 +214,7 @@ continues to work. A private SMTP endpoint also needs a narrow `networkPolicy.pr
 
 `config.registrationMode` defaults to `approval_required`. Set it to `open` only when any authenticated founder may provision a workspace without platform-administrator approval, or to `closed` when workspace creation must begin with an invitation. `public.supportUrl` gives people a safe next step when registration is closed or workspace access needs help. `public.termsUrl` and `public.termsVersion` are optional, but must be configured together so recorded acceptance identifies the exact terms.
 
-`config.trustedProxyHops` is the number of trusted right-most forwarded-address entries the API receives. Leave it at `0` when the API is reached directly. Behind an ingress, `0` intentionally treats the ingress socket as the caller, so public-request rate limits are shared by every client behind it. Set a nonzero count only when the edge proxy discards untrusted client-supplied forwarding data, downstream trusted proxies preserve or append the verified chain, and the API cannot be reached around that chain. If the ingress resolves the client and replaces the header with one verified address, use `1` regardless of upstream physical hops.
+`config.trustedProxyHops` is the number of trusted right-most forwarded-address entries the API receives. Leave it at `0` when the API is reached directly. Behind a gateway, `0` intentionally treats the gateway socket as the caller, so public-request rate limits are shared by every client behind it. Set a nonzero count only when the edge proxy discards untrusted client-supplied forwarding data, downstream trusted proxies preserve or append the verified chain, and the API cannot be reached around that chain. If the gateway resolves the client and replaces the header with one verified address, use `1` regardless of upstream physical hops.
 
 `extraEnv` and `extraEnvFrom` exist for deployment integration such as cloud workload identity variables. They must not replace `ROLE`, `PORT`, the required Secret keys, the public-site values, `REGISTRATION_MODE`, or `TRUST_PROXY_HOPS`. The API renders public-site and security settings as explicit environment variables, so an opaque `extraEnvFrom` source cannot override them; a conflicting `extraEnv` entry fails chart validation.
 

@@ -1,0 +1,48 @@
+{{- /*
+Gateway API replacement for the removed Ingress.
+
+HTTPRoute is gateway.networking.k8s.io/v1, served by every conformant gateway,
+so nothing here names an implementation. TLS belongs to the listener, not the
+route, which is why webOrigin is now explicit: the chart can no longer read a
+scheme off a tls block, and guessing one would hand the dashboard a WEB_ORIGIN
+that silently fails CORS, Better Auth CSRF and the WebSocket upgrade.
+Objects outside Gateway API go through extraObjects.
+*/ -}}
+{{- if .Values.route.enabled -}}
+{{- if not .Values.route.parentRefs }}
+{{- fail "route.parentRefs is empty. The API server accepts a parentless HTTPRoute and it then serves nothing, so this fails at render instead. Name the Gateway, or the ListenerSet on Gateway API v1.5.0 and later, whose listener carries this host." }}
+{{- end }}
+{{- /*
+The dashboard takes a password and Binance API keys, and an http:// origin
+puts the session cookie on the wire in clear. allowInsecure is the escape
+hatch for a deliberate plain-HTTP deployment, such as a private network.
+*/ -}}
+{{- if and (not (hasPrefix "https://" (include "binance-trading-bot.webOrigin" .))) (not .Values.route.allowInsecure) }}
+{{- fail "webOrigin is not https://, so the dashboard and its session cookie would be served over cleartext HTTP. Attach the route to an HTTPS listener and set webOrigin to the https:// origin, or set route.allowInsecure=true to accept plain HTTP." }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "binance-trading-bot.fullname" . }}
+  labels:
+    {{- include "binance-trading-bot.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.route.parentRefs | nindent 4 }}
+  {{- with .Values.route.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if .Values.route.rules }}
+    {{- toYaml .Values.route.rules | nindent 4 }}
+    {{- else }}
+    - backendRefs:
+        - name: {{ include "binance-trading-bot.fullname" . }}
+          port: {{ .Values.service.port }}
+    {{- end }}
+{{- end }}

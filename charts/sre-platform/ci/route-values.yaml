@@ -1,0 +1,34 @@
+# Gateway API route branch for the permanent render gate. Not for production use.
+existingSecret: sre-platform-ci
+
+public:
+  dashboardUrl: https://sre.example.com
+  apiUrl: https://api.sre.example.com
+
+embeddings:
+  url: http://embeddings.default.svc.cluster.local:8080
+
+llm:
+  provider: claude
+
+route:
+  api:
+    enabled: true
+    parentRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: public
+        namespace: gateway-system
+        sectionName: https
+    hostnames:
+      - api.sre.example.com
+  dashboard:
+    enabled: true
+    parentRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: public
+        namespace: gateway-system
+        sectionName: https
+    hostnames:
+      - sre.example.com

@@ -58,25 +58,48 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 3000
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    # Add security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Frame-Options: DENY";
-      more_set_headers "X-Content-Type-Options: nosniff";
-      more_set_headers "X-XSS-Protection: 1; mode=block";
-  hosts:
-    - host: "ip-lookup.local"
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+# Gateway API route, replacing the removed Ingress. HTTPRoute is portable across
+# conformant gateways, so nothing here names an implementation.
+route:
+  # Off by default: a route needs a parentRef naming a Gateway, or a ListenerSet
+  # on Gateway API v1.5.0 and later, that already exists in the cluster, and no
+  # chart can guess one. Enabling without it fails the render deliberately.
+  enabled: false
+  # Set sectionName to the HTTPS listener. Without it the route attaches to
+  # every listener on the Gateway, plain HTTP included.
+  parentRefs: []
+  # Optional. An empty list inherits the parent listener's hostname, which is
+  # correct when that listener already serves exactly this host.
+  hostnames: []
+  # Metadata only. nginx.ingress.kubernetes.io/* annotations have no effect on
+  # an HTTPRoute; express headers, redirects and rewrites as rules[].filters.
+  annotations: {}
+  # Empty renders one catch-all rule to this chart's Service. Set it to take
+  # full control; matches and filters pass through verbatim.
+  # The removed Ingress set these security headers through an nginx snippet by
+  # default; the route drops them unless set here. ResponseHeaderModifier is
+  # Extended support in Gateway API, so confirm the gateway implements it.
+  # backendRefs name is this chart's fullname, see `helm template`.
+  # rules:
+  #   - backendRefs:
+  #       - name: ip-lookup
+  #         port: 3000
+  #     filters:
+  #       - type: ResponseHeaderModifier
+  #         responseHeaderModifier:
+  #           set:
+  #             - name: X-Frame-Options
+  #               value: DENY
+  #             - name: X-Content-Type-Options
+  #               value: nosniff
+  #             # OWASP: set "0". The legacy XSS filter can itself introduce XSS.
+  #             - name: X-XSS-Protection
+  #               value: "0"
+  rules: []
+
+# Manifests rendered verbatim, for anything outside Gateway API: a cert-manager
+# Certificate for the listener, an authorization policy, a ListenerSet.
+extraObjects: []
 
 resources:
   limits:

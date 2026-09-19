@@ -30,7 +30,7 @@ binance-trading-bot:
         compare_to: refs/heads/main
   script:
     # Renders the chart across every conditional branch (default, split topology,
-    # external datastores, ingress + NetworkPolicy, observability, external OTLP,
+    # external datastores, route + NetworkPolicy, observability, external OTLP,
     # persistence off) and asserts what each one must produce, including negative
     # cases such as an unresolvable webOrigin. helm lint runs inside the gate, so
     # it is not repeated here. The script needs only helm and bash, both already
