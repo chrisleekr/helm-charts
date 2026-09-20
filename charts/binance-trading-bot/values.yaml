@@ -120,7 +120,7 @@ postgres:
   # at a pullable image when postgres.enabled is false.
   image:
     repository: timescale/timescaledb
-    tag: 2.30.0-pg17
+    tag: 2.30.1-pg17
     pullPolicy: IfNotPresent
   auth:
     username: binance_trading_bot
