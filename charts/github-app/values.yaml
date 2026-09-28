@@ -84,6 +84,7 @@ workflowRunner:
   # .namespace, whose fail-closed admission policy admits only exact attempt Pods.
   imageWarmer:
     enabled: false
+    podAnnotations: {}
     # Empty uses the cluster default. Set a low- or negative-priority class so a
     # warmer can never evict or delay a real attempt on a full node.
     priorityClassName: ""
@@ -231,6 +232,7 @@ extraEnv: []
 
 postgres:
   enabled: false                                # Set true to provision Postgres in-cluster.
+  podAnnotations: {}                            # Postgres Pod only, e.g. monitoring check annotations.
   # Use an existing Postgres instead of provisioning one. Do not combine with postgres.enabled.
   external:
     enabled: false
@@ -304,6 +306,7 @@ valkey:
   service:
     type: ClusterIP
     port: 6379
+  podAnnotations: {}                            # Valkey Pod only, e.g. monitoring check annotations.
   persistence:
     enabled: true
     storageClass: ""                            # Leave empty for cluster default.

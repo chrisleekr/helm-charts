@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.23.0
+version: 0.24.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: added
+      description: "Every Pod the chart renders now accepts annotations: `valkey.podAnnotations`, `postgres.podAnnotations` and `workflowRunner.imageWarmer.podAnnotations` join the existing `podAnnotations` and `daemon.pools.<name>.podAnnotations`. Use them for per-Pod integrations such as a Datadog `ad.datadoghq.com/<container>.checks` annotation. Empty by default, so rendered output is unchanged."
     - kind: removed
       description: "BREAKING: the Ingress is removed. `ingress.*` and the workflow-runner Ingress (`workflowRunner.ingress.*`) are replaced by a Gateway API HTTPRoute under `route.*` and `workflowRunner.route.*`; the runner front door is a separate `<fullname>-ws` HTTPRoute on the orchestratorPublicUrl host only. TLS moves to the Gateway listener, so set `sectionName` in `route.parentRefs` to the HTTPS listener. `helm upgrade` deletes the existing Ingress, so provision the Gateway first. See the UPGRADING to 0.23.0 section in NOTES.txt."
     - kind: fixed

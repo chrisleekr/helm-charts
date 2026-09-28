@@ -14,6 +14,10 @@ spec:
       app.kubernetes.io/component: valkey
   template:
     metadata:
+      {{- with .Values.valkey.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "github-app.labels" . | nindent 8 }}
         app.kubernetes.io/component: valkey

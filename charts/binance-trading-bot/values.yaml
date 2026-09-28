@@ -76,6 +76,8 @@ extraEnv: []
 # Job and sets SKIP_MIGRATIONS=1 on every app workload instead.
 migrations:
   enabled: true
+  # Annotations for the migration Job's Pod only.
+  podAnnotations: {}
   # How long the init container waits for the database to accept connections
   # before failing with a readable message. Covers the bundled StatefulSet's
   # first start; raise it if an external database is slow to come up.
@@ -114,6 +116,8 @@ migrations:
 # and point externalDatabase.url at a managed instance to avoid all three.
 postgres:
   enabled: true
+  # Annotations for the Postgres Pod only, e.g. monitoring check annotations.
+  podAnnotations: {}
   # Also the image for the migration Job's wait-for-database init container,
   # which runs pg_isready against DATABASE_URL. That container renders whether
   # or not the bundled database is enabled, so this stanza still has to point
@@ -183,6 +187,8 @@ externalDatabase:
 
 valkey:
   enabled: true
+  # Annotations for the Valkey Pod only, e.g. monitoring check annotations.
+  podAnnotations: {}
   # Probe budget for the first boot, at 5s per attempt. Valkey answers LOADING
   # while it reads an existing RDB back, and the liveness probe would otherwise
   # kill it partway and restart the same load. 60 = 5 minutes.
