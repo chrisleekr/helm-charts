@@ -18,6 +18,10 @@ spec:
   activeDeadlineSeconds: {{ .Values.bootstrap.activeDeadlineSeconds }}
   template:
     metadata:
+      {{- with .Values.bootstrap.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "sre-platform.selectorLabels" . | nindent 8 }}
         # No egress policy selects this component, so the pod is non-isolated,

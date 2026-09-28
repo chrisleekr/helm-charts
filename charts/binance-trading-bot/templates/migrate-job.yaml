@@ -35,6 +35,10 @@ spec:
   activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
   template:
     metadata:
+      {{- with .Values.migrations.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "binance-trading-bot.labels" . | nindent 8 }}
         app.kubernetes.io/component: migrate

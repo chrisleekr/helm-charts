@@ -38,6 +38,10 @@ spec:
       app.kubernetes.io/component: runner-image-warmer
   template:
     metadata:
+      {{- with .Values.workflowRunner.imageWarmer.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "github-app.labels" . | nindent 8 }}
         app.kubernetes.io/component: runner-image-warmer

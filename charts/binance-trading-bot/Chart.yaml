@@ -17,7 +17,7 @@ keywords:
 #
 # 1.0.0 is a full rewrite of the chart for upstream v1.0.0, which replaced the
 # application the 0.x chart deployed. There is no in-place upgrade path from 0.x.
-version: 2.0.0
+version: 2.1.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -36,6 +36,8 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: added
+      description: "`postgres.podAnnotations`, `valkey.podAnnotations` and `migrations.podAnnotations` set annotations on the bundled Postgres, Valkey and migration Job Pods, which `podAnnotations` does not reach. Use them for per-Pod integrations such as a Datadog `ad.datadoghq.com/<container>.checks` annotation. Empty by default, so rendered output is unchanged."
     - kind: changed
       description: "Bump bundled images: timescale/timescaledb 2.29.2-pg17 to 2.30.0-pg17, otel/opentelemetry-collector-contrib 0.158.0 to 0.161.0."
     - kind: removed

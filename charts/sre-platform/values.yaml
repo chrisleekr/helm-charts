@@ -140,6 +140,8 @@ components:
 
 migrations:
   enabled: true
+  # Annotations for the migration Job's Pod only.
+  podAnnotations: {}
   backoffLimit: 3
   activeDeadlineSeconds: 300
   resources:
@@ -158,6 +160,8 @@ migrations:
 # so review changes as access-control changes.
 bootstrap:
   enabled: false
+  # Annotations for the bootstrap Job's Pod only.
+  podAnnotations: {}
   staffProvider:
     displayName: ""
     issuer: ""
