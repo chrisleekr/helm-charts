@@ -3,6 +3,56 @@ entries:
   binance-trading-bot:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.6.0: **api:** harden sign-in with OIDC single sign-on, rate limits and lockout (#791); **auth:** add security settings, security events and their delivery (#790); **mcp:** answer why-no-trade in one read and keep agents connected (#793); **mcp:** expose the bot to AI agents over MCP with OAuth 2.1 (#789); **web:** add the Security settings page, sign-in alerts and operator docs (#792); **deps:** patch docs toolchain alerts and refresh dependencies (#797); **discovery:** unstick momentum idle slots, dead entry settings, blind diagnosis (#788). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.6.0"
+        - kind: added
+          description: "`postgres.podAnnotations`, `valkey.podAnnotations` and `migrations.podAnnotations` set annotations on the bundled Postgres, Valkey and migration Job Pods, which `podAnnotations` does not reach. Use them for per-Pod integrations such as a Datadog `ad.datadoghq.com/<container>.checks` annotation. Empty by default, so rendered output is unchanged."
+        - kind: changed
+          description: "Bump bundled images: timescale/timescaledb 2.29.2-pg17 to 2.30.0-pg17, otel/opentelemetry-collector-contrib 0.158.0 to 0.161.0."
+        - kind: removed
+          description: "BREAKING: networking.k8s.io Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed; TLS moves to the Gateway listener (extraObjects). webOrigin is now required. ingress.allowInsecure becomes route.allowInsecure; with route.enabled a non-https:// webOrigin fails the render unless it is set. An upgrade deletes the existing Ingress."
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.5.0: **risk:** add loss-streak and drawdown entry breakers beside daily loss (#777); **web:** rebuild trade history around fee-valued statistics (#779); **worker:** add a replace-order decision backed by Binance cancelReplace (#775); **worker:** alert when a held position has no protective stop resting (#778); **strategy:** judge the exchange minimum at the stop's own price (#776); **worker:** prove who placed an order before adopting its fill (#774). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.5.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.4.0: **trading:** pin bindings, drop the always-hold reserve, and record fee basis (#765). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.4.0"
+        - kind: added
+          description: "Preload pg_stat_statements in the bundled Postgres. The app's migration creates the extension, but the module only records once preloaded, so the view errored on every read. shared_preload_libraries replaces postgresql.conf rather than appending, so timescaledb is now named explicitly alongside it. Adds a commented pg_stat_statements.track_planning toggle."
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.3.0: **discovery:** surface asset-policy aborts to the operator (#755); **observability:** alert on the new counters and unit-test the rules (#757); **archive:** recover the real exit reason on backfilled cycles (#756); clear position-scoped state fields on every position close (#761); **worker:** flatten sub-notional dust instead of stranding the position (#754). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.3.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.2.0: **discovery:** exclude stablecoins and fiat using Binance's own classification (#750); **api,db,web:** bound pool checkouts and statements, scope archive sums by quote (#749). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.2.0"
+        - kind: changed
+          description: "Sync to binance-trading-bot v1.1.0: archive cost-basis integrity, symbol permissions, dust cancel, discovery admission (#735); **binance:** add a per-account ORDERS rate governor and deferrable order intents (#734); **db:** store open conditions in condition_states and harden scoped repo binding (#731); **profile:** add on-demand profile diagnosis and discovery funnel (#736); **retention:** move log retention into a config table and add the log surfaces (#733); **strategy:** add the price-outside-exchange-band protective-stop blocker (#737); **strategy:** clamp or natively trail a protective stop Binance's price band refuses (#741); **ci:** resolve audit and release formatting drift (#745); **technicals:** align the rating window and vote rules with TradingView (#739); **web:** hold scroll position while loading and polling, and gate phantom alert metrics (#716); **web:** reserve height for every loading branch, gate regressions in CI (#718); **worker,contracts,web:** harden diagnosis ladder, discovery funnel, and signal panel (#744); **worker,contracts:** alert when a protective stop never reaches the exchange (#740); **worker:** break the retry loop on an order Binance keeps refusing (#742). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.1.0"
+        - kind: added
+          description: "Track upstream releases automatically: a chart bump PR is now opened on each binance-trading-bot release. Adds this Artifact Hub changelog."
+    apiVersion: v2
+    appVersion: v1.6.0
+    created: "2026-10-03T14:44:24.724800151Z"
+    description: A Helm chart for Binance Trading Bot - a self-hosted automated crypto
+      trading bot
+    digest: 2e69874f4309ce897346d7ce3c4247b5075bc001e4fa6f39e51e33e33f75f03a
+    keywords:
+    - bot
+    - trading-bot
+    - cryptocurrency
+    - binance
+    - binance-api
+    - crypto-trading
+    - grid-trading
+    - binance-trading-bot
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: binance-trading-bot
+    sources:
+    - https://github.com/chrisleekr/binance-trading-bot
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/binance-trading-bot-2.1.1/binance-trading-bot-2.1.1.tgz
+    version: 2.1.1
+  - annotations:
+      artifacthub.io/changes: |
         - kind: added
           description: "`postgres.podAnnotations`, `valkey.podAnnotations` and `migrations.podAnnotations` set annotations on the bundled Postgres, Valkey and migration Job Pods, which `podAnnotations` does not reach. Use them for per-Pod integrations such as a Datadog `ad.datadoghq.com/<container>.checks` annotation. Empty by default, so rendered output is unchanged."
         - kind: changed
@@ -3509,4 +3559,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-09-28T11:20:53.112451368Z"
+generated: "2026-10-03T14:44:24.724963697Z"
