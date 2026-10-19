@@ -13,12 +13,12 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.24.0
+version: 0.24.1
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.18.0"
+appVersion: "1.18.1"
 kubeVersion: ">= 1.31.0"
 maintainers:
   - name: Chris Lee
@@ -36,6 +36,8 @@ sources:
 annotations:
   # https://artifacthub.io/docs/topics/annotations/helm/
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to github-app v1.18.1: **deps:** update dependency picomatch to v4.0.7 (#315); **workflow-runner:** fail attempts past the token cutoff and patch advisories (#321). Release notes: https://github.com/chrisleekr/github-app/releases/tag/v1.18.1"
     - kind: added
       description: "Every Pod the chart renders now accepts annotations: `valkey.podAnnotations`, `postgres.podAnnotations` and `workflowRunner.imageWarmer.podAnnotations` join the existing `podAnnotations` and `daemon.pools.<name>.podAnnotations`. Use them for per-Pod integrations such as a Datadog `ad.datadoghq.com/<container>.checks` annotation. Empty by default, so rendered output is unchanged."
     - kind: removed
