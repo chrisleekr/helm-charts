@@ -33,15 +33,9 @@ valkey:
   enabled: true
 
 extraObjects:
-  - apiVersion: gateway.networking.k8s.io/v1beta1
-    kind: ReferenceGrant
+  - apiVersion: v1
+    kind: ConfigMap
     metadata:
-      name: "{{ .Release.Name }}-routes"
-    spec:
-      from:
-        - group: gateway.networking.k8s.io
-          kind: HTTPRoute
-          namespace: apps
-      to:
-        - group: ""
-          kind: Service
+      name: "{{ .Release.Name }}-extra"
+    data:
+      note: rendered through tpl

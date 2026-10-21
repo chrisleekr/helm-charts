@@ -33,7 +33,5 @@ annotations:
   # The images are listed for scanning once a release exists; 0.0.0 has none.
   artifacthub.io/prerelease: "true"
   artifacthub.io/changes: |
-    - kind: changed
-      description: "config.upstreamURL replaces config.upstreams and config.upstreamHosts. The edge forwards every request to that one load balancer or gateway with Host unchanged, and names the request's host in TLS for an https upstream. The old keys now fail the render."
-    - kind: removed
-      description: "referenceGrant: app routes no longer point at the edge. The CDN or tunnel sends traffic to the edge, and the edge to your gateway."
+    - kind: added
+      description: "Initial release."

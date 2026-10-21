@@ -33,7 +33,7 @@ Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [
 
    Helm does not own them, so they survive `helm uninstall`; delete them to start over. Back up `AUDIT_HMAC_KEY`: without it the audit chain cannot be verified.
 
-   Each value below replaces the generated Secret for its component, and is required when `bootstrap.generateSecrets` is `false`. `admin.existingSecret` is also required whenever `postgres.cnpg.enabled` is `false`, because only it supplies `DATABASE_URL`:
+   Each value below replaces the generated Secret for its component, and is required when `bootstrap.generateSecrets` is `false`. `admin.existingSecret` is also required whenever `postgres.cnpg.enabled` is `false`, because only it supplies `DATABASE_URL`. It then replaces the generated admin Secret, so it must also hold the audit keys and those are the ones to back up:
 
    | Value | Keys |
    |---|---|

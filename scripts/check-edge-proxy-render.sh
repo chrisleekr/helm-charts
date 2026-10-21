@@ -55,7 +55,7 @@ expect_fail "admin.image.tag is required" --set admin.image.tag=
 # 3. Secrets and required config fail the render instead of producing pods that
 #    wait or crash.
 expect_fail "edge.existingSecret is required when bootstrap.generateSecrets=false" --set bootstrap.generateSecrets=false --set logShipper.existingSecret=logs
-expect_fail "admin.existingSecret with DATABASE_URL is required" --set admin.existingSecret=
+expect_fail "admin.existingSecret with DATABASE_URL, AUDIT_HMAC_KEY_ID and AUDIT_HMAC_KEY is required" --set admin.existingSecret=
 expect_fail "migrations.existingSecret is required" --set migrations.existingSecret=
 expect_fail "config.clientIPSource is required" --set config.clientIPSource=
 expect_fail "config.upstreamURL is required" --set config.upstreamURL=

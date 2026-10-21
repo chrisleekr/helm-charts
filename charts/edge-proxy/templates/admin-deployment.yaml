@@ -95,7 +95,7 @@ spec:
             {{- end }}
             {{- $secret := include "edge-proxy.adminSecret" . }}
             {{- if and (not .Values.postgres.cnpg.enabled) (not $admin.existingSecret) }}
-            {{- fail "admin.existingSecret with DATABASE_URL is required unless postgres.cnpg.enabled=true." }}
+            {{- fail "admin.existingSecret with DATABASE_URL, AUDIT_HMAC_KEY_ID and AUDIT_HMAC_KEY is required unless postgres.cnpg.enabled=true." }}
             {{- end }}
             {{- range $key := $keys }}
             - name: {{ $key }}
