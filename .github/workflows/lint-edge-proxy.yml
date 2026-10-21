@@ -1,0 +1,22 @@
+name: Lint edge-proxy
+
+# Called by lint.yml, never triggered directly. Path filtering lives in lint.yml's
+# `changes` job: a workflow skipped by a paths filter leaves its checks Pending
+# and blocks the merge, whereas a job skipped by a conditional reports Success.
+on:
+  workflow_call:
+
+jobs:
+  gate:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Render matrix
+        # helm and yq are preinstalled on the ubuntu-24.04 runner image.
+        run: bash scripts/check-edge-proxy-render.sh

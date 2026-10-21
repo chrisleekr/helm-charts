@@ -1,0 +1,387 @@
+# Edge Proxy runs two deployables: the edge (public traffic, scales out) and
+# admin (policy, UI, background jobs; internal only). Postgres and Valkey are
+# external by default; postgres.cnpg and valkey bundle them. bootstrap creates
+# the Secrets, the first admin and a starter policy, so a fresh install serves
+# with no manual step.
+
+# config is the deployment config both binaries read. Admin validates policy
+# against it, so a rule using a viewer field the edges lack is refused at save.
+# One ConfigMap feeds both so they cannot disagree. Variable reference:
+# https://github.com/chrisleekr/edge-proxy/blob/main/docs/deploy/edge.md
+config:
+  # clientIPSource is required: cloudfront, cloudflare, header:<Name>:ip,
+  # header:<Name>:ip_port, xff or remote_addr.
+  clientIPSource: ""
+  # trustedProxies is a comma-separated list of the IPs or CIDRs of the CDN or
+  # load balancer in front of the edge. Required unless clientIPSource is
+  # remote_addr. A request from any other peer is rejected.
+  trustedProxies: ""
+  # viewerHeaders is field=Header,... for viewer fields. Empty uses the
+  # clientIPSource preset.
+  viewerHeaders: ""
+  # upstreamURL is required: http(s)://host[:port][/path] of the load balancer
+  # or gateway that routes your services. The edge forwards every request there
+  # with Host unchanged and never routes itself. Over https the request's host
+  # is the TLS server name, so the gateway needs a certificate for each host.
+  upstreamURL: ""
+  # ingressSecretHeader names a header the CDN adds with a secret value. The
+  # values go in edge.existingSecret under INGRESS_SECRET_VALUES.
+  ingressSecretHeader: ""
+  # allowRegex allows the `matches` operator in rules.
+  allowRegex: false
+
+# imagePullSecrets applies to every pod of the chart.
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# serviceAccount is shared by edge and admin. Neither calls the Kubernetes API,
+# so no token is mounted.
+serviceAccount:
+  create: true
+  # name defaults to the release fullname when create is true, and to
+  # "default" otherwise.
+  name: ""
+  annotations: {}
+
+# podSecurityContext applies to every pod. Both images are distroless and run
+# as uid 65532.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# securityContext applies to every container.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+edge:
+  image:
+    repository: chrisleekr/edge-proxy
+    # tag defaults to Chart.appVersion. A "<tag>@sha256:<digest>" value is
+    # passed through unchanged.
+    tag: ""
+    pullPolicy: IfNotPresent
+  # replicas is also rendered as EXPECTED_REPLICAS. Run at least 2.
+  replicas: 2
+  # existingSecret replaces the generated edge token. Required when
+  # bootstrap.generateSecrets is false, and must exist before install. Admin
+  # mounts EDGE_SERVICE_TOKEN as its own token file only while
+  # generateSecrets is true; otherwise it is an edge token created in admin.
+  # Keys:
+  #   EDGE_SERVICE_TOKEN     the edge token; mounted as a file
+  #   VALKEY_URL             optional, ignored when valkey.enabled; without it
+  #                          every rule uses its fail_mode
+  #   INGRESS_SECRET_VALUES  optional; comma-separated, with config.ingressSecretHeader
+  existingSecret: ""
+  # env sets extra environment variables, for example MAX_STREAMS or
+  # BOOTSTRAP_PATH. Maps merge, so setting one key keeps the defaults.
+  env:
+    # GOMEMLIMIT is the Go runtime's soft memory limit, about 90% of
+    # resources.limits.memory. Change the two together.
+    GOMEMLIMIT: 230MiB
+  # extraVolumes and extraVolumeMounts add volumes, for example a bootstrap
+  # policy file for BOOTSTRAP_PATH. The snapshot cache is an emptyDir, so a new
+  # pod starts with no policy while admin is down; a bootstrap file refreshed
+  # well inside BOOTSTRAP_MAX_AGE (7 days) lets it start anyway.
+  extraVolumes: []
+  extraVolumeMounts: []
+  podAnnotations: {}
+  podLabels: {}
+  # terminationGracePeriodSeconds covers DRAIN_DELAY (10s) plus
+  # SHUTDOWN_TIMEOUT (30s). Raise it with them.
+  terminationGracePeriodSeconds: 45
+  # resources sets no CPU limit, so the Go runtime is never throttled. The
+  # memory limit covers the default MAX_STREAMS (1000) at about 72 KiB each
+  # plus the baseline; raise it, and env.GOMEMLIMIT, with MAX_STREAMS.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  # topologySpreadConstraints null spreads edge pods across zones and nodes,
+  # preferred rather than required so a small cluster still schedules them.
+  # [] disables spreading; a list replaces the default.
+  topologySpreadConstraints: null
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+admin:
+  image:
+    repository: chrisleekr/edge-proxy-admin
+    tag: ""
+    pullPolicy: IfNotPresent
+  # existingSecret replaces the generated audit key. Required when
+  # bootstrap.generateSecrets is false or postgres.cnpg is off. Keys:
+  # AUDIT_HMAC_KEY_ID, AUDIT_HMAC_KEY, optionally AUDIT_HMAC_PREVIOUS_KEYS, and
+  # DATABASE_URL (runtime role) unless postgres.cnpg.enabled.
+  existingSecret: ""
+  # trustedProxies sets ADMIN_TRUSTED_PROXIES: the IPs or CIDRs of admin's own
+  # HTTPS proxy. Without it every user shares the proxy's sign-in throttle.
+  trustedProxies: ""
+  env:
+    # GOMAXPROCS bounds concurrent sign-in hashes, which run before
+    # authentication and hold 19 MiB each. Without a CPU limit Go uses every
+    # node CPU, so a burst of sign-ins on a large node exceeds the memory limit.
+    GOMAXPROCS: "2"
+    # GOMEMLIMIT is about 90% of resources.limits.memory. Change them together.
+    GOMEMLIMIT: 115MiB
+  # extraVolumes and extraVolumeMounts add volumes, for example a
+  # PASSWORD_BLOCKLIST_PATH file.
+  extraVolumes: []
+  extraVolumeMounts: []
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# bootstrap makes a fresh install usable with no manual step.
+bootstrap:
+  # generateSecrets runs a hook Job before each install and upgrade that creates
+  # these Secrets when they do not exist, and never changes an existing one:
+  #   <fullname>-edge-generated   EDGE_SERVICE_TOKEN
+  #   <fullname>-admin-generated  ADMIN_PASSWORD, AUDIT_HMAC_KEY_ID, AUDIT_HMAC_KEY
+  #   <fullname>-pg-runtime       the runtime role, with postgres.cnpg and no
+  #                               runtimeRoleSecret
+  #   <fullname>-logs-generated   LOG_INGEST_TOKEN, with logShipper.enabled and
+  #                               no logShipper.existingSecret
+  # Helm does not own them, so they survive uninstall. Back up the audit key:
+  # without it the audit chain can no longer be verified. The Job's Role can
+  # create Secrets but not read them.
+  generateSecrets: true
+  # adminUsername is created as an admin, with ADMIN_PASSWORD from the generated
+  # Secret, only while admin has no users. Changing the password in admin does
+  # not update the Secret.
+  adminUsername: admin
+  # publishStarterPolicy publishes the starter policy while no version exists:
+  # no rules, every request forwarded to config.upstreamURL, and a per-IP
+  # backstop of 100 requests/s (burst 200). Edges become ready once it
+  # is published.
+  publishStarterPolicy: true
+  # image runs the hook Job. It needs sh, tr, head, base64 and curl.
+  image:
+    repository: curlimages/curl
+    tag: 8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 32Mi
+
+# logShipper runs Vector as a DaemonSet on the nodes that run edges. It reads
+# the edges' access lines from the node's pod log files and posts them to
+# admin, which builds Routes from them; the edge does no extra work. It needs
+# a read-only hostPath mount of /var/log/pods, root to read the log files
+# (they are root's and not world-readable), and cluster-wide list and watch on
+# pods and nodes, which Vector's kubernetes_logs source requires. It inserts
+# no namespace fields, so it does not watch namespaces.
+# A namespace that enforces the baseline Pod Security Standard refuses it; set
+# enabled: false there, or where that access is not acceptable.
+logShipper:
+  enabled: true
+  # existingSecret holds LOG_INGEST_TOKEN, at least 32 characters and not the
+  # edge token (admin refuses to start if they match). Empty uses
+  # <fullname>-logs-generated, created by bootstrap.generateSecrets.
+  existingSecret: ""
+  image:
+    repository: timberio/vector
+    tag: 0.59.0-distroless-libc@sha256:54a7c01056e98305fce80545ace22779035747af9e89114508330fe94f829831
+    pullPolicy: IfNotPresent
+  # dataDir on the node keeps Vector's read positions, so a restart neither
+  # repeats nor skips lines. The release's namespace and name are appended.
+  dataDir: /var/lib/edge-proxy-log-shipper
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  # nodeSelector and tolerations default to the edge's, so the shipper runs
+  # where edges run.
+  nodeSelector: {}
+  tolerations: []
+
+# migrations runs `admin migrate` as an init container of admin, so it runs
+# before admin serves and after a bundled Postgres exists. A Helm hook would run
+# before the chart's own Cluster, and under Argo CD a failed PreSync hook stops
+# the sync that would create it. Migrate is idempotent and serialised by an
+# advisory lock.
+migrations:
+  enabled: true
+  # existingSecret holds MIGRATION_DATABASE_URL, the owner role's URL. Required
+  # unless postgres.cnpg.enabled, which uses the operator's generated owner
+  # Secret. Separate from admin.existingSecret so the server container never
+  # holds owner credentials.
+  existingSecret: ""
+  # runtimeRole is the role admin connects as.
+  runtimeRole: edge_app
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+# postgres.cnpg creates a CloudNativePG Cluster. Needs the CloudNativePG
+# operator: https://cloudnative-pg.io/docs/1.30/
+# It creates database edge_admin owned by edge_owner (the migration role, from
+# the operator's <cluster>-app Secret) and the runtime role
+# migrations.runtimeRole.
+postgres:
+  cnpg:
+    enabled: false
+    instances: 1
+    # imageName empty uses the operator's default PostgreSQL image.
+    imageName: ""
+    storage:
+      size: 1Gi
+      # storageClass empty uses the cluster's default StorageClass.
+      storageClass: ""
+    # runtimeRoleSecret replaces the generated runtime role password: a
+    # kubernetes.io/basic-auth Secret whose username is migrations.runtimeRole.
+    # Label it cnpg.io/reload: "true" so a password change reaches Postgres.
+    # Required when bootstrap.generateSecrets is false.
+    runtimeRoleSecret: ""
+    resources: {}
+    # plugins is passed to Cluster.spec.plugins. This database holds policy
+    # history and the audit chain, so configure WAL archiving with the Barman
+    # Cloud plugin in production:
+    # https://cloudnative-pg.io/docs/1.30/backup
+    plugins: []
+    # scheduledBackup is the spec of a ScheduledBackup for this Cluster, for
+    # example {schedule: "0 0 3 * * *", method: plugin,
+    # pluginConfiguration: {name: barman-cloud.cloudnative-pg.io}}. Empty
+    # renders none.
+    scheduledBackup: {}
+
+# valkey adds Valkey from the project-maintained chart; other keys pass through:
+# https://github.com/valkey-io/valkey-helm/tree/main/valkey
+# Rate-limit state needs no persistence. ACL auth is off, so the network policy
+# admits only edge pods. Subchart values cannot be templated, so the selector
+# is literal: with nameOverride, set valkey.networkPolicy.ingress to match (the
+# render fails otherwise), and edge pods of another edge-proxy release in the
+# same namespace can also reach this Valkey.
+valkey:
+  enabled: false
+  # valkeyConfig caps memory below the container limit. At about 124 bytes per
+  # key, a spread of client IPs would otherwise grow Valkey until it is killed,
+  # losing every counter. volatile-ttl evicts the counters nearest expiry first.
+  # save "" skips snapshots that an emptyDir would discard anyway.
+  valkeyConfig: |
+    maxmemory 100mb
+    maxmemory-policy volatile-ttl
+    save ""
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  networkPolicy:
+    ingress:
+      - from:
+          - podSelector:
+              matchLabels:
+                app.kubernetes.io/name: edge-proxy
+                app.kubernetes.io/component: edge
+        ports:
+          - protocol: TCP
+            port: 6379
+
+# networkPolicy restricts ingress to the edge and admin pods. Egress stays
+# open. A pod always accepts connections from its own node, so kubelet probes
+# and port-forward are unaffected.
+networkPolicy:
+  enabled: false
+  # edgeFrom lists the NetworkPolicy peers allowed to reach the edge's http
+  # port: your gateway or load balancer. Required when enabled, because the edge
+  # trusts client-IP headers from config.trustedProxies and any other pod in
+  # that range could otherwise set its own client IP.
+  edgeFrom: []
+  # - namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: gateway-system
+  #   podSelector:
+  #     matchLabels:
+  #       gateway.networking.k8s.io/gateway-name: public
+  # metricsFrom lists the peers allowed to reach the edge's internal port
+  # (/metrics), normally Prometheus. Empty admits none.
+  metricsFrom: []
+  # adminFrom lists peers allowed to reach admin besides the edge pods, for
+  # example the gateway when route.admin is enabled.
+  adminFrom: []
+
+# istio adds objects for an Istio proxy in front of the edge.
+istio:
+  destinationRule:
+    enabled: false
+    # idleTimeout must stay below the edge's IDLE_TIMEOUT (75s). Istio's default
+    # is 1h, so the proxy reuses connections the edge has already closed, and
+    # those requests fail with 503.
+    idleTimeout: 60s
+
+metrics:
+  # serviceMonitor scrapes the edge's /metrics. Needs the Prometheus Operator.
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    # labels are added to the ServiceMonitor, for a Prometheus serviceMonitorSelector.
+    labels: {}
+  # prometheusRule adds the alerts from edge-proxy's monitoring guide, scoped to
+  # this release's edges. Needs serviceMonitor.
+  prometheusRule:
+    enabled: false
+    # labels are added to the PrometheusRule, for a Prometheus ruleSelector.
+    labels: {}
+
+route:
+  # admin is an HTTPRoute to admin. Admin's session cookie is Secure, so attach
+  # it to an HTTPS listener only.
+  admin:
+    enabled: false
+    parentRefs: []
+    hostnames: []
+    # filters are added to the route's rule. Admin throttles sign-ins by client
+    # IP from X-Forwarded-For when admin.trustedProxies lists the gateway, so a
+    # gateway that does not set X-Forwarded-For to the visitor's address makes
+    # every visitor share one budget. On Istio:
+    # - type: RequestHeaderModifier
+    #   requestHeaderModifier:
+    #     set:
+    #       - name: X-Forwarded-For
+    #         value: "%REQ(X-ENVOY-EXTERNAL-ADDRESS)%"
+    filters: []
+    # oauth2Proxy puts an Istio ext_authz provider, such as oauth2-proxy, in
+    # front of the admin hostnames with a CUSTOM AuthorizationPolicy on the
+    # Gateway. Needs route.admin.enabled and hostnames, and permission to create
+    # the policy in the gateway's namespace. Every Gateway in parentRefs must be
+    # this gateway; a ListenerSet parent is not checked, so make sure it
+    # belongs to this gateway.
+    oauth2Proxy:
+      enabled: false
+      # provider is the ext_authz provider name in Istio's mesh config.
+      provider: oauth2-proxy
+      gateway:
+        name: ""
+        namespace: ""
+
+# extraObjects are rendered through tpl, for objects a given cluster needs next
+# to the chart, such as a ListenerSet or a Certificate.
+extraObjects: []

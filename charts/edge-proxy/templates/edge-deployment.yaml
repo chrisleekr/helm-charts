@@ -1,0 +1,144 @@
+{{- $edge := .Values.edge -}}
+{{- /* Subchart values cannot be templated, so the Valkey policy's selector is a literal that nameOverride does not follow. */}}
+{{- if and .Values.valkey.enabled (ne (include "edge-proxy.name" .) "edge-proxy") (contains "\"app.kubernetes.io/name\":\"edge-proxy\"" (toJson .Values.valkey.networkPolicy)) }}
+{{- fail "nameOverride changes the edge pods' app.kubernetes.io/name, so the default valkey.networkPolicy would block them from Valkey. Set valkey.networkPolicy.ingress to match the new name." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  replicas: {{ $edge.replicas }}
+  # Never drop below the current count during a rollout: the edge is the only
+  # path to the upstream.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: edge
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include "edge-proxy.configChecksum" . }}
+        {{- with $edge.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "edge-proxy.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: edge
+        {{- with $edge.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "edge-proxy.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $edge.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: edge
+          image: {{ include "edge-proxy.image" (dict "ctx" . "image" $edge.image "key" "edge.image.tag") | quote }}
+          imagePullPolicy: {{ $edge.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: internal
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: {{ include "edge-proxy.fullname" . }}
+          env:
+            - name: ADMIN_URL
+              value: {{ printf "http://%s:8081" (include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin")) | quote }}
+            # A file keeps the token out of the process environment.
+            - name: EDGE_SERVICE_TOKEN_FILE
+              value: /var/run/secrets/edge-proxy/token
+            # Lets a restarted edge serve its last good policy while admin is down.
+            - name: SNAPSHOT_CACHE_PATH
+              value: /var/cache/edge/snapshot.json
+            # Fleet size for fail_mode: local before admin reports the live count.
+            - name: EXPECTED_REPLICAS
+              value: {{ $edge.replicas | quote }}
+            {{- if .Values.valkey.enabled }}
+            - name: VALKEY_URL
+              value: {{ printf "valkey://%s:6379" (include "edge-proxy.valkeyHost" .) | quote }}
+            {{- end }}
+            {{- with $edge.existingSecret }}
+            {{- $keys := list "INGRESS_SECRET_VALUES" }}
+            {{- if not $.Values.valkey.enabled }}
+            {{- $keys = prepend $keys "VALKEY_URL" }}
+            {{- end }}
+            {{- range $key := $keys }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $edge.existingSecret }}
+                  key: {{ $key }}
+                  {{- /* A missing key then stops the pod at start instead of rejecting every request. */}}
+                  optional: {{ not (and (eq $key "INGRESS_SECRET_VALUES") $.Values.config.ingressSecretHeader) }}
+            {{- end }}
+            {{- end }}
+            {{- include "edge-proxy.env" $edge.env | nindent 12 }}
+          # /readyz is "policy loaded and not draining", never dependency health,
+          # so a Valkey or admin outage does not pull replicas from the Service.
+          # No startup probe: a pod waiting for its first policy while admin is
+          # down is healthy, and a startup probe on /readyz would restart it.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: internal
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: internal
+            periodSeconds: 10
+          resources:
+            {{- toYaml $edge.resources | nindent 12 }}
+          volumeMounts:
+            - name: token
+              mountPath: /var/run/secrets/edge-proxy
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/edge
+            {{- with $edge.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: token
+          secret:
+            secretName: {{ include "edge-proxy.edgeSecret" . }}
+            items:
+              - key: EDGE_SERVICE_TOKEN
+                path: token
+        - name: cache
+          emptyDir: {}
+        {{- with $edge.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- include "edge-proxy.edgeSpread" . | nindent 6 }}
+      {{- with $edge.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $edge.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $edge.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

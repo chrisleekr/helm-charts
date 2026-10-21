@@ -1,0 +1,32 @@
+# Vector unit tests for the log shipper's transform, run by
+# scripts/check-edge-proxy-render.sh against the config the chart renders.
+tests:
+  - name: an access line is passed on as its JSON object
+    inputs:
+      - insert_at: access
+        type: log
+        log_fields:
+          message: '{"time":"2026-10-20T01:02:03Z","level":"INFO","msg":"access","http.request.method":"GET","server.address":"api.example.com","url.path":"/users/1","http.response.status_code":200}'
+    outputs:
+      - extract_from: access
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.msg, "access")
+              assert_eq!(get!(., ["url.path"]), "/users/1")
+              assert_eq!(get!(., ["http.response.status_code"]), 200)
+              assert!(!exists(.message))
+  - name: other edge lines are dropped
+    inputs:
+      - insert_at: access
+        type: log
+        log_fields:
+          message: '{"level":"INFO","msg":"snapshot loaded"}'
+    no_outputs_from: [access]
+  - name: a line that is not JSON is dropped
+    inputs:
+      - insert_at: access
+        type: log
+        log_fields:
+          message: 'panic: something'
+    no_outputs_from: [access]

@@ -1,0 +1,53 @@
+{{- $pg := .Values.postgres.cnpg -}}
+{{- if $pg.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "edge-proxy.pgCluster" . }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  instances: {{ $pg.instances }}
+  {{- with $pg.imageName }}
+  imageName: {{ . | quote }}
+  {{- end }}
+  storage:
+    size: {{ $pg.storage.size }}
+    {{- with $pg.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  {{- with $pg.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  # The owner role runs migrations and grants the runtime role only what it
+  # needs; the runtime role can never update or delete audit rows.
+  bootstrap:
+    initdb:
+      database: edge_admin
+      owner: edge_owner
+  managed:
+    roles:
+      - name: {{ .Values.migrations.runtimeRole }}
+        ensure: present
+        login: true
+        passwordSecret:
+          name: {{ include "edge-proxy.pgRuntimeSecret" . }}
+  {{- with $pg.plugins }}
+  plugins:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- with $pg.scheduledBackup }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "edge-proxy.pgCluster" $ }}
+  labels:
+    {{- include "edge-proxy.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  {{- toYaml (merge (dict "cluster" (dict "name" (include "edge-proxy.pgCluster" $))) .) | nindent 2 }}
+{{- end }}
+{{- end }}

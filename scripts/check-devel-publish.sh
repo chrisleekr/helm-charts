@@ -25,6 +25,9 @@ export CI_API_V4_URL=https://registry.example/api/v4
 curl() { printf 'uploaded\n' >> uploads; }
 export -f curl
 
+mkdir -p charts/edge-proxy
+printf 'apiVersion: v2\nname: edge-proxy\nversion: 3.0.0\nappVersion: "0.0.0"\n' > charts/edge-proxy/Chart.yaml
+
 for appversion in 0.0.0 1.2.3; do
   export CI_COMMIT_BEFORE_SHA=$(git rev-parse HEAD)
   appversion="$appversion" yq -i '.appVersion = strenv(appversion)' charts/sre-platform/Chart.yaml
@@ -38,7 +41,9 @@ for appversion in 0.0.0 1.2.3; do
   # other-chart changed in the same commit and is still withheld at 0.0.0.
   [ ! -e other-chart-2.0.0-dev-01234567.tgz ]
 done
-[ "$(wc -l < uploads | tr -d ' ')" = 2 ]
+# edge-proxy changed only in the first commit and is published at 0.0.0.
+[ -e edge-proxy-3.0.0-dev-01234567.tgz ]
+[ "$(wc -l < uploads | tr -d ' ')" = 3 ]
 echo 'PASS: placeholder published, real release version, on-disk metadata untouched, other placeholder charts withheld'
 
 export CI_COMMIT_BEFORE_SHA=$(git rev-parse HEAD)
@@ -47,7 +52,7 @@ cp "$root/.gitlab/ci/publish-devel.yml" .gitlab/ci/publish-devel.yml
 git add .gitlab
 git commit -q -m 'Publishing policy only'
 bash publish.sh
-[ "$(wc -l < uploads | tr -d ' ')" = 2 ]
+[ "$(wc -l < uploads | tr -d ' ')" = 3 ]
 echo 'PASS: CI-only changes do not republish SRE Platform'
 
 # The fixture above is metadata with no templates, so it cannot show whether the
@@ -57,3 +62,8 @@ helm package "$root/charts/sre-platform" --version 1.0.0-dev-01234567 --destinat
 helm template sre "$tmp/real/sre-platform-1.0.0-dev-01234567.tgz" \
   -f "$root/charts/sre-platform/ci/ct-values.yaml" >/dev/null
 echo 'PASS: the packaged SRE Platform chart renders under default values'
+
+helm package -u "$root/charts/edge-proxy" --version 1.0.0-dev-01234567 --destination "$tmp/real" >/dev/null
+helm template edge "$tmp/real/edge-proxy-1.0.0-dev-01234567.tgz" \
+  -f "$root/charts/edge-proxy/ci/ct-values.yaml" >/dev/null
+echo 'PASS: the packaged edge-proxy chart renders with explicit image tags'

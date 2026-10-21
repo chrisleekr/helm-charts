@@ -1,0 +1,15 @@
+{{- /* maxUnavailable rather than minAvailable: it lets one pod go at a time at
+any replica count, and never blocks a drain of a single replica. */ -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: edge

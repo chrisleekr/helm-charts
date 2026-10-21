@@ -1,0 +1,19 @@
+{{- if .Values.istio.destinationRule.enabled }}
+{{- /*
+In the release namespace, so it applies to every Istio proxy that sends to the
+edge, including a gateway in another namespace.
+*/}}
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  host: {{ printf "%s.%s.svc.cluster.local" (include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge")) .Release.Namespace }}
+  trafficPolicy:
+    connectionPool:
+      http:
+        idleTimeout: {{ .Values.istio.destinationRule.idleTimeout }}
+{{- end }}

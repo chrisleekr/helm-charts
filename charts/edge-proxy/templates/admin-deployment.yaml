@@ -1,0 +1,184 @@
+{{- $admin := .Values.admin -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  # Background jobs run on one replica chosen by a Postgres advisory lock; a
+  # second replica only adds failover, so the chart runs one.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: admin
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include "edge-proxy.configChecksum" . }}
+        {{- with $admin.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "edge-proxy.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: admin
+        {{- with $admin.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "edge-proxy.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.migrations.enabled }}
+      initContainers:
+        - name: migrate
+          image: {{ include "edge-proxy.image" (dict "ctx" . "image" $admin.image "key" "admin.image.tag") | quote }}
+          imagePullPolicy: {{ $admin.image.pullPolicy }}
+          args: ["migrate"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: MIGRATION_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.postgres.cnpg.enabled }}
+                  name: {{ include "edge-proxy.pgCluster" . }}-app
+                  key: uri
+                  {{- else }}
+                  name: {{ required "migrations.existingSecret is required unless postgres.cnpg.enabled=true." .Values.migrations.existingSecret }}
+                  key: MIGRATION_DATABASE_URL
+                  {{- end }}
+            - name: DB_RUNTIME_ROLE
+              value: {{ required "migrations.runtimeRole is required." .Values.migrations.runtimeRole | quote }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: admin
+          image: {{ include "edge-proxy.image" (dict "ctx" . "image" $admin.image "key" "admin.image.tag") | quote }}
+          imagePullPolicy: {{ $admin.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: {{ include "edge-proxy.fullname" . }}
+          env:
+            {{- if .Values.postgres.cnpg.enabled }}
+            # pgx fills user and password from PGUSER and PGPASSWORD when the URL
+            # omits them, so the password never needs URL-encoding.
+            - name: DATABASE_URL
+              value: {{ printf "postgres://%s-rw:5432/edge_admin" (include "edge-proxy.pgCluster" .) | quote }}
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "edge-proxy.pgRuntimeSecret" . }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "edge-proxy.pgRuntimeSecret" . }}
+                  key: password
+            {{- end }}
+            {{- $keys := list "AUDIT_HMAC_KEY_ID" "AUDIT_HMAC_KEY" }}
+            {{- if not .Values.postgres.cnpg.enabled }}
+            {{- $keys = prepend $keys "DATABASE_URL" }}
+            {{- end }}
+            {{- $secret := include "edge-proxy.adminSecret" . }}
+            {{- if and (not .Values.postgres.cnpg.enabled) (not $admin.existingSecret) }}
+            {{- fail "admin.existingSecret with DATABASE_URL, AUDIT_HMAC_KEY_ID and AUDIT_HMAC_KEY is required unless postgres.cnpg.enabled=true." }}
+            {{- end }}
+            {{- range $key := $keys }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ $key }}
+            {{- end }}
+            - name: AUDIT_HMAC_PREVIOUS_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: AUDIT_HMAC_PREVIOUS_KEYS
+                  optional: true
+            {{- if .Values.bootstrap.generateSecrets }}
+            # Admin accepts the edges' token from this file, so no token has to
+            # be created in the UI.
+            - name: EDGE_SERVICE_TOKEN_FILE
+              value: /var/run/secrets/edge-proxy/edge-token
+            # Creates this admin only while admin has no users.
+            - name: BOOTSTRAP_ADMIN_USERNAME
+              value: {{ required "bootstrap.adminUsername is required when bootstrap.generateSecrets=true." .Values.bootstrap.adminUsername | quote }}
+            - name: BOOTSTRAP_ADMIN_PASSWORD_FILE
+              value: /var/run/secrets/edge-proxy/admin-password
+            {{- end }}
+            {{- if .Values.logShipper.enabled }}
+            # Admin accepts access lines from the log shipper with this token.
+            - name: LOG_INGEST_TOKEN_FILE
+              value: /var/run/secrets/edge-proxy-logs/token
+            {{- end }}
+            {{- if .Values.bootstrap.publishStarterPolicy }}
+            # Publishes the starter policy only while nothing is published.
+            - name: BOOTSTRAP_PUBLISH_DEFAULT
+              value: "true"
+            {{- end }}
+            {{- with $admin.trustedProxies }}
+            - name: ADMIN_TRUSTED_PROXIES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- include "edge-proxy.env" $admin.env | nindent 12 }}
+          # Admin has no health endpoint; the UI root answers 200 without a session.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml $admin.resources | nindent 12 }}
+          {{- $mounts := $admin.extraVolumeMounts }}
+          {{- $volumes := $admin.extraVolumes }}
+          {{- if .Values.bootstrap.generateSecrets }}
+          {{- $mounts = prepend $mounts (dict "name" "secrets" "mountPath" "/var/run/secrets/edge-proxy" "readOnly" true) }}
+          {{- $edgeToken := dict "secret" (dict "name" (include "edge-proxy.edgeSecret" .) "items" (list (dict "key" "EDGE_SERVICE_TOKEN" "path" "edge-token"))) }}
+          {{- $password := dict "secret" (dict "name" (include "edge-proxy.generatedAdminSecret" .) "items" (list (dict "key" "ADMIN_PASSWORD" "path" "admin-password"))) }}
+          {{- $volumes = prepend $volumes (dict "name" "secrets" "projected" (dict "sources" (list $edgeToken $password))) }}
+          {{- end }}
+          {{- if .Values.logShipper.enabled }}
+          {{- $mounts = prepend $mounts (dict "name" "log-token" "mountPath" "/var/run/secrets/edge-proxy-logs" "readOnly" true) }}
+          {{- $volumes = prepend $volumes (dict "name" "log-token" "secret" (dict "secretName" (include "edge-proxy.logsSecret" .) "items" (list (dict "key" "LOG_INGEST_TOKEN" "path" "token")))) }}
+          {{- end }}
+          {{- with $mounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with $volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $admin.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $admin.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $admin.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

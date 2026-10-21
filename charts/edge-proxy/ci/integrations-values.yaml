@@ -1,0 +1,70 @@
+# Render-only chart-testing values with every optional integration on, so the
+# NetworkPolicy, DestinationRule, admin HTTPRoute and
+# AuthorizationPolicy are schema-checked.
+config:
+  clientIPSource: cloudflare
+  trustedProxies: 10.0.0.0/8
+  upstreamURL: https://public-gateway.gateway-system.svc.cluster.local:443
+
+edge:
+  image:
+    tag: 0.1.0
+  existingSecret: edge-proxy-ci-edge
+
+admin:
+  image:
+    tag: 0.1.0
+  existingSecret: edge-proxy-ci-admin
+  trustedProxies: 10.0.0.0/8
+
+migrations:
+  existingSecret: edge-proxy-ci-migrations
+
+networkPolicy:
+  enabled: true
+  edgeFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: gateway-system
+      podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: public
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+  adminFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: gateway-system
+
+istio:
+  destinationRule:
+    enabled: true
+
+metrics:
+  serviceMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+
+route:
+  admin:
+    enabled: true
+    parentRefs:
+      - name: public
+        namespace: gateway-system
+        sectionName: https
+    hostnames:
+      - admin.example.com
+    filters:
+      - type: RequestHeaderModifier
+        requestHeaderModifier:
+          set:
+            - name: X-Forwarded-For
+              value: "%REQ(X-ENVOY-EXTERNAL-ADDRESS)%"
+    oauth2Proxy:
+      enabled: true
+      gateway:
+        name: public
+        namespace: gateway-system

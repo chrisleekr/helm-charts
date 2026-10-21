@@ -1,0 +1,37 @@
+apiVersion: v2
+name: edge-proxy
+description: >-
+  A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between
+  a CDN and the load balancer or gateway that routes your services, and its
+  admin service
+type: application
+version: 0.5.1
+# matchLabelKeys in the edge topology spread is on by default from 1.27.
+kubeVersion: ">=1.27.0-0"
+# 0.0.0 is the unpublished placeholder. Until a release exists, set edge.image.tag
+# and admin.image.tag; release.yml withholds the chart while the placeholder stands.
+appVersion: "0.0.0"
+home: https://github.com/chrisleekr/edge-proxy
+sources:
+  - https://github.com/chrisleekr/edge-proxy
+maintainers:
+  - name: Chris Lee
+    url: https://github.com/chrisleekr
+# Optional Valkey for rate-limit state, off by default. The project-maintained
+# chart replaced Bitnami's after Bitnami stopped publishing free images.
+dependencies:
+  - name: valkey
+    version: 0.12.0
+    repository: https://valkey.io/valkey-helm/
+    condition: valkey.enabled
+keywords:
+  - reverse-proxy
+  - rate-limiting
+  - waf
+  - kubernetes
+annotations:
+  # The images are listed for scanning once a release exists; 0.0.0 has none.
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/changes: |
+    - kind: added
+      description: "Initial release."

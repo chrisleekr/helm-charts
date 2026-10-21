@@ -1,0 +1,41 @@
+# Render-only chart-testing values with the bundled Postgres and Valkey and
+# every Secret generated, the install that needs no prior setup, so the
+# CloudNativePG Cluster, the Valkey subchart objects and the bootstrap hook are
+# schema-checked.
+config:
+  clientIPSource: cloudflare
+  trustedProxies: 10.0.0.0/8
+  upstreamURL: https://public-gateway.gateway-system.svc.cluster.local:443
+
+edge:
+  image:
+    tag: 0.1.0
+
+admin:
+  image:
+    tag: 0.1.0
+
+postgres:
+  cnpg:
+    enabled: true
+    plugins:
+      - name: barman-cloud.cloudnative-pg.io
+        isWALArchiver: true
+        parameters:
+          barmanObjectName: edge-proxy-ci-store
+    scheduledBackup:
+      schedule: "0 0 3 * * *"
+      method: plugin
+      pluginConfiguration:
+        name: barman-cloud.cloudnative-pg.io
+
+valkey:
+  enabled: true
+
+extraObjects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: "{{ .Release.Name }}-extra"
+    data:
+      note: rendered through tpl

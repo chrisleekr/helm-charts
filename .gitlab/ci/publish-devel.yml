@@ -11,6 +11,7 @@ devel-publish-test:
           - .gitlab/ci/publish-devel.yml
           - scripts/check-devel-publish.sh
           - charts/sre-platform/**/*
+          - charts/edge-proxy/**/*
         # Without compare_to, a branch pipeline diffs against the previous commit
         # on the branch, so a file touched in an earlier commit of the same push
         # goes ungated. https://docs.gitlab.com/ci/yaml/#ruleschanges
@@ -68,7 +69,10 @@ publish-devel:
         # explicit image.tag. No substitute tag exists on Docker Hub either way,
         # so the rewrite buys nothing. scripts/check-devel-publish.sh renders the
         # real packaged chart to hold this.
-        if [ "$appversion" = "0.0.0" ] && [ "$name" != "sre-platform" ]; then
+        # edge-proxy is published the same way: it has no release yet, its
+        # images ship as a rolling tag from another registry, and its templates
+        # refuse to render 0.0.0 without an explicit image tag.
+        if [ "$appversion" = "0.0.0" ] && [ "$name" != "sre-platform" ] && [ "$name" != "edge-proxy" ]; then
           echo "withholding $name from devel: appVersion is the 0.0.0 placeholder"
           continue
         fi
@@ -81,7 +85,9 @@ publish-devel:
         # can be all digits, and SemVer rejects a numeric identifier with a
         # leading zero, which helm would refuse to package.
         devel="${version}-dev-${CI_COMMIT_SHORT_SHA}"
-        helm package "charts/$name" --version "$devel" --destination .
+        # -u fetches subcharts, which are not committed. A chart without
+        # dependencies is unaffected.
+        helm package -u "charts/$name" --version "$devel" --destination .
         # GitLab treats a channel as a separate repository, so "devel" can never
         # be resolved by anything pointed at stable. CI_JOB_TOKEN is accepted
         # here, which avoids installing the chartmuseum/helm-push plugin.

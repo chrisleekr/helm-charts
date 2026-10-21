@@ -1,0 +1,26 @@
+{{- with .Values.metrics.serviceMonitor }}
+{{- if .enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" $ "suffix" "edge") }}
+  labels:
+    {{- include "edge-proxy.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: edge
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ $.Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: edge
+  endpoints:
+    - port: internal
+      path: /metrics
+      interval: {{ .interval }}
+{{- end }}
+{{- end }}

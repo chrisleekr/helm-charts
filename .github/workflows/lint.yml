@@ -36,6 +36,7 @@ jobs:
       github_app: ${{ steps.filter.outputs.github_app }}
       binance_trading_bot: ${{ steps.filter.outputs.binance_trading_bot }}
       sre_platform: ${{ steps.filter.outputs.sre_platform }}
+      edge_proxy: ${{ steps.filter.outputs.edge_proxy }}
       renovate: ${{ steps.filter.outputs.renovate }}
     steps:
       - name: Checkout
@@ -115,6 +116,13 @@ jobs:
             '.github/workflows/lint-sre-platform.yml' \
             '.github/workflows/sre-platform-sync.yml' \
             '.gitlab/ci/lint-sre-platform.yml' \
+            '.gitlab-ci.yml' \
+            '.github/workflows/lint.yml'
+          emit edge_proxy \
+            'charts/edge-proxy/*' \
+            'scripts/check-edge-proxy-render.sh' \
+            '.github/workflows/lint-edge-proxy.yml' \
+            '.gitlab/ci/lint-edge-proxy.yml' \
             '.gitlab-ci.yml' \
             '.github/workflows/lint.yml'
           emit renovate \
@@ -197,6 +205,14 @@ jobs:
       contents: read
     uses: ./.github/workflows/lint-sre-platform.yml
 
+  edge_proxy:
+    name: edge-proxy
+    needs: changes
+    if: needs.changes.outputs.edge_proxy == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-edge-proxy.yml
+
   lint:
     # THE required status check. Keep this job id as "lint" — the ruleset pins
     # that exact context, so renaming it silently unblocks every merge.
@@ -204,7 +220,7 @@ jobs:
     # if: always() is load-bearing. Without it this job is skipped whenever a
     # dependency fails, and a skipped required check does not block the merge,
     # which turns the whole gate into a rubber stamp.
-    needs: [changes, ct_lint, renovate, omniroute, github_app, binance_trading_bot, sre_platform]
+    needs: [changes, ct_lint, renovate, omniroute, github_app, binance_trading_bot, sre_platform, edge_proxy]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest
