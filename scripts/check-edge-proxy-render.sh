@@ -3,9 +3,9 @@
 # Render matrix for the edge-proxy chart.
 #
 # Covers the conditional branches a single `helm template` does not: the
-# placeholder-tag and missing-Secret guards, the generated and supplied Secrets, migrations off, the single-replica
-# PodDisruptionBudget skip, extra env rendering, and the wiring of the bundled
-# CloudNativePG Postgres and Valkey. Every --set flag is a static
+# placeholder-tag and missing-Secret guards, the generated and supplied
+# Secrets, migrations off, the PodDisruptionBudget at one replica, extra env
+# rendering, and the wiring of the bundled CloudNativePG Postgres and Valkey. Every --set flag is a static
 # literal, so the script has no injection surface when driven from CI.
 #
 # Dependencies: helm and yq, and network access to fetch the Valkey subchart.
@@ -113,6 +113,8 @@ while IFS= read -r pair; do
   [ "$(yq e ".metadata.labels.\"${pair%%=*}\"" <<<"$edge")" = "${pair#*=}" ] \
     || fail charts/edge-proxy/values.yaml "valkey.networkPolicy selector $pair does not match the edge pods"
 done <<<"$allowed"
+# nameOverride renames the edge pods but not the subchart's literal selector.
+expect_fail "nameOverride changes the edge pods' app.kubernetes.io/name" --set valkey.enabled=true --set nameOverride=ep
 
 # 9. Defaults that keep the edge up. No startup probe: one on /readyz kills a
 #    pod that is correctly waiting for its first policy while admin is down.

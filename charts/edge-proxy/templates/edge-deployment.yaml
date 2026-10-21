@@ -1,4 +1,8 @@
 {{- $edge := .Values.edge -}}
+{{- /* Subchart values cannot be templated, so the Valkey policy's selector is a literal that nameOverride does not follow. */}}
+{{- if and .Values.valkey.enabled (ne (include "edge-proxy.name" .) "edge-proxy") (contains "\"app.kubernetes.io/name\":\"edge-proxy\"" (toJson .Values.valkey.networkPolicy)) }}
+{{- fail "nameOverride changes the edge pods' app.kubernetes.io/name, so the default valkey.networkPolicy would block them from Valkey. Set valkey.networkPolicy.ingress to match the new name." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

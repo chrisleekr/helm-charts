@@ -274,8 +274,10 @@ postgres:
 # valkey adds Valkey from the project-maintained chart; other keys pass through:
 # https://github.com/valkey-io/valkey-helm/tree/main/valkey
 # Rate-limit state needs no persistence. ACL auth is off, so the network policy
-# admits only edge pods; it matches on labels, so it assumes nameOverride is
-# unset.
+# admits only edge pods. Subchart values cannot be templated, so the selector
+# is literal: with nameOverride, set valkey.networkPolicy.ingress to match (the
+# render fails otherwise), and edge pods of another edge-proxy release in the
+# same namespace can also reach this Valkey.
 valkey:
   enabled: false
   # valkeyConfig caps memory below the container limit. At about 124 bytes per
