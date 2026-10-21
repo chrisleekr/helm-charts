@@ -75,12 +75,13 @@ the <name>-app Secret from it, so it leaves room under the 63-character limit.
 
 {{/* Service name of the bundled Valkey, mirroring the valkey chart's fullname helper. */}}
 {{- define "edge-proxy.valkeyHost" -}}
+{{- $name := default "valkey" .Values.valkey.nameOverride -}}
 {{- if .Values.valkey.fullnameOverride -}}
 {{- .Values.valkey.fullnameOverride | trunc 63 | trimSuffix "-" -}}
-{{- else if contains "valkey" .Release.Name -}}
+{{- else if contains $name .Release.Name -}}
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- printf "%s-valkey" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- end }}
 

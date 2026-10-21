@@ -59,6 +59,7 @@ expect_fail "admin.existingSecret with DATABASE_URL is required" --set admin.exi
 expect_fail "migrations.existingSecret is required" --set migrations.existingSecret=
 expect_fail "config.clientIPSource is required" --set config.clientIPSource=
 expect_fail "config.upstreamURL is required" --set config.upstreamURL=
+expect_fail "config.trustedProxies is required unless config.clientIPSource is remote_addr" --set config.trustedProxies= --set config.clientIPSource=xff
 expect_fail "config.ingressSecretHeader needs edge.existingSecret" --set config.ingressSecretHeader=X-Origin-Secret --set edge.existingSecret=
 # A setting from before the single upstream fails instead of being ignored.
 expect_fail "additional properties 'upstreams' not allowed" --set config.upstreams=app=http://app
@@ -113,6 +114,11 @@ while IFS= read -r pair; do
   [ "$(yq e ".metadata.labels.\"${pair%%=*}\"" <<<"$edge")" = "${pair#*=}" ] \
     || fail charts/edge-proxy/values.yaml "valkey.networkPolicy selector $pair does not match the edge pods"
 done <<<"$allowed"
+# valkey.nameOverride renames the subchart's Service, and VALKEY_URL must follow.
+helm template "$chart" -f "$values" --set valkey.enabled=true --set valkey.nameOverride=kv > "$rendered"
+svc=$(yq e -N 'select(.kind == "Service" and .metadata.labels."app.kubernetes.io/name" == "kv" and .spec.clusterIP != "None") | .metadata.name' "$rendered" | head -1)
+vurl=$(yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels."app.kubernetes.io/component" == "edge") | .spec.template.spec.containers[0].env[] | select(.name == "VALKEY_URL") | .value' "$rendered")
+[ -n "$svc" ] && [ "$vurl" = "valkey://$svc:6379" ] || fail charts/edge-proxy/templates/_helpers.tpl "with valkey.nameOverride, VALKEY_URL must be valkey://$svc:6379, got '$vurl'"
 # nameOverride renames the edge pods but not the subchart's literal selector.
 expect_fail "nameOverride changes the edge pods' app.kubernetes.io/name" --set valkey.enabled=true --set nameOverride=ep
 

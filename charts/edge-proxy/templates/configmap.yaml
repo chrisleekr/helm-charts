@@ -7,6 +7,10 @@ metadata:
 data:
   CLIENT_IP_SOURCE: {{ required "config.clientIPSource is required." .Values.config.clientIPSource | quote }}
   UPSTREAM_URL: {{ required "config.upstreamURL is required." .Values.config.upstreamURL | quote }}
+  {{- /* The edge exits at startup without trusted proxies for any source but remote_addr. */}}
+  {{- if and (not .Values.config.trustedProxies) (ne .Values.config.clientIPSource "remote_addr") }}
+  {{- fail "config.trustedProxies is required unless config.clientIPSource is remote_addr." }}
+  {{- end }}
   {{- with .Values.config.trustedProxies }}
   TRUSTED_PROXIES: {{ . | quote }}
   {{- end }}
