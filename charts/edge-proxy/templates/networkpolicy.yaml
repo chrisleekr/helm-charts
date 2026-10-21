@@ -11,6 +11,9 @@ kubectl port-forward keep working.
 {{- if and .Values.metrics.serviceMonitor.enabled (not $np.metricsFrom) }}
 {{- fail "networkPolicy.metricsFrom is empty while metrics.serviceMonitor.enabled, so Prometheus could not scrape the edge and its alerts would never fire. List the Prometheus peers." }}
 {{- end }}
+{{- if and .Values.route.admin.enabled (not $np.adminFrom) }}
+{{- fail "networkPolicy.adminFrom is empty while route.admin.enabled, so the gateway could not reach admin. List the gateway's peers." }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

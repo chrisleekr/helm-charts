@@ -83,7 +83,8 @@ spec:
                 secretKeyRef:
                   name: {{ $edge.existingSecret }}
                   key: {{ $key }}
-                  optional: true
+                  {{- /* A missing key then stops the pod at start instead of rejecting every request. */}}
+                  optional: {{ not (and (eq $key "INGRESS_SECRET_VALUES") $.Values.config.ingressSecretHeader) }}
             {{- end }}
             {{- end }}
             {{- include "edge-proxy.env" $edge.env | nindent 12 }}

@@ -156,6 +156,11 @@ host=$(yq e -N 'select(.kind == "DestinationRule") | .spec.host' "$rendered")
 [ "$host" = "$edge_svc.edge-ci.svc.cluster.local" ] || fail charts/edge-proxy/templates/destinationrule.yaml "DestinationRule host must be the edge Service FQDN, got '$host'"
 expect_fail "networkPolicy.edgeFrom is empty" --set networkPolicy.enabled=true
 expect_fail "networkPolicy.metricsFrom is empty while metrics.serviceMonitor.enabled" -f "$integrations" --set networkPolicy.metricsFrom=null
+expect_fail "networkPolicy.adminFrom is empty while route.admin.enabled" -f "$integrations" --set networkPolicy.adminFrom=null
+# With the header set, a Secret missing its values must stop the pod, not start it.
+optional=$(helm template "$chart" -f "$integrations" --set config.ingressSecretHeader=X-Origin-Secret \
+  | yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels."app.kubernetes.io/component" == "edge") | .spec.template.spec.containers[0].env[] | select(.name == "INGRESS_SECRET_VALUES") | .valueFrom.secretKeyRef.optional' -)
+[ "$optional" = "false" ] || fail charts/edge-proxy/templates/edge-deployment.yaml "INGRESS_SECRET_VALUES must be required with config.ingressSecretHeader, got optional '$optional'"
 
 # 12. Alerts match the series a ServiceMonitor scrape labels with this edge
 #     Service, and refuse to render without that ServiceMonitor, where they
