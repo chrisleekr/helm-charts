@@ -35,6 +35,19 @@ spec:
 {{- fail "route.admin.oauth2Proxy.enabled needs route.admin.hostnames: the gate matches requests by host." }}
 {{- end }}
 {{- /*
+The gate covers only its own Gateway, so a route attached to any other Gateway
+would serve admin without it. Group and kind default as in Gateway API. A
+ListenerSet parent cannot be checked here.
+*/}}
+{{- range $r.parentRefs }}
+{{- if and (eq (.group | default "gateway.networking.k8s.io") "gateway.networking.k8s.io") (eq (.kind | default "Gateway") "Gateway") }}
+{{- $ns := .namespace | default $.Release.Namespace }}
+{{- if or (ne .name $gate.gateway.name) (ne $ns $gate.gateway.namespace) }}
+{{- fail (printf "route.admin.parentRefs names Gateway %s/%s, but route.admin.oauth2Proxy.gateway is %s/%s: requests through it would reach admin without passing the gate." $ns .name $gate.gateway.namespace $gate.gateway.name) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- /*
 Istio host patterns take one wildcard, at the start or the end. A wildcard
 hostname would need "*.example.com:*" for requests that carry a port, which
 cannot match, so those requests would reach admin without passing the gate.

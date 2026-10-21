@@ -2,7 +2,7 @@
 
 Deploys [Edge Proxy](https://github.com/chrisleekr/edge-proxy): the edge, a reverse proxy that enforces policy between your CDN and the load balancer or gateway that routes your services, and admin, which manages that policy. Point your CDN or tunnel at the edge Service and set `config.upstreamURL` to your gateway; the edge forwards every request there with `Host` unchanged and never routes itself. Admin is internal and is never on the request path.
 
-Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [CloudNativePG](https://cloudnative-pg.io/docs/1.30/) `Cluster` (the operator must be installed) and `valkey.enabled` adds the project-maintained [Valkey chart](https://github.com/valkey-io/valkey-helm). A fresh install needs no manual step: `bootstrap` generates the Secrets, creates the first admin and publishes a starter policy.
+Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [CloudNativePG](https://cloudnative-pg.io/docs/1.30/) `Cluster` (the operator must be installed) and `valkey.enabled` adds the project-maintained [Valkey chart](https://github.com/valkey-io/valkey-helm). With `postgres.cnpg.enabled`, a fresh install needs no manual step: `bootstrap` generates the Secrets, creates the first admin and publishes a starter policy.
 
 ## What it renders
 
@@ -33,7 +33,7 @@ Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [
 
    Helm does not own them, so they survive `helm uninstall`; delete them to start over. Back up `AUDIT_HMAC_KEY`: without it the audit chain cannot be verified.
 
-   Each value below replaces the generated Secret for its component, and is required when `bootstrap.generateSecrets` is `false`:
+   Each value below replaces the generated Secret for its component, and is required when `bootstrap.generateSecrets` is `false`. `admin.existingSecret` is also required whenever `postgres.cnpg.enabled` is `false`, because only it supplies `DATABASE_URL`:
 
    | Value | Keys |
    |---|---|

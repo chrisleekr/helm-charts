@@ -14,6 +14,10 @@ data:
   VIEWER_HEADERS: {{ . | quote }}
   {{- end }}
   {{- with .Values.config.ingressSecretHeader }}
+  {{- /* The bootstrap hook never generates INGRESS_SECRET_VALUES; without them the edge accepts no value. */}}
+  {{- if not $.Values.edge.existingSecret }}
+  {{- fail "config.ingressSecretHeader needs edge.existingSecret with INGRESS_SECRET_VALUES: the bootstrap hook does not generate them." }}
+  {{- end }}
   INGRESS_SECRET_HEADER: {{ . | quote }}
   {{- end }}
   ALLOW_REGEX: {{ .Values.config.allowRegex | toString | quote }}

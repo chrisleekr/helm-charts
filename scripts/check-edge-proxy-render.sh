@@ -59,6 +59,7 @@ expect_fail "admin.existingSecret with DATABASE_URL is required" --set admin.exi
 expect_fail "migrations.existingSecret is required" --set migrations.existingSecret=
 expect_fail "config.clientIPSource is required" --set config.clientIPSource=
 expect_fail "config.upstreamURL is required" --set config.upstreamURL=
+expect_fail "config.ingressSecretHeader needs edge.existingSecret" --set config.ingressSecretHeader=X-Origin-Secret --set edge.existingSecret=
 # A setting from before the single upstream fails instead of being ignored.
 expect_fail "additional properties 'upstreams' not allowed" --set config.upstreams=app=http://app
 
@@ -154,6 +155,7 @@ admin_from=$(yq e -N 'select(.kind == "NetworkPolicy" and .metadata.labels."app.
 host=$(yq e -N 'select(.kind == "DestinationRule") | .spec.host' "$rendered")
 [ "$host" = "$edge_svc.edge-ci.svc.cluster.local" ] || fail charts/edge-proxy/templates/destinationrule.yaml "DestinationRule host must be the edge Service FQDN, got '$host'"
 expect_fail "networkPolicy.edgeFrom is empty" --set networkPolicy.enabled=true
+expect_fail "networkPolicy.metricsFrom is empty while metrics.serviceMonitor.enabled" -f "$integrations" --set networkPolicy.metricsFrom=null
 
 # 12. Alerts match the series a ServiceMonitor scrape labels with this edge
 #     Service, and refuse to render without that ServiceMonitor, where they
@@ -171,6 +173,8 @@ gate=$(yq e -N 'select(.kind == "AuthorizationPolicy")' "$rendered")
 [ "$(yq e '.spec.rules[0].to[0].operation.hosts | join(",")' <<<"$gate")" = "admin.example.com,admin.example.com:*" ] \
   || fail charts/edge-proxy/templates/admin-route.yaml "the gate must match each admin host with and without a port"
 expect_fail "route.admin.oauth2Proxy.enabled needs route.admin.enabled" --set route.admin.oauth2Proxy.enabled=true
+# A route on another Gateway would serve admin without the gate.
+expect_fail "but route.admin.oauth2Proxy.gateway is gateway-system/public" -f "$integrations" --set 'route.admin.parentRefs[0].name=private'
 # A wildcard host would need a pattern Istio cannot match once a port is added.
 helm template "$chart" -f "$integrations" --set 'route.admin.hostnames[0]=*.example.com' > /dev/null 2>"$rendered" \
   && fail charts/edge-proxy/templates/admin-route.yaml "the gate must refuse a wildcard hostname"
@@ -204,6 +208,9 @@ admin=$(yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels
 admin_env() { yq e ".containers[0].env[] | select(.name == \"$1\") | (.value // .valueFrom.secretKeyRef.name)" <<<"$admin"; }
 [ "$(admin_env AUDIT_HMAC_KEY)" = "$admin_secret" ] || fail charts/edge-proxy/templates/admin-deployment.yaml "the audit key must come from $admin_secret"
 [ "$(admin_env PGPASSWORD)" = "$pg_secret" ] || fail charts/edge-proxy/templates/admin-deployment.yaml "PGPASSWORD must come from $pg_secret"
+# DATABASE_URL has no user, so without PGUSER admin connects as the OS user.
+[ "$(yq e '.containers[0].env[] | select(.name == "PGUSER") | .valueFrom.secretKeyRef.name + ":" + .valueFrom.secretKeyRef.key' <<<"$admin")" = "$pg_secret:username" ] \
+  || fail charts/edge-proxy/templates/admin-deployment.yaml "PGUSER must come from $pg_secret:username"
 [ "$(yq e -N 'select(.kind == "Cluster") | .spec.managed.roles[0].passwordSecret.name' "$rendered")" = "$pg_secret" ] \
   || fail charts/edge-proxy/templates/postgres-cluster.yaml "the runtime role password must come from $pg_secret"
 [ "$(admin_env BOOTSTRAP_ADMIN_USERNAME)/$(admin_env BOOTSTRAP_PUBLISH_DEFAULT)" = "admin/true" ] \

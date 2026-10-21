@@ -369,7 +369,9 @@ route:
     # oauth2Proxy puts an Istio ext_authz provider, such as oauth2-proxy, in
     # front of the admin hostnames with a CUSTOM AuthorizationPolicy on the
     # Gateway. Needs route.admin.enabled and hostnames, and permission to create
-    # the policy in the gateway's namespace.
+    # the policy in the gateway's namespace. Every Gateway in parentRefs must be
+    # this gateway; a ListenerSet parent is not checked, so make sure it
+    # belongs to this gateway.
     oauth2Proxy:
       enabled: false
       # provider is the ext_authz provider name in Istio's mesh config.

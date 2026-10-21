@@ -78,7 +78,7 @@ spec:
             # omits them, so the password never needs URL-encoding.
             - name: DATABASE_URL
               value: {{ printf "postgres://%s-rw:5432/edge_admin" (include "edge-proxy.pgCluster" .) | quote }}
-            - name: PASSER
+            - name: PGUSER
               valueFrom:
                 secretKeyRef:
                   name: {{ include "edge-proxy.pgRuntimeSecret" . }}
