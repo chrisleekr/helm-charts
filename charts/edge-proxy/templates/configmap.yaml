@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "edge-proxy.fullname" . }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+data:
+  CLIENT_IP_SOURCE: {{ required "config.clientIPSource is required." .Values.config.clientIPSource | quote }}
+  UPSTREAM_URL: {{ required "config.upstreamURL is required." .Values.config.upstreamURL | quote }}
+  {{- with .Values.config.trustedProxies }}
+  TRUSTED_PROXIES: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.viewerHeaders }}
+  VIEWER_HEADERS: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.ingressSecretHeader }}
+  INGRESS_SECRET_HEADER: {{ . | quote }}
+  {{- end }}
+  ALLOW_REGEX: {{ .Values.config.allowRegex | toString | quote }}

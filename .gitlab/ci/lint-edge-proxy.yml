@@ -1,0 +1,21 @@
+# Mirror of .github/workflows/lint-edge-proxy.yml.
+#
+# alpine/helm:3.20.0 already ships bash and yq (mikefarah v4).
+edge-proxy:
+  stage: lint
+  image:
+    name: alpine/helm:3.20.0
+    # The image's ENTRYPOINT is helm; an empty one restores the shell.
+    # https://docs.gitlab.com/runner/executors/docker/#configure-a-docker-entrypoint
+    entrypoint: [""]
+  interruptible: true
+  rules:
+    - changes:
+        paths:
+          - charts/edge-proxy/**/*
+          - scripts/check-edge-proxy-render.sh
+          - .gitlab/ci/lint-edge-proxy.yml
+          - .gitlab-ci.yml
+        compare_to: refs/heads/main
+  script:
+    - bash scripts/check-edge-proxy-render.sh

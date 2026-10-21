@@ -1,0 +1,78 @@
+{{- $r := .Values.route.admin -}}
+{{- $gate := $r.oauth2Proxy -}}
+{{- if and $gate.enabled (not $r.enabled) }}
+{{- fail "route.admin.oauth2Proxy.enabled needs route.admin.enabled: the gate matches the route's hostnames." }}
+{{- end }}
+{{- if $r.enabled }}
+{{- if not $r.parentRefs }}
+{{- fail "route.admin.parentRefs is empty. The API server accepts a parentless HTTPRoute that then serves nothing. Name the Gateway or ListenerSet whose HTTPS listener carries the admin host." }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  parentRefs:
+    {{- toYaml $r.parentRefs | nindent 4 }}
+  {{- with $r.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - backendRefs:
+        - name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+          port: 8081
+      {{- with $r.filters }}
+      filters:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- if $gate.enabled }}
+{{- if not $r.hostnames }}
+{{- fail "route.admin.oauth2Proxy.enabled needs route.admin.hostnames: the gate matches requests by host." }}
+{{- end }}
+{{- /*
+Istio host patterns take one wildcard, at the start or the end. A wildcard
+hostname would need "*.example.com:*" for requests that carry a port, which
+cannot match, so those requests would reach admin without passing the gate.
+*/}}
+{{- range $r.hostnames }}
+{{- if contains "*" . }}
+{{- fail (printf "route.admin.oauth2Proxy.enabled does not support the wildcard hostname %q: the gate could not match it when a request carries a port, letting it bypass the gate. List exact hostnames." .) }}
+{{- end }}
+{{- end }}
+---
+{{- /*
+Istio checks a CUSTOM AuthorizationPolicy at the gateway, so it lives in the
+gateway's namespace and targets the Gateway. Edges are unaffected: they call
+admin through its Service, never through the gateway.
+*/}}
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin-oauth2") }}
+  namespace: {{ required "route.admin.oauth2Proxy.gateway.namespace is required." $gate.gateway.namespace }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ required "route.admin.oauth2Proxy.gateway.name is required." $gate.gateway.name }}
+  action: CUSTOM
+  provider:
+    name: {{ required "route.admin.oauth2Proxy.provider is required." $gate.provider }}
+  rules:
+    - to:
+        - operation:
+            # The authority carries the port when a client sends one.
+            hosts:
+              {{- range $r.hostnames }}
+              - {{ . | quote }}
+              - {{ printf "%s:*" . | quote }}
+              {{- end }}
+{{- end }}

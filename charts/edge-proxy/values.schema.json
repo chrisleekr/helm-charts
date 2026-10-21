@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "config": {
+      "type": "object",
+      "properties": {
+        "clientIPSource": {
+          "type": "string",
+          "pattern": "^(|cloudfront|cloudflare|xff|remote_addr|header:[A-Za-z0-9-]+:(ip|ip_port))$"
+        },
+        "trustedProxies": { "type": "string" },
+        "viewerHeaders": { "type": "string" },
+        "upstreamURL": { "type": "string", "pattern": "^(|https?://[^/@]+(/.*)?)$" },
+        "ingressSecretHeader": { "type": "string" },
+        "allowRegex": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1 },
+        "existingSecret": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+        "extraVolumes": { "type": "array" },
+        "extraVolumeMounts": { "type": "array" },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+        "topologySpreadConstraints": { "type": ["array", "null"] }
+      }
+    },
+    "admin": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "trustedProxies": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+        "extraVolumes": { "type": "array" },
+        "extraVolumeMounts": { "type": "array" }
+      }
+    },
+    "bootstrap": {
+      "type": "object",
+      "properties": {
+        "generateSecrets": { "type": "boolean" },
+        "adminUsername": { "type": "string" },
+        "publishStarterPolicy": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "logShipper": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 }
+          }
+        },
+        "dataDir": { "type": "string", "pattern": "^/" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "runtimeRole": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "properties": {
+        "cnpg": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "instances": { "type": "integer", "minimum": 1 },
+            "runtimeRoleSecret": { "type": "string" },
+            "plugins": { "type": "array" },
+            "scheduledBackup": { "type": "object" }
+          }
+        }
+      }
+    },
+    "valkey": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "edgeFrom": { "type": "array" },
+        "metricsFrom": { "type": "array" },
+        "adminFrom": { "type": "array" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "parentRefs": { "type": "array" },
+            "hostnames": { "type": "array", "items": { "type": "string" } },
+            "filters": { "type": "array" }
+          }
+        }
+      }
+    },
+    "extraObjects": { "type": "array", "items": { "type": "object" } }
+  }
+}

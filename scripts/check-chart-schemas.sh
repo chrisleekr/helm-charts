@@ -104,6 +104,12 @@ printf 'Discovered %s charts\n' "${#charts[@]}"
 fixtures=0
 for chart_dir in "${charts[@]}"; do
   chart_name=${chart_dir##*/}
+  # Subcharts are not committed (.gitignore). `update` rather than `build`:
+  # build refuses a Chart.lock whose repository was never `helm repo add`ed,
+  # and the exact version pin in Chart.yaml makes both resolve the same chart.
+  if [ "$(yq e '.dependencies | length' "$chart_dir/Chart.yaml")" != "0" ]; then
+    helm dependency update "$chart_dir" >/dev/null
+  fi
   # ct installs every file under ci/ independently, so each one is a distinct
   # rendered shape. Validating ct-values.yaml alone would leave exactly the
   # branches that add API surface unchecked: the binance-trading-bot

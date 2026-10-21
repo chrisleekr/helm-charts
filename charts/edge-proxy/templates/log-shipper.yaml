@@ -1,0 +1,198 @@
+{{- /* Vector's config: (dict "ctx" . "admin" <admin Service name>). */}}
+{{- define "edge-proxy.vectorConfig" -}}
+data_dir: /vector-data-dir
+# The token is read from its mounted Secret: since Vector 0.57 an environment
+# variable reference in the config is sent as written, not substituted.
+secret:
+  logs:
+    type: directory
+    path: /var/run/secrets/edge-proxy-logs
+    remove_trailing_whitespace: true
+sources:
+  edge:
+    type: kubernetes_logs
+    extra_label_selector: "app.kubernetes.io/name={{ include "edge-proxy.name" .ctx }},app.kubernetes.io/instance={{ .ctx.Release.Name }},app.kubernetes.io/component=edge"
+    extra_field_selector: "metadata.namespace={{ .ctx.Release.Namespace }}"
+    # Without namespace fields Vector does not watch namespaces, so the
+    # ClusterRole below does not grant them.
+    insert_namespace_fields: false
+transforms:
+  access:
+    type: remap
+    inputs: [edge]
+    # Other edge lines, and anything that is not a JSON object, are dropped
+    # without an error per line.
+    source: |
+      parsed, err = parse_json(string(.message) ?? "")
+      if err != null || !is_object(parsed) { abort }
+      . = object!(parsed)
+      if .msg != "access" { abort }
+sinks:
+  admin:
+    type: http
+    inputs: [access]
+    uri: "http://{{ .admin }}.{{ .ctx.Release.Namespace }}.svc:8081/v1/logs/access"
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    auth:
+      strategy: bearer
+      token: "SECRET[logs.token]"
+    # The endpoint only accepts POST.
+    healthcheck:
+      enabled: false
+    # Admin refuses bodies over 4 MiB.
+    batch:
+      max_bytes: 1000000
+      timeout_secs: 5
+    # While admin is away, lines past the buffer are dropped rather than
+    # held: route stats never grow the shipper's memory.
+    buffer:
+      type: memory
+      max_events: 10000
+      when_full: drop_newest
+{{- end }}
+{{- if .Values.logShipper.enabled }}
+{{- $ls := .Values.logShipper }}
+{{- $name := include "edge-proxy.componentName" (dict "ctx" . "suffix" "log-shipper") }}
+{{- /* Cluster-scoped names must not collide between releases in different namespaces. */}}
+{{- $clusterName := printf "%s-%s" .Release.Namespace $name | trunc 63 | trimSuffix "-" }}
+{{- $admin := include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-shipper
+---
+# Vector's kubernetes_logs source lists and watches the pods on its node,
+# across all namespaces, and the node itself; it needs nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $clusterName }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-shipper
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $clusterName }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-shipper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $clusterName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-shipper
+data:
+  vector.yaml: |
+    {{- include "edge-proxy.vectorConfig" (dict "ctx" . "admin" $admin) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: log-shipper
+spec:
+  selector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: log-shipper
+  template:
+    metadata:
+      labels:
+        {{- include "edge-proxy.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: log-shipper
+      annotations:
+        checksum/config: {{ include "edge-proxy.vectorConfig" (dict "ctx" . "admin" $admin) | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Pod log files are root's and not world-readable.
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vector
+          image: {{ printf "%s:%s" $ls.image.repository $ls.image.tag | quote }}
+          imagePullPolicy: {{ $ls.image.pullPolicy }}
+          args: ["--config", "/etc/vector/vector.yaml"]
+          env:
+            - name: VECTOR_SELF_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml $ls.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+              readOnly: true
+            - name: data
+              mountPath: /vector-data-dir
+            - name: log-token
+              mountPath: /var/run/secrets/edge-proxy-logs
+              readOnly: true
+            # Only pod logs: with containerd and CRI-O these are the files,
+            # not links into another directory.
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+        - name: log-token
+          secret:
+            secretName: {{ include "edge-proxy.logsSecret" . }}
+            items:
+              - key: LOG_INGEST_TOKEN
+                path: token
+        - name: data
+          hostPath:
+            path: {{ printf "%s/%s-%s" $ls.dataDir .Release.Namespace (include "edge-proxy.fullname" .) | quote }}
+            type: DirectoryOrCreate
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+      {{- with (default .Values.edge.nodeSelector $ls.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (default .Values.edge.tolerations $ls.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

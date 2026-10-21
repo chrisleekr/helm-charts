@@ -1,0 +1,17 @@
+# Render-only chart-testing values. Every identifier and credential is a fixture.
+config:
+  clientIPSource: cloudflare
+  trustedProxies: 10.0.0.0/8
+  upstreamURL: http://gateway.default.svc.cluster.local:80
+
+edge:
+  image:
+    tag: 0.1.0
+
+admin:
+  image:
+    tag: 0.1.0
+  existingSecret: edge-proxy-ci-admin
+
+migrations:
+  existingSecret: edge-proxy-ci-migrations

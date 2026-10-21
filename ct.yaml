@@ -2,6 +2,10 @@ remote: origin
 target-branch: main
 chart-dirs:
   - charts
+# Repositories of chart dependencies. ct runs `helm dependency build`, which
+# needs each one added.
+chart-repos:
+  - valkey=https://valkey.io/valkey-helm/
 # Fail if a changed chart's version has not been incremented
 check-version-increment: true
 # Skip maintainer validation. ct hits https://api.github.com/users/<name> per

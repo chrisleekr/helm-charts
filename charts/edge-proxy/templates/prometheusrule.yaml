@@ -1,0 +1,89 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+{{- if not .Values.metrics.serviceMonitor.enabled }}
+{{- fail "metrics.prometheusRule.enabled needs metrics.serviceMonitor.enabled: the alerts match the service label that ServiceMonitor scraping adds, so without it they would never fire." }}
+{{- end }}
+{{- /*
+The alerts from edge-proxy's monitoring guide. The Prometheus Operator puts
+namespace and service labels on every series it scrapes through a
+ServiceMonitor, so $sel limits each expression to this release's edges; the
+metric names alone would also match another release.
+*/}}
+{{- $svc := include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}
+{{- $sel := printf "namespace=%q,service=%q" .Release.Namespace $svc }}
+{{- $runbooks := "https://github.com/chrisleekr/edge-proxy/blob/main/docs/operate/runbooks.md" }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $svc }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ $svc }}
+      rules:
+        - alert: EdgeProxyNotReady
+          expr: edge_ready{ {{- $sel -}} } == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Edge {{ "{{" }} $labels.pod {{ "}}" }} has no policy loaded"
+            runbook_url: {{ $runbooks }}#edge-not-ready
+        - alert: EdgeProxySnapshotVersionSkew
+          expr: max(edge_snapshot_version{ {{- $sel -}} }) != min(edge_snapshot_version{ {{- $sel -}} })
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Edges run different policy versions; some cannot reach admin
+            runbook_url: {{ $runbooks }}#admin-or-postgres-down
+        - alert: EdgeProxySnapshotPollErrors
+          expr: rate(edge_snapshot_poll_errors_total{ {{- $sel -}} }[5m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Edge {{ "{{" }} $labels.pod {{ "}}" }} cannot poll admin; it keeps its current policy"
+            runbook_url: {{ $runbooks }}#admin-or-postgres-down
+        - alert: EdgeProxySnapshotRejected
+          expr: increase(edge_snapshot_rejected_total{ {{- $sel -}} }[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: An edge refused a policy admin served; check edge logs and that versions match
+        - alert: EdgeProxyValkeyErrors
+          expr: rate(edge_valkey_errors_total{ {{- $sel -}} }[5m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: Rate limits are on their fail_mode
+            runbook_url: {{ $runbooks }}#valkey-down
+        - alert: EdgeProxyTokensPassUnchecked
+          expr: increase(edge_auth_total{ {{- $sel -}} ,result="pass_no_keys"}[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: Tokens pass unchecked because signing keys were never fetched
+            runbook_url: {{ $runbooks }}#identity-provider-down
+        - alert: EdgeProxyRunningFromBootstrap
+          expr: edge_bootstrap_age_seconds{ {{- $sel -}} } > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Edge {{ "{{" }} $labels.pod {{ "}}" }} serves a bootstrap file; restore admin"
+        - alert: EdgeProxyOverloaded
+          expr: rate(edge_rejected_total{ {{- $sel -}} ,reason=~"overloaded|streams_overloaded"}[5m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: Capacity limits hit; scale edges or raise MAX_*
+        - alert: EdgeProxyPanics
+          expr: increase(edge_background_panics_total{ {{- $sel -}} }[10m]) > 0 or increase(edge_rejected_total{ {{- $sel -}} ,reason="panic"}[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: The edge recovered from a panic; collect logs and report it
+{{- end }}

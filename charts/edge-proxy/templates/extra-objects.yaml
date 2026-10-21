@@ -1,0 +1,10 @@
+{{- /*
+Manifests passed through tpl, for objects a given cluster needs next to the
+chart, such as a ListenerSet or a Certificate.
+Each entry is a map and can reference .Values and the release.
+A literal {{ must be escaped, e.g. {{ "{{" }}.
+*/ -}}
+{{- range .Values.extraObjects }}
+---
+{{ tpl (toYaml .) $ }}
+{{- end }}

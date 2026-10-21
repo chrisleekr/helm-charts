@@ -1,0 +1,36 @@
+{{ .Chart.Name }} installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+Edge:  {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}:8080 (traffic), :9090 (/livez, /readyz, /metrics; never expose publicly)
+Admin: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}:8081 (internal only, behind HTTPS)
+{{- $admin := include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+{{- if .Values.bootstrap.generateSecrets }}
+
+Sign in to admin as {{ .Values.bootstrap.adminUsername }}. The password:
+  kubectl --namespace {{ .Release.Namespace }} get secret {{ include "edge-proxy.generatedAdminSecret" . }} -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d; echo
+{{- if not .Values.bootstrap.publishStarterPolicy }}
+
+Edges stay unready until a first policy is published in admin.
+{{- end }}
+{{- else }}
+
+First install: edge pods wait in ContainerCreating until Secret {{ .Values.edge.existingSecret }} holds EDGE_SERVICE_TOKEN, which is created in admin.
+
+  1. Create the first admin user; the password is the first line of stdin:
+       kubectl --namespace {{ .Release.Namespace }} exec -i deploy/{{ $admin }} -c admin -- /admin create-user <username> admin
+  2. Sign in, create an edge token, and publish a first policy.
+  3. Put the token in Secret {{ .Values.edge.existingSecret }} under EDGE_SERVICE_TOKEN. Edges become ready once they load the policy.
+{{- end }}
+{{- if not .Values.route.admin.enabled }}
+
+Reach admin:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ $admin }} 8081
+Then open http://localhost:8081. The session cookie is Secure, so browsers accept it over plain HTTP on localhost only.
+{{- end }}
+{{- if and .Values.postgres.cnpg.enabled (not .Values.postgres.cnpg.plugins) }}
+
+Warning: the bundled Postgres has no WAL archive or backups (postgres.cnpg.plugins is empty). It holds policy history and the audit chain.
+{{- end }}
+{{- if not (hasKey .Values.edge.env "BOOTSTRAP_PATH") }}
+
+Note: without BOOTSTRAP_PATH, an edge pod created while admin is down has no policy and stays unready until admin returns.
+{{- end }}

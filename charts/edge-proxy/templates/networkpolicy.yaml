@@ -1,0 +1,74 @@
+{{- /*
+Ingress only. Egress stays open: the edge reaches its upstream wherever it runs.
+A pod always accepts connections from its own node, so kubelet probes and
+kubectl port-forward keep working.
+*/ -}}
+{{- $np := .Values.networkPolicy -}}
+{{- if $np.enabled }}
+{{- if not $np.edgeFrom }}
+{{- fail "networkPolicy.edgeFrom is empty, which would admit no traffic to the edge. List the peers of your gateway or load balancer." }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: edge
+  policyTypes:
+    - Ingress
+  ingress:
+    # The edge trusts client-IP headers from any peer in config.trustedProxies,
+    # so only the gateway may reach it; otherwise any pod in that range could
+    # set its own client IP.
+    - from:
+        {{- toYaml $np.edgeFrom | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: http
+    {{- with $np.metricsFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: internal
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: admin
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "edge-proxy.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: edge
+        {{- if .Values.logShipper.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "edge-proxy.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: log-shipper
+        {{- end }}
+        {{- with $np.adminFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: http
+{{- end }}
