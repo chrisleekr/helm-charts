@@ -1,16 +1,14 @@
 apiVersion: v2
 name: edge-proxy
 description: >-
-  A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between
-  a CDN and the load balancer or gateway that routes your services, and its
-  admin service
+  A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between a CDN and the load balancer or gateway that routes your services, and its admin service
 type: application
-version: 0.5.1
+version: 0.5.2
 # matchLabelKeys in the edge topology spread is on by default from 1.27.
 kubeVersion: ">=1.27.0-0"
 # 0.0.0 is the unpublished placeholder. Until a release exists, set edge.image.tag
 # and admin.image.tag; release.yml withholds the chart while the placeholder stands.
-appVersion: "0.0.0"
+appVersion: "1.0.0"
 home: https://github.com/chrisleekr/edge-proxy
 sources:
   - https://github.com/chrisleekr/edge-proxy
@@ -30,8 +28,8 @@ keywords:
   - waf
   - kubernetes
 annotations:
-  # The images are listed for scanning once a release exists; 0.0.0 has none.
-  artifacthub.io/prerelease: "true"
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to edge-proxy v1.0.0: single UPSTREAM_URL edge, observed routes, and admin bootstrap (backend) (#2); **ui:** redesign admin UI with dashboard, routes view and docs screenshot gate (#3). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.0.0"
     - kind: added
       description: "Initial release."
