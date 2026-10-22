@@ -89,9 +89,12 @@ jobs:
 
           # Idempotency: skip only when an open PR already exists for this
           # version. A branch left by a run whose PR creation failed is
-          # replaced (the push below forces), so a re-run can recover.
+          # replaced (the push below forces), so a re-run can recover. --head
+          # matches the branch name in any fork, so count same-repo PRs only, or
+          # a fork PR with this branch name would suppress the sync.
           open_prs=$(gh pr list --repo chrisleekr/helm-charts \
-            --head "chore/edge-proxy-$new" --state open --json number --jq length)
+            --head "chore/edge-proxy-$new" --state open --json isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository | not)] | length')
           if [ "$open_prs" != "0" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "an open PR for chore/edge-proxy-$new already exists; skipping"
