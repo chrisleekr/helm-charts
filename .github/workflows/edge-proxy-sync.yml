@@ -44,9 +44,10 @@ jobs:
     if: github.actor == 'chrisleekr'
     # Least privilege: every write in this job goes through RELEASE_TOKEN (the
     # explicit-token push and gh pr create), so GITHUB_TOKEN needs no write
-    # scopes.
+    # scopes. pull-requests:read lets the plan step see an open sync PR.
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - name: Checkout helm-charts
         # RELEASE_TOKEN (PAT) so the PR this job opens triggers lint.yml; a PR
@@ -86,12 +87,24 @@ jobs:
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-          # Idempotency: if a sync branch for this version already exists on the
-          # remote, a PR is already open. Skip so a re-run does not churn.
-          if git ls-remote --exit-code --heads origin "chore/edge-proxy-$new" >/dev/null 2>&1; then
+          # Idempotency: skip only when an open PR already exists for this
+          # version. A branch left by a run whose PR creation failed is
+          # replaced (the push below forces), so a re-run can recover.
+          open_prs=$(gh pr list --repo chrisleekr/helm-charts \
+            --head "chore/edge-proxy-$new" --state open --json number --jq length)
+          if [ "$open_prs" != "0" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "branch chore/edge-proxy-$new already exists; skipping"
+            echo "an open PR for chore/edge-proxy-$new already exists; skipping"
             exit 0
+          fi
+
+          # A major bump (including the first release from the 0.0.0
+          # placeholder) is where a version-only sync is most likely incomplete.
+          # Still open the PR, but flag it so nobody merges it as routine.
+          if [ "${new%%.*}" != "${old%%.*}" ]; then
+            echo "major=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "major=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Bump chart + changelog (deterministic)
@@ -100,6 +113,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }} # reading a public release needs no PAT
           NEW: ${{ steps.plan.outputs.new }}
+          OLD: ${{ steps.plan.outputs.old }}
         run: |
           set -euo pipefail
           chart=charts/edge-proxy/Chart.yaml
@@ -113,6 +127,11 @@ jobs:
           echo "newchart=$NEWCHART" >> "$GITHUB_OUTPUT"
           NEW="$NEW" NEWCHART="$NEWCHART" yq -i \
             '.appVersion = strenv(NEW) | .version = strenv(NEWCHART)' "$chart"
+          # The first real release ends the placeholder. Without this, merging
+          # the bump publishes the chart to Artifact Hub still marked prerelease.
+          if [ "$OLD" = "0.0.0" ]; then
+            yq -i 'del(.annotations."artifacthub.io/prerelease")' "$chart"
+          fi
 
           # Deterministic Artifact Hub changelog from the upstream release-please
           # notes. Scratch files go in $RUNNER_TEMP, never the work tree.
@@ -179,11 +198,14 @@ jobs:
           NEWCHART: ${{ steps.bump.outputs.newchart }}
           OLDCHART: ${{ steps.bump.outputs.oldchart }}
           SEC: ${{ steps.bump.outputs.sec }}
+          MAJOR: ${{ steps.plan.outputs.major }}
         run: |
           set -euo pipefail
           # Credentials are not persisted (see checkout); supply the PAT
-          # explicitly for this one push. Avoid printing the token.
-          git push "https://x-access-token:${RELEASE_TOKEN}@github.com/chrisleekr/helm-charts.git" \
+          # explicitly for this one push. Avoid printing the token. --force
+          # replaces a bot branch left by a run whose PR creation failed; the
+          # plan step already skipped if an open PR uses it.
+          git push --force "https://x-access-token:${RELEASE_TOKEN}@github.com/chrisleekr/helm-charts.git" \
             "HEAD:refs/heads/chore/edge-proxy-$NEW"
 
           # printf owns the templated parts; the release notes are inserted with
@@ -196,6 +218,18 @@ jobs:
             printf '**Image tag (appVersion):** `%s`\n\n' "$NEW"
             if [ "$SEC" = "true" ]; then
               printf '> **Contains security updates.** `artifacthub.io/containsSecurityUpdates` is set on this chart version.\n\n'
+            fi
+            if [ "$MAJOR" = "true" ]; then
+              printf '> [!WARNING]\n'
+              printf '> **Major upstream bump (v%s to v%s), do not merge as routine.**\n' "$OLD" "$NEW"
+              printf '> This sync only bumps versions. A major release usually changes the env surface,\n'
+              printf '> the topology, or both, and needs values.yaml + template work on top of this branch.\n'
+              if [ "$OLD" = "0.0.0" ]; then
+                printf '>\n> **First release from the 0.0.0 placeholder.** `artifacthub.io/prerelease` is already removed. Before merging, also:\n'
+                printf '> - rewrite the 0.0.0 placeholder comments in `charts/edge-proxy/Chart.yaml` (above `appVersion` and the annotations)\n'
+                printf '> - update the image-tag note in `charts/edge-proxy/README.md`\n'
+              fi
+              printf '\n'
             fi
             printf 'This is a **version-only sync**: `appVersion`, chart `version` and the Artifact Hub changelog. No values or template changes. edge-proxy publishes no env contract, so env drift is not detected automatically.\n\n'
             printf '### Upstream release notes (edge-proxy v%s)\n\n' "$NEW"
