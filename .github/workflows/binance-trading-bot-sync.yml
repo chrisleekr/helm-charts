@@ -50,6 +50,8 @@ jobs:
     # scopes. No id-token:write, because no LLM action runs here.
     permissions:
       contents: read
+      # The idempotency check lists open PRs with GITHUB_TOKEN.
+      pull-requests: read
     steps:
       - name: Checkout helm-charts
         # RELEASE_TOKEN (PAT) so the PR this job opens triggers lint.yml; a PR
@@ -92,12 +94,19 @@ jobs:
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-          # Idempotency: if a sync branch for this version already exists on the
-          # remote, a PR is already open. Skip so a re-run does not churn.
-          if git ls-remote --exit-code --heads origin "chore/binance-trading-bot-$new" >/dev/null 2>&1; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "branch chore/binance-trading-bot-$new already exists; skipping"
-            exit 0
+          # Idempotency: skip only when the sync PR is already open. A branch with
+          # no open PR means an earlier run pushed and then failed to open one;
+          # skipping would leave it stuck forever, so fail loudly instead.
+          branch="chore/binance-trading-bot-$new"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            open_prs=$(gh pr list --repo chrisleekr/helm-charts --head "$branch" --state open --json number --jq length)
+            if [ "$open_prs" -gt 0 ]; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "sync pull request for $branch already open; skipping"
+              exit 0
+            fi
+            echo "::error::branch $branch exists without an open pull request; recover or remove it before retrying"
+            exit 1
           fi
 
           # A major bump is the one case where a version-only sync is very

@@ -49,8 +49,18 @@ refs=$(yq e -N 'select(.kind == "Deployment") | .spec.template.spec.containers[0
 
 # 2. Without an explicit tag the 0.0.0 placeholder would deploy an image that
 #    does not exist. The migrate init container and admin share admin.image.
-expect_fail "edge.image.tag is required" --set edge.image.tag=
-expect_fail "admin.image.tag is required" --set admin.image.tag=
+#    Once a release replaces the placeholder, an empty tag follows appVersion.
+appver=$(yq e '.appVersion' "$chart/Chart.yaml")
+if [ "$appver" = "0.0.0" ]; then
+  expect_fail "edge.image.tag is required" --set edge.image.tag=
+  expect_fail "admin.image.tag is required" --set admin.image.tag=
+else
+  images=$(helm template "$chart" -f "$values" --set edge.image.tag= --set admin.image.tag= \
+    | yq e -N 'select(.kind == "Deployment") | .spec.template.spec | ((.initContainers // []).[].image, .containers[].image)' - | sort -u)
+  for want in "chrisleekr/edge-proxy:$appver" "chrisleekr/edge-proxy-admin:$appver"; do
+    grep -qxF "$want" <<<"$images" || fail charts/edge-proxy/templates/_helpers.tpl "an empty image tag must render $want, got: $images"
+  done
+fi
 
 # 3. Secrets and required config fail the render instead of producing pods that
 #    wait or crash.
