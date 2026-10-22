@@ -229,8 +229,9 @@ jobs:
               printf '> the topology, or both, and needs values.yaml + template work on top of this branch.\n'
               if [ "$OLD" = "0.0.0" ]; then
                 printf '>\n> **First release from the 0.0.0 placeholder.** `artifacthub.io/prerelease` is already removed. Before merging, also:\n'
-                printf '> - rewrite the 0.0.0 placeholder comments in `charts/edge-proxy/Chart.yaml` (above `appVersion` and the annotations)\n'
+                printf '> - rewrite the 0.0.0 placeholder comment above `appVersion` in `charts/edge-proxy/Chart.yaml`\n'
                 printf '> - update the image-tag note in `charts/edge-proxy/README.md`\n'
+                printf '> - decide on `artifacthub.io/images` for `chrisleekr/edge-proxy` and `chrisleekr/edge-proxy-admin`: removing `prerelease` also removed the comment that promised it, and this workflow does not bump those tags, so pinned tags would go stale\n'
               fi
               printf '\n'
             fi
