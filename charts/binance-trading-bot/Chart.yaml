@@ -17,14 +17,14 @@ keywords:
 #
 # 1.0.0 is a full rewrite of the chart for upstream v1.0.0, which replaced the
 # application the 0.x chart deployed. There is no in-place upgrade path from 0.x.
-version: 2.2.1
+version: 2.2.2
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 #
 # Upstream tags with a leading "v", so the tag string is "v1.0.0", not "1.0.0".
-appVersion: "v1.7.0"
+appVersion: "v1.8.0"
 kubeVersion: ">= 1.31.0"
 sources:
   - https://github.com/chrisleekr/binance-trading-bot
@@ -36,6 +36,8 @@ annotations:
   # binance-trading-bot-sync.yml prepends an entry here on every release sync,
   # so this list must exist and parse as a YAML list before the first sync runs.
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to binance-trading-bot v1.8.0: **momentum:** add impulse entry, below-trend breakout layer and inverted trend filter (#811); **momentum:** add relative-strength entry gate and bump Bun to 1.4.4 (#814). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.8.0"
     - kind: changed
       description: "Sync to binance-trading-bot v1.7.0: **backtest:** replay within-candle exits minute by minute and fill stops at the trigger (#800); **momentum:** adopt coins already held and add a breakout entry trigger (#801); **api:** profile-stop snapshot, cost-basis guidance, stateless MCP, local-midnight windows (#802); **discovery:** hold the symbol cap, keep tradable coins and cushion entry cash (#804); window the live verdict at the baseline pin and make the dashboard readable (#803). Release notes: https://github.com/chrisleekr/binance-trading-bot/releases/tag/v1.7.0"
     - kind: changed
