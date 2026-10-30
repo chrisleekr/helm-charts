@@ -347,7 +347,7 @@ otelCollector:
   enabled: false
   image:
     repository: otel/opentelemetry-collector-contrib
-    tag: 0.162.0
+    tag: 0.164.0
     pullPolicy: IfNotPresent
   replicaCount: 1
   tailSampling:
