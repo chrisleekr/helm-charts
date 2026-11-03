@@ -41,6 +41,7 @@
       "properties": {
         "existingSecret": { "type": "string" },
         "trustedProxies": { "type": "string" },
+        "alertmanagerURL": { "type": "string", "pattern": "^(|https?://[^/@?]+(/[^?]*)?)$" },
         "env": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
         "extraVolumes": { "type": "array" },
         "extraVolumeMounts": { "type": "array" }
@@ -76,6 +77,28 @@
         "dataDir": { "type": "string", "pattern": "^/" },
         "nodeSelector": { "type": "object" },
         "tolerations": { "type": "array" }
+      }
+    },
+    "autopilot": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "tokenSecret": { "type": "string" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" }
+          }
+        },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "caseTimeout": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+        "maxTurns": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
       }
     },
     "migrations": {

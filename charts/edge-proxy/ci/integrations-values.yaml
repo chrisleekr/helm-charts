@@ -1,5 +1,5 @@
 # Render-only chart-testing values with every optional integration on, so the
-# NetworkPolicy, DestinationRule, admin HTTPRoute and
+# NetworkPolicy, DestinationRule, admin HTTPRoute, autopilot runner and
 # AuthorizationPolicy are schema-checked.
 config:
   clientIPSource: cloudflare
@@ -68,3 +68,7 @@ route:
       gateway:
         name: public
         namespace: gateway-system
+
+autopilot:
+  enabled: true
+  existingSecret: edge-proxy-ci-autopilot

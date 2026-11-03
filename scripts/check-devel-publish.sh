@@ -36,15 +36,15 @@ for appversion in 0.0.0 1.2.3; do
   bash publish.sh
   # The packaged appVersion is the one on disk. Substituting a different value
   # would flip the chart's bootstrap predicate off and break its render.
-  [ "$(helm show chart sre-platform-1.0.0-dev-01234567.tgz | yq '.appVersion')" = "$appversion" ]
+  [ "$(helm show chart sre-platform-0.0.0-dev-01234567.tgz | yq '.appVersion')" = "$appversion" ]
   [ "$(yq '.appVersion' charts/sre-platform/Chart.yaml)" = "$appversion" ]
   # other-chart changed in the same commit and is still withheld at 0.0.0.
   [ ! -e other-chart-2.0.0-dev-01234567.tgz ]
 done
 # edge-proxy changed only in the first commit and is published at 0.0.0.
-[ -e edge-proxy-3.0.0-dev-01234567.tgz ]
+[ -e edge-proxy-0.0.0-dev-01234567.tgz ]
 [ "$(wc -l < uploads | tr -d ' ')" = 3 ]
-echo 'PASS: placeholder published, real release version, on-disk metadata untouched, other placeholder charts withheld'
+echo 'PASS: placeholder published, named by commit, on-disk metadata untouched, other placeholder charts withheld'
 
 export CI_COMMIT_BEFORE_SHA=$(git rev-parse HEAD)
 mkdir -p .gitlab/ci
@@ -58,12 +58,12 @@ echo 'PASS: CI-only changes do not republish SRE Platform'
 # The fixture above is metadata with no templates, so it cannot show whether the
 # artifact the job uploads actually renders. Package the real chart the way the
 # job does and template it under default CI values.
-helm package "$root/charts/sre-platform" --version 1.0.0-dev-01234567 --destination "$tmp/real" >/dev/null
-helm template sre "$tmp/real/sre-platform-1.0.0-dev-01234567.tgz" \
+helm package "$root/charts/sre-platform" --version 0.0.0-dev-01234567 --destination "$tmp/real" >/dev/null
+helm template sre "$tmp/real/sre-platform-0.0.0-dev-01234567.tgz" \
   -f "$root/charts/sre-platform/ci/ct-values.yaml" >/dev/null
 echo 'PASS: the packaged SRE Platform chart renders under default values'
 
-helm package -u "$root/charts/edge-proxy" --version 1.0.0-dev-01234567 --destination "$tmp/real" >/dev/null
-helm template edge "$tmp/real/edge-proxy-1.0.0-dev-01234567.tgz" \
+helm package -u "$root/charts/edge-proxy" --version 0.0.0-dev-01234567 --destination "$tmp/real" >/dev/null
+helm template edge "$tmp/real/edge-proxy-0.0.0-dev-01234567.tgz" \
   -f "$root/charts/edge-proxy/ci/ct-values.yaml" >/dev/null
 echo 'PASS: the packaged edge-proxy chart renders with explicit image tags'

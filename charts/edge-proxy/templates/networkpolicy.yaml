@@ -9,7 +9,7 @@ kubectl port-forward keep working.
 {{- fail "networkPolicy.edgeFrom is empty, which would admit no traffic to the edge. List the peers of your gateway or load balancer." }}
 {{- end }}
 {{- if and .Values.metrics.serviceMonitor.enabled (not $np.metricsFrom) }}
-{{- fail "networkPolicy.metricsFrom is empty while metrics.serviceMonitor.enabled, so Prometheus could not scrape the edge and its alerts would never fire. List the Prometheus peers." }}
+{{- fail "networkPolicy.metricsFrom is empty while metrics.serviceMonitor.enabled, so Prometheus could not scrape the edge or admin and their alerts would never fire. List the Prometheus peers." }}
 {{- end }}
 {{- if and .Values.route.admin.enabled (not $np.adminFrom) }}
 {{- fail "networkPolicy.adminFrom is empty while route.admin.enabled, so the gateway could not reach admin. List the gateway's peers." }}
@@ -71,10 +71,25 @@ spec:
               {{- include "edge-proxy.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: log-shipper
         {{- end }}
+        {{- if .Values.autopilot.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "edge-proxy.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: autopilot
+        {{- end }}
         {{- with $np.adminFrom }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       ports:
         - protocol: TCP
           port: http
+    # Admin's /metrics has no authentication, so it gets its own rule: the
+    # peers above never reach it.
+    {{- with $np.metricsFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: metrics
+    {{- end }}
 {{- end }}

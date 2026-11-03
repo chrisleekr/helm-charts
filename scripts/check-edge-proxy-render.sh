@@ -5,8 +5,9 @@
 # Covers the conditional branches a single `helm template` does not: the
 # placeholder-tag and missing-Secret guards, the generated and supplied
 # Secrets, migrations off, the PodDisruptionBudget at one replica, extra env
-# rendering, and the wiring of the bundled CloudNativePG Postgres and Valkey. Every --set flag is a static
-# literal, so the script has no injection surface when driven from CI.
+# rendering, the wiring of the bundled CloudNativePG Postgres and Valkey, and
+# the autopilot runner. Every --set flag is a static literal, so the script has
+# no injection surface when driven from CI.
 #
 # Dependencies: helm and yq, and network access to fetch the Valkey subchart.
 #
@@ -186,6 +187,21 @@ optional=$(helm template "$chart" -f "$integrations" --set config.ingressSecretH
 sel=$(yq e -N 'select(.kind == "PrometheusRule") | .spec.groups[0].rules[0].expr' "$rendered")
 grep -qF "service=\"$edge_svc\"" <<<"$sel" || fail charts/edge-proxy/templates/prometheusrule.yaml "alerts must select service=\"$edge_svc\", got: $sel"
 expect_fail "metrics.prometheusRule.enabled needs metrics.serviceMonitor.enabled" --set metrics.prometheusRule.enabled=true
+# Admin's /metrics has no authentication: its port admits exactly the
+# metricsFrom peers, the http rule (edge pods, adminFrom) never names it, and
+# the admin alerts select the series scraped from the admin Service.
+admin_svc=$(yq e -N 'select(.kind == "Service" and .metadata.labels."app.kubernetes.io/component" == "admin") | .metadata.name' "$rendered")
+admin_np='select(.kind == "NetworkPolicy" and .metadata.labels."app.kubernetes.io/component" == "admin")'
+[ "$(yq e -N "$admin_np | .spec.ingress[] | select(.ports[].port == \"metrics\") | .from" "$rendered")" = "$(yq e -N '.networkPolicy.metricsFrom' "$integrations")" ] \
+  || fail charts/edge-proxy/templates/networkpolicy.yaml "admin's metrics port must admit exactly networkPolicy.metricsFrom"
+[ "$(yq e -N "$admin_np | .spec.ingress[] | select(.ports[].port == \"metrics\") | .ports | length" "$rendered")" = "1" ] \
+  || fail charts/edge-proxy/templates/networkpolicy.yaml "admin's metrics rule must open only the metrics port"
+[ "$(yq e -N "$admin_np | .spec.ingress[0].ports[].port" "$rendered")" = "http" ] \
+  || fail charts/edge-proxy/templates/networkpolicy.yaml "admin's edge and adminFrom rule must open only http"
+[ "$(yq e -N 'select(.kind == "ServiceMonitor" and .metadata.labels."app.kubernetes.io/component" == "admin") | .spec.endpoints[0].port' "$rendered")" = "metrics" ] \
+  || fail charts/edge-proxy/templates/servicemonitor.yaml "admin must be scraped on its metrics port"
+leader=$(yq e -N 'select(.kind == "PrometheusRule") | .spec.groups[0].rules[] | select(.alert == "EdgeProxyAdminNoLeader") | .expr' "$rendered")
+grep -qF "service=\"$admin_svc\"" <<<"$leader" || fail charts/edge-proxy/templates/prometheusrule.yaml "admin alerts must select service=\"$admin_svc\", got: $leader"
 
 # 13. The oauth2-proxy gate lives in the gateway's namespace, targets the
 #     Gateway, and covers each admin host with and without a port. It cannot
@@ -319,7 +335,53 @@ helm template "$chart" -f "$values" --set logShipper.enabled=false > "$rendered"
   && [ -z "$(yq e -N 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "LOGS_SECRET") | .value' "$rendered")" ] \
   || fail charts/edge-proxy/templates/log-shipper.yaml "logShipper.enabled=false must render no shipper and create no token"
 
-# 18. The shipper's transform passes Vector's own unit tests: access lines are
+# 18. Autopilot runner, off by default. When on it must hold the same token
+#     admin reads, from the Secret the hook creates, reach admin through its
+#     NetworkPolicy, and take each credential as optional from
+#     autopilot.existingSecret. A mismatch leaves the runner refused, silently.
+generated_autopilot_secret() { yq e -N 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "AUTOPILOT_SECRET") | .value' "$rendered"; }
+helm template "$chart" -f "$values" > "$rendered"
+[ -z "$(yq e -N 'select(.metadata.labels."app.kubernetes.io/component" == "autopilot")' "$rendered")" ] \
+  && ! grep -q AUTOPILOT_TOKEN_FILE "$rendered" \
+  && [ -z "$(generated_autopilot_secret)" ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "autopilot.enabled=false must render no runner, no admin AUTOPILOT_TOKEN_FILE and create no token"
+helm template "$chart" -f "$integrations" --namespace edge-ci > "$rendered"
+runner=$(yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels."app.kubernetes.io/component" == "autopilot") | .spec.template.spec' "$rendered")
+admin=$(yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels."app.kubernetes.io/component" == "admin") | .spec.template.spec' "$rendered")
+admin_svc=$(yq e -N 'select(.kind == "Service" and .metadata.labels."app.kubernetes.io/component" == "admin") | .metadata.name' "$rendered")
+runner_env() { yq e ".containers[0].env[] | select(.name == \"$1\") | .value" <<<"$runner"; }
+autopilot_secret=$(generated_autopilot_secret)
+[ -n "$autopilot_secret" ] && [ "$(yq e '.volumes[] | select(.name == "token") | .secret.secretName' <<<"$runner")" = "$autopilot_secret" ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "the runner's token must come from the generated '$autopilot_secret'"
+[ "$(yq e '.volumes[] | select(.name == "autopilot-token") | .secret.secretName + ":" + .secret.items[0].key' <<<"$admin")" = "$autopilot_secret:AUTOPILOT_TOKEN" ] \
+  || fail charts/edge-proxy/templates/admin-deployment.yaml "admin must read the runner's token from $autopilot_secret:AUTOPILOT_TOKEN"
+admin_mount=$(yq e '.containers[0].volumeMounts[] | select(.name == "autopilot-token") | .mountPath' <<<"$admin")
+[ "$(yq e '.containers[0].env[] | select(.name == "AUTOPILOT_TOKEN_FILE") | .value' <<<"$admin")" = "$admin_mount/token" ] \
+  || fail charts/edge-proxy/templates/admin-deployment.yaml "admin's AUTOPILOT_TOKEN_FILE must point into $admin_mount"
+runner_mount=$(yq e '.containers[0].volumeMounts[] | select(.name == "token") | .mountPath' <<<"$runner")
+[ "$(runner_env AUTOPILOT_TOKEN_FILE)" = "$runner_mount/token" ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "the runner's AUTOPILOT_TOKEN_FILE must point into $runner_mount"
+[ "$(runner_env AUTOPILOT_ADMIN_URL)" = "http://$admin_svc.edge-ci.svc:8081" ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "the runner must call $admin_svc on port 8081"
+[ "$(yq e -o=json -I=0 '[.containers[0].env[] | select(.valueFrom.secretKeyRef) | .name + ":" + .valueFrom.secretKeyRef.name + ":" + .valueFrom.secretKeyRef.key + ":" + (.valueFrom.secretKeyRef.optional | tostring)]' <<<"$runner")" \
+  = '["CLAUDE_CODE_OAUTH_TOKEN:edge-proxy-ci-autopilot:CLAUDE_CODE_OAUTH_TOKEN:true","ANTHROPIC_API_KEY:edge-proxy-ci-autopilot:ANTHROPIC_API_KEY:true","OPENAI_API_KEY:edge-proxy-ci-autopilot:OPENAI_API_KEY:true"]' ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "the runner must take each credential, optional, from autopilot.existingSecret"
+# The root filesystem is read-only, and each run works under /tmp.
+[ "$(yq e '.containers[0].securityContext.readOnlyRootFilesystem' <<<"$runner")/$(yq e '.containers[0].volumeMounts[] | select(.name == "tmp") | .mountPath' <<<"$runner")" = "true//tmp" ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "the runner must have a read-only root and a writable /tmp"
+[ "$(yq e -N 'select(.kind == "NetworkPolicy" and .metadata.labels."app.kubernetes.io/component" == "admin") | .spec.ingress[0].from[] | select(.podSelector.matchLabels."app.kubernetes.io/component" == "autopilot") | .podSelector.matchLabels."app.kubernetes.io/component"' "$rendered")" = "autopilot" ] \
+  || fail charts/edge-proxy/templates/networkpolicy.yaml "admin's http rule must admit the autopilot runner"
+expect_fail "autopilot.existingSecret is required when autopilot.enabled" --set autopilot.enabled=true
+expect_fail "autopilot.tokenSecret is required when bootstrap.generateSecrets=false" \
+  --set autopilot.enabled=true --set autopilot.existingSecret=creds \
+  --set bootstrap.generateSecrets=false --set edge.existingSecret=edge --set logShipper.existingSecret=logs
+# A supplied token Secret replaces the generated one for admin and the runner alike.
+helm template "$chart" -f "$values" --set autopilot.enabled=true --set autopilot.existingSecret=creds --set autopilot.tokenSecret=runner > "$rendered"
+[ "$(yq e -N '.. | select(has("secretName") and .items[0].key == "AUTOPILOT_TOKEN") | .secretName' "$rendered" | sort -u)" = "runner" ] \
+  && [ -z "$(generated_autopilot_secret)" ] \
+  || fail charts/edge-proxy/templates/autopilot-deployment.yaml "autopilot.tokenSecret must supply the token to admin and the runner, and none be generated"
+
+# 19. The shipper's transform passes Vector's own unit tests: access lines are
 #     posted as their JSON object, and every other line is dropped. The pinned
 #     binary must be the version the chart deploys.
 vector_version=0.59.0
@@ -342,4 +404,4 @@ else
   docker run --rm -v "$vdir:/cfg:ro" "timberio/vector:$(yq e '.logShipper.image.tag' "$chart/values.yaml")" test /cfg/vector.yaml /cfg/tests.yaml
 fi >"$vdir/out" 2>&1 || fail charts/edge-proxy/ci/vector-tests.yaml "Vector unit tests failed: $(cat "$vdir/out")"
 
-echo "edge-proxy render matrix: 18/18 cases passed"
+echo "edge-proxy render matrix: 19/19 cases passed"
