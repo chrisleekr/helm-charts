@@ -69,6 +69,9 @@ spec:
           ports:
             - name: http
               containerPort: 8081
+            # /metrics, unauthenticated: only networkPolicy.metricsFrom reaches it.
+            - name: metrics
+              containerPort: 9091
           envFrom:
             - configMapRef:
                 name: {{ include "edge-proxy.fullname" . }}
@@ -126,6 +129,11 @@ spec:
             - name: LOG_INGEST_TOKEN_FILE
               value: /var/run/secrets/edge-proxy-logs/token
             {{- end }}
+            {{- if .Values.autopilot.enabled }}
+            # Admin accepts the autopilot runner with this token.
+            - name: AUTOPILOT_TOKEN_FILE
+              value: /var/run/secrets/edge-proxy-autopilot/token
+            {{- end }}
             {{- if .Values.bootstrap.publishStarterPolicy }}
             # Publishes the starter policy only while nothing is published.
             - name: BOOTSTRAP_PUBLISH_DEFAULT
@@ -133,6 +141,10 @@ spec:
             {{- end }}
             {{- with $admin.trustedProxies }}
             - name: ADMIN_TRUSTED_PROXIES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with $admin.alertmanagerURL }}
+            - name: ALERTMANAGER_URL
               value: {{ . | quote }}
             {{- end }}
             {{- include "edge-proxy.env" $admin.env | nindent 12 }}
@@ -161,6 +173,10 @@ spec:
           {{- if .Values.logShipper.enabled }}
           {{- $mounts = prepend $mounts (dict "name" "log-token" "mountPath" "/var/run/secrets/edge-proxy-logs" "readOnly" true) }}
           {{- $volumes = prepend $volumes (dict "name" "log-token" "secret" (dict "secretName" (include "edge-proxy.logsSecret" .) "items" (list (dict "key" "LOG_INGEST_TOKEN" "path" "token")))) }}
+          {{- end }}
+          {{- if .Values.autopilot.enabled }}
+          {{- $mounts = prepend $mounts (dict "name" "autopilot-token" "mountPath" "/var/run/secrets/edge-proxy-autopilot" "readOnly" true) }}
+          {{- $volumes = prepend $volumes (dict "name" "autopilot-token" "secret" (dict "secretName" (include "edge-proxy.autopilotSecret" .) "items" (list (dict "key" "AUTOPILOT_TOKEN" "path" "token")))) }}
           {{- end }}
           {{- with $mounts }}
           volumeMounts:

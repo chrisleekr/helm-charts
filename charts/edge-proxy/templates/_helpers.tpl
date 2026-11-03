@@ -161,6 +161,20 @@ generated one for its component.
 {{- end -}}
 {{- end }}
 
+{{- define "edge-proxy.generatedAutopilotSecret" -}}
+{{- include "edge-proxy.componentName" (dict "ctx" . "suffix" "autopilot-generated") -}}
+{{- end }}
+
+{{- define "edge-proxy.autopilotSecret" -}}
+{{- if .Values.autopilot.tokenSecret -}}
+{{- .Values.autopilot.tokenSecret -}}
+{{- else if .Values.bootstrap.generateSecrets -}}
+{{- include "edge-proxy.generatedAutopilotSecret" . -}}
+{{- else -}}
+{{- fail "autopilot.tokenSecret is required when bootstrap.generateSecrets=false; or set autopilot.enabled=false." -}}
+{{- end -}}
+{{- end }}
+
 {{- define "edge-proxy.pgRuntimeSecret" -}}
 {{- if .Values.postgres.cnpg.runtimeRoleSecret -}}
 {{- .Values.postgres.cnpg.runtimeRoleSecret -}}

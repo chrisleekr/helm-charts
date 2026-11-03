@@ -46,11 +46,17 @@ sinks:
     batch:
       max_bytes: 1000000
       timeout_secs: 5
+    # The default adaptive concurrency allows up to 200 batches in flight,
+    # which OOM-killed the shipper at 10k lines/s while admin was slow. Two
+    # in flight still move tens of MB/s.
+    request:
+      concurrency: 2
     # While admin is away, lines past the buffer are dropped rather than
-    # held: route stats never grow the shipper's memory.
+    # held: route stats never grow the shipper's memory. 1000 events keep
+    # the shipper near 150 MiB at 10k lines/s; 10000 reached about 220.
     buffer:
       type: memory
-      max_events: 10000
+      max_events: 1000
       when_full: drop_newest
 {{- end }}
 {{- if .Values.logShipper.enabled }}

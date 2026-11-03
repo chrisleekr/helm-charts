@@ -2,6 +2,9 @@
 
 Edge:  {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}:8080 (traffic), :9090 (/livez, /readyz, /metrics; never expose publicly)
 Admin: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}:8081 (internal only, behind HTTPS)
+{{- if .Values.autopilot.enabled }}
+Autopilot runner: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "autopilot") }}, with credentials from Secret {{ .Values.autopilot.existingSecret }}. Autopilot in admin shows it connected.
+{{- end }}
 {{- $admin := include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
 {{- if .Values.bootstrap.generateSecrets }}
 

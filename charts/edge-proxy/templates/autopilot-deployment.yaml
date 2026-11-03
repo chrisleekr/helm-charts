@@ -1,0 +1,96 @@
+{{- if .Values.autopilot.enabled }}
+{{- $ap := .Values.autopilot }}
+{{- $secret := required "autopilot.existingSecret is required when autopilot.enabled: a Secret holding CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY or OPENAI_API_KEY." $ap.existingSecret }}
+{{- $admin := include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edge-proxy.componentName" (dict "ctx" . "suffix" "autopilot") }}
+  labels:
+    {{- include "edge-proxy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: autopilot
+spec:
+  # One runner is enough; AUTOPILOT_CONCURRENCY runs more cases at once.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "edge-proxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: autopilot
+  template:
+    metadata:
+      {{- with $ap.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "edge-proxy.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: autopilot
+    spec:
+      serviceAccountName: {{ include "edge-proxy.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      # On SIGTERM the runner reports its runs as shutdown and exits within 10s.
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        # No port and no health endpoint, so no Service and no probes.
+        - name: autopilot
+          image: {{ include "edge-proxy.image" (dict "ctx" . "image" $ap.image "key" "autopilot.image.tag") | quote }}
+          imagePullPolicy: {{ $ap.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: AUTOPILOT_ADMIN_URL
+              value: {{ printf "http://%s.%s.svc:8081" $admin .Release.Namespace | quote }}
+            - name: AUTOPILOT_TOKEN_FILE
+              value: /var/run/secrets/edge-proxy-autopilot/token
+            - name: AUTOPILOT_CONCURRENCY
+              value: {{ $ap.concurrency | quote }}
+            - name: AUTOPILOT_CASE_TIMEOUT
+              value: {{ $ap.caseTimeout | quote }}
+            - name: AUTOPILOT_MAX_TURNS
+              value: {{ $ap.maxTurns | quote }}
+            {{- /* Any one credential is enough; the runner fails at start with none. */}}
+            {{- range $key := list "CLAUDE_CODE_OAUTH_TOKEN" "ANTHROPIC_API_KEY" "OPENAI_API_KEY" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+          resources:
+            {{- toYaml $ap.resources | nindent 12 }}
+          volumeMounts:
+            - name: token
+              mountPath: /var/run/secrets/edge-proxy-autopilot
+              readOnly: true
+            # Each run's working, home and config directory.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: token
+          secret:
+            secretName: {{ include "edge-proxy.autopilotSecret" . }}
+            items:
+              - key: AUTOPILOT_TOKEN
+                path: token
+        - name: tmp
+          emptyDir: {}
+      {{- with $ap.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ap.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ap.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

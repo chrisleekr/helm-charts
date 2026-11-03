@@ -35,8 +35,8 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# serviceAccount is shared by edge and admin. Neither calls the Kubernetes API,
-# so no token is mounted.
+# serviceAccount is shared by edge, admin and autopilot. None calls the
+# Kubernetes API, so no token is mounted.
 serviceAccount:
   create: true
   # name defaults to the release fullname when create is true, and to
@@ -84,8 +84,9 @@ edge:
   # BOOTSTRAP_PATH. Maps merge, so setting one key keeps the defaults.
   env:
     # GOMEMLIMIT is the Go runtime's soft memory limit, about 90% of
-    # resources.limits.memory. Change the two together.
-    GOMEMLIMIT: 230MiB
+    # resources.limits.memory. Change the two together. The edge also sizes
+    # its default MAX_INFLIGHT from it (GOMEMLIMIT / 256 KiB, at most 10000).
+    GOMEMLIMIT: 460MiB
   # extraVolumes and extraVolumeMounts add volumes, for example a bootstrap
   # policy file for BOOTSTRAP_PATH. The snapshot cache is an emptyDir, so a new
   # pod starts with no policy while admin is down; a bootstrap file refreshed
@@ -98,14 +99,17 @@ edge:
   # SHUTDOWN_TIMEOUT (30s). Raise it with them.
   terminationGracePeriodSeconds: 45
   # resources sets no CPU limit, so the Go runtime is never throttled. The
-  # memory limit covers the default MAX_STREAMS (1000) at about 72 KiB each
-  # plus the baseline; raise it, and env.GOMEMLIMIT, with MAX_STREAMS.
+  # memory limit covers the default MAX_STREAMS (1000) at about 72 KiB each,
+  # the in-flight requests the default MAX_INFLIGHT allows at about 100 KiB
+  # each, and the baseline. With 256Mi an overload behind a slow upstream got
+  # the edge OOM-killed instead of shedding with 503. Raise it, and
+  # env.GOMEMLIMIT, with MAX_STREAMS or MAX_INFLIGHT.
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
     limits:
-      memory: 256Mi
+      memory: 512Mi
   # topologySpreadConstraints null spreads edge pods across zones and nodes,
   # preferred rather than required so a small cluster still schedules them.
   # [] disables spreading; a list replaces the default.
@@ -127,6 +131,10 @@ admin:
   # trustedProxies sets ADMIN_TRUSTED_PROXIES: the IPs or CIDRs of admin's own
   # HTTPS proxy. Without it every user shares the proxy's sign-in throttle.
   trustedProxies: ""
+  # alertmanagerURL sets ALERTMANAGER_URL: Alertmanager's base URL, such as
+  # http://alertmanager-operated.monitoring.svc:9093. Admin posts anomaly
+  # notifications to its /api/v2/alerts. Empty shows them in admin only.
+  alertmanagerURL: ""
   env:
     # GOMAXPROCS bounds concurrent sign-in hashes, which run before
     # authentication and hold 19 MiB each. Without a CPU limit Go uses every
@@ -160,6 +168,8 @@ bootstrap:
   #                               runtimeRoleSecret
   #   <fullname>-logs-generated   LOG_INGEST_TOKEN, with logShipper.enabled and
   #                               no logShipper.existingSecret
+  #   <fullname>-autopilot-generated  AUTOPILOT_TOKEN, with autopilot.enabled
+  #                                   and no autopilot.tokenSecret
   # Helm does not own them, so they survive uninstall. Back up the audit key:
   # without it the audit chain can no longer be verified. The Job's Role can
   # create Secrets but not read them.
@@ -217,6 +227,48 @@ logShipper:
   # where edges run.
   nodeSelector: {}
   tolerations: []
+
+# autopilot runs the runner that investigates autopilot cases with Claude or
+# OpenAI models. It long-polls admin, holds the model credentials (they never
+# reach admin), and is never on the request path. Reference:
+# https://github.com/chrisleekr/edge-proxy/blob/main/docs/deploy/autopilot.md
+autopilot:
+  enabled: false
+  image:
+    repository: chrisleekr/edge-proxy-autopilot
+    # tag defaults to Chart.appVersion, like the edge and admin images.
+    tag: ""
+    pullPolicy: IfNotPresent
+  # existingSecret is required when enabled and holds any of
+  # CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY and OPENAI_API_KEY; at least
+  # one must be set. Each is optional, so set only the providers you use.
+  existingSecret: ""
+  # tokenSecret holds AUTOPILOT_TOKEN, the token admin and the runner share:
+  # at least 32 characters, and not the edge or log shipper token (admin
+  # refuses to start if they match). Empty uses <fullname>-autopilot-generated,
+  # created by bootstrap.generateSecrets.
+  tokenSecret: ""
+  # concurrency is AUTOPILOT_CONCURRENCY, cases run at once (1 to 4). Raise
+  # resources with it.
+  concurrency: 1
+  # caseTimeout is AUTOPILOT_CASE_TIMEOUT, the longest a run may take (1s to
+  # 1h), as a number and one unit: ms, s, m or h.
+  caseTimeout: 10m
+  # maxTurns is AUTOPILOT_MAX_TURNS, model turns a run may take (1 to 100).
+  maxTurns: 30
+  # resources fit one Claude run: 1 CPU and 1 GiB. Multiply the limits by
+  # concurrency. OpenAI runs start no Claude Code process and need less.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # migrations runs `admin migrate` as an init container of admin, so it runs
 # before admin serves and after a bundled Postgres exists. A Helm hook would run
@@ -321,8 +373,10 @@ networkPolicy:
   #   podSelector:
   #     matchLabels:
   #       gateway.networking.k8s.io/gateway-name: public
-  # metricsFrom lists the peers allowed to reach the edge's internal port
-  # (/metrics), normally Prometheus. Empty admits none.
+  # metricsFrom lists the peers allowed to reach the edge's internal port and
+  # admin's metrics port (/metrics), normally Prometheus. Empty admits none.
+  # Both ports are unauthenticated, so without networkPolicy.enabled any pod that
+  # can reach the Services can read them.
   metricsFrom: []
   # adminFrom lists peers allowed to reach admin besides the edge pods, for
   # example the gateway when route.admin is enabled.
@@ -338,14 +392,15 @@ istio:
     idleTimeout: 60s
 
 metrics:
-  # serviceMonitor scrapes the edge's /metrics. Needs the Prometheus Operator.
+  # serviceMonitor scrapes the edge's and admin's /metrics. Needs the
+  # Prometheus Operator.
   serviceMonitor:
     enabled: false
     interval: 30s
     # labels are added to the ServiceMonitor, for a Prometheus serviceMonitorSelector.
     labels: {}
   # prometheusRule adds the alerts from edge-proxy's monitoring guide, scoped to
-  # this release's edges. Needs serviceMonitor.
+  # this release's edges and admin. Needs serviceMonitor.
   prometheusRule:
     enabled: false
     # labels are added to the PrometheusRule, for a Prometheus ruleSelector.

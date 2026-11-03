@@ -5,11 +5,12 @@
 {{- /*
 The alerts from edge-proxy's monitoring guide. The Prometheus Operator puts
 namespace and service labels on every series it scrapes through a
-ServiceMonitor, so $sel limits each expression to this release's edges; the
-metric names alone would also match another release.
+ServiceMonitor, so $sel and $adminSel limit each expression to this release's
+edges or admin; the metric names alone would also match another release.
 */}}
 {{- $svc := include "edge-proxy.componentName" (dict "ctx" . "suffix" "edge") }}
 {{- $sel := printf "namespace=%q,service=%q" .Release.Namespace $svc }}
+{{- $adminSel := printf "namespace=%q,service=%q" .Release.Namespace (include "edge-proxy.componentName" (dict "ctx" . "suffix" "admin")) }}
 {{- $runbooks := "https://github.com/chrisleekr/edge-proxy/blob/main/docs/operate/runbooks.md" }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -80,10 +81,48 @@ spec:
             severity: warning
           annotations:
             summary: Capacity limits hit; scale edges or raise MAX_*
+        # Admin finds anomalies in the stats edges report; while edges can't
+        # report, it can't notify.
+        - alert: EdgeProxyStatsDropped
+          expr: rate(edge_stats_dropped_total{ {{- $sel -}} }[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Edges can't report stats to admin, so anomaly notifications can't see them
+            runbook_url: {{ $runbooks }}#admin-or-postgres-down
         - alert: EdgeProxyPanics
           expr: increase(edge_background_panics_total{ {{- $sel -}} }[10m]) > 0 or increase(edge_rejected_total{ {{- $sel -}} ,reason="panic"}[10m]) > 0
           labels:
             severity: critical
           annotations:
             summary: The edge recovered from a panic; collect logs and report it
+        # No admin leader changes no traffic, but nothing runs the guard,
+        # notifications, JWKS refresh or audit checks. vector(0) also fires it
+        # when no admin replica is scraped.
+        - alert: EdgeProxyAdminNoLeader
+          expr: (max(admin_leader{ {{- $adminSel -}} }) or vector(0)) == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: No admin replica runs background jobs; check admin logs for leader loop, and Postgres
+        - alert: EdgeProxyAdminLeaderFlapping
+          expr: sum(changes(admin_leader{ {{- $adminSel -}} }[30m])) > 4
+          labels:
+            severity: warning
+          annotations:
+            summary: Admin leadership keeps moving, so background jobs keep restarting; check the leader's Postgres connection
+        - alert: EdgeProxyAdminAuditVerifyFailed
+          expr: increase(admin_audit_verify_failures_total{ {{- $adminSel -}} }[1h]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: The audit chain is broken, or the audit key is wrong; check the audit chain broken log line
+        - alert: EdgeProxyAdminJobFailures
+          expr: increase(admin_background_job_failures_total{ {{- $adminSel -}} }[30m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Admin job {{ "{{" }} $labels.exported_job {{ "}}" }} failed; check the background job failed log line"
 {{- end }}
