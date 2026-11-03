@@ -107,7 +107,7 @@ With `bootstrap.generateSecrets: false` the edge token is created in admin, so t
 | `edge.extraVolumes`, `edge.extraVolumeMounts`, `admin.extraVolumes`, `admin.extraVolumeMounts` | `[]` | For a bootstrap file or a password blocklist |
 | `edge.topologySpreadConstraints` | `null` (zone and node spread) | `[]` disables |
 | `serviceAccount.create`, `.name`, `.annotations` | `true`, release fullname, `{}` | |
-| `edge.resources` | requests `50m`/`64Mi`, limit `512Mi` | No CPU limit. Raise the memory limit, and `GOMEMLIMIT`, with `MAX_STREAMS` or `MAX_INFLIGHT`. Chart 0.7.0 raised the default `GOMEMLIMIT` to `460MiB`: a release that overrides `limits.memory` must also set `edge.env.GOMEMLIMIT` to about 90% of it, or Go stops collecting before the hard limit and `MAX_INFLIGHT` is sized for memory the pod does not have |
+| `edge.resources` | requests `50m`/`64Mi`, limit `512Mi` | No CPU limit. Raise the memory limit, and `GOMEMLIMIT`, with `MAX_STREAMS` or `MAX_INFLIGHT`. Chart 0.6.0 raised the default `GOMEMLIMIT` to `460MiB`: a release that overrides `limits.memory` must also set `edge.env.GOMEMLIMIT` to about 90% of it, or Go stops collecting before the hard limit and `MAX_INFLIGHT` is sized for memory the pod does not have |
 | `admin.trustedProxies` | `""` | `ADMIN_TRUSTED_PROXIES`, admin's own HTTPS proxy |
 | `admin.alertmanagerURL` | `""` | `ALERTMANAGER_URL`: admin sends [anomaly notifications](https://github.com/chrisleekr/edge-proxy/blob/main/docs/operate/notifications.md) to this Alertmanager. Empty shows them in admin only |
 | `admin.resources` | requests `25m`/`64Mi`, limit `128Mi` | |

@@ -3,7 +3,7 @@ name: edge-proxy
 description: >-
   A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between a CDN and the load balancer or gateway that routes your services, and its admin service
 type: application
-version: 0.7.0
+version: 0.6.0
 # matchLabelKeys in the edge topology spread is on by default from 1.27.
 kubeVersion: ">=1.27.0-0"
 appVersion: "1.1.0"
