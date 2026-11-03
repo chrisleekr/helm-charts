@@ -76,15 +76,17 @@ publish-devel:
           echo "withholding $name from devel: appVersion is the 0.0.0 placeholder"
           continue
         fi
-        version=$(yq e '.version' "charts/$name/Chart.yaml")
         # helm names the archive after Chart.yaml .name, not after the
         # directory. They match today; reading both keeps the curl --form path
         # correct if one ever diverges.
         chartname=$(yq e '.name' "charts/$name/Chart.yaml")
+        # Devel builds are named by commit alone, 0.0.0-dev-<sha>, so a chart
+        # change merged here needs no version bump and a consumer pins the
+        # hash. Stable versions are bumped and released on GitHub only.
         # One prerelease identifier, "dev-<sha>", not "dev.<sha>". A short SHA
         # can be all digits, and SemVer rejects a numeric identifier with a
         # leading zero, which helm would refuse to package.
-        devel="${version}-dev-${CI_COMMIT_SHORT_SHA}"
+        devel="0.0.0-dev-${CI_COMMIT_SHORT_SHA}"
         # -u fetches subcharts, which are not committed. A chart without
         # dependencies is unaffected.
         helm package -u "charts/$name" --version "$devel" --destination .

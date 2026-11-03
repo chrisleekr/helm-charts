@@ -34,3 +34,6 @@ spec:
     - name: http
       port: 8081
       targetPort: http
+    - name: metrics
+      port: 9091
+      targetPort: metrics

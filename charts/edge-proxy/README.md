@@ -11,12 +11,13 @@ Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [
 | ConfigMap `<release>-edge-proxy` | The deployment config (`config.*`), loaded by both edge and admin. Admin validates policy against it, so they must agree |
 | Deployment and Service `<release>-edge-proxy-edge` | Port `http` 8080 for traffic, `internal` 9090 for `/livez`, `/readyz` and `/metrics` |
 | PodDisruptionBudget `<release>-edge-proxy-edge` | `maxUnavailable: 1` |
-| ServiceAccount `<release>-edge-proxy` | Shared by edge and admin. No token is mounted: neither calls the Kubernetes API |
-| Deployment and Service `<release>-edge-proxy-admin` | Port `http` 8081, one replica. Init container `migrate` runs `admin migrate` before admin starts; it is idempotent and serialised by an advisory lock |
+| ServiceAccount `<release>-edge-proxy` | Shared by edge, admin and the autopilot runner. No token is mounted: none calls the Kubernetes API |
+| Deployment and Service `<release>-edge-proxy-admin` | Port `http` 8081 and `metrics` 9091 for `/metrics`, one replica. Init container `migrate` runs `admin migrate` before admin starts; it is idempotent and serialised by an advisory lock |
 | Cluster `<release>-edge-proxy-pg` | With `postgres.cnpg.enabled`. Database `edge_admin` owned by `edge_owner`, plus the runtime role `migrations.runtimeRole`. A ScheduledBackup with `postgres.cnpg.scheduledBackup` |
 | Valkey Deployment and Service `<release>-valkey` | With `valkey.enabled`. No persistence, `maxmemory 100mb` with `volatile-ttl` eviction, and a NetworkPolicy that admits only the edge pods |
 | Job `<release>-edge-proxy-bootstrap`, with its ServiceAccount, Role and RoleBinding | With `bootstrap.generateSecrets`. A `pre-install,pre-upgrade` hook (an Argo CD PreSync hook) that creates the Secrets below when they are missing. Its Role can create Secrets but not read them |
 | DaemonSet `<release>-edge-proxy-log-shipper`, with its ConfigMap, ServiceAccount, ClusterRole and ClusterRoleBinding | With `logShipper.enabled` (the default). [Vector](https://vector.dev/docs/reference/configuration/sources/kubernetes_logs/) on the nodes that run edges reads only this release's edge pod logs from a read-only `/var/log/pods` and posts their access lines to admin, which builds **Routes** from them. It runs as root to read the log files, keeps read positions under `logShipper.dataDir` on the node, and its ClusterRole only lists and watches pods and nodes. A namespace that enforces the baseline Pod Security Standard refuses its hostPath mounts |
+| Deployment `<release>-edge-proxy-autopilot` | With `autopilot.enabled`. One [autopilot runner](https://github.com/chrisleekr/edge-proxy/blob/main/docs/deploy/autopilot.md), which claims cases from admin's Service and runs them with the model credentials in `autopilot.existingSecret`. It opens no port, so it has no Service and no probes. `/tmp` is an `emptyDir`, the only writable path |
 | `extraObjects` | Rendered through `tpl`, for objects such as a ListenerSet or Certificate |
 
 ## Before installing
@@ -30,6 +31,7 @@ Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [
    | `<release>-edge-proxy-admin-generated` | `ADMIN_PASSWORD`, `AUDIT_HMAC_KEY_ID`, `AUDIT_HMAC_KEY`. Separate from the edge's, so an edge node never receives it |
    | `<release>-edge-proxy-pg-runtime` | With `postgres.cnpg.enabled` and no `runtimeRoleSecret`: the runtime role's `username` and `password` |
    | `<release>-edge-proxy-logs-generated` | With `logShipper.enabled` and no `logShipper.existingSecret`: `LOG_INGEST_TOKEN`, which lets the shipper post access lines to admin and nothing else |
+   | `<release>-edge-proxy-autopilot-generated` | With `autopilot.enabled` and no `autopilot.tokenSecret`: `AUTOPILOT_TOKEN`, which admin and the runner share. It lets the runner claim cases, report results and call admin's MCP tools, and nothing else |
 
    Helm does not own them, so they survive `helm uninstall`; delete them to start over. Back up `AUDIT_HMAC_KEY`: without it the audit chain cannot be verified.
 
@@ -42,6 +44,9 @@ Postgres and Valkey are external by default. `postgres.cnpg.enabled` creates a [
    | `admin.existingSecret` | `AUDIT_HMAC_KEY_ID`, `AUDIT_HMAC_KEY`, optional `AUDIT_HMAC_PREVIOUS_KEYS`, and `DATABASE_URL` (runtime role) unless `postgres.cnpg.enabled` |
    | `edge.existingSecret` | `EDGE_SERVICE_TOKEN`, optional `INGRESS_SECRET_VALUES`, and optional `VALKEY_URL` unless `valkey.enabled` |
    | `logShipper.existingSecret` | With `logShipper.enabled`: `LOG_INGEST_TOKEN`, at least 32 characters and different from the edge token |
+   | `autopilot.tokenSecret` | With `autopilot.enabled`: `AUTOPILOT_TOKEN`, at least 32 characters and different from the edge and log shipper tokens |
+
+   `autopilot.existingSecret` is always required with `autopilot.enabled`, and nothing generates it: it holds any of `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, at least one. Admin never mounts it.
 
 3. **Image tags.** Until Edge Proxy publishes a release, `appVersion` is the `0.0.0` placeholder and the render fails without `edge.image.tag` and `admin.image.tag`.
 
@@ -51,9 +56,9 @@ All off by default.
 
 | Value | Renders |
 |---|---|
-| `networkPolicy.enabled` | Ingress policies. The edge's `http` port admits only `networkPolicy.edgeFrom` (required: what sends traffic to the edge, such as cloudflared). Without it, any pod inside `config.trustedProxies` could reach the edge and set its own client IP. `internal` admits `metricsFrom`; admin admits the edge pods and `adminFrom` |
+| `networkPolicy.enabled` | Ingress policies. The edge's `http` port admits only `networkPolicy.edgeFrom` (required: what sends traffic to the edge, such as cloudflared). Without it, any pod inside `config.trustedProxies` could reach the edge and set its own client IP. `internal` admits `metricsFrom`; admin's `http` admits the edge pods, the log shipper and autopilot runner when enabled, and `adminFrom`, and its unauthenticated `metrics` port admits only `metricsFrom` |
 | `istio.destinationRule.enabled` | A DestinationRule with `idleTimeout: 60s`, below the edge's `IDLE_TIMEOUT` (75s). Istio's default is 1h, so it reuses connections the edge has closed, and those requests fail with 503 |
-| `metrics.serviceMonitor.enabled`, `metrics.prometheusRule.enabled` | Scraping of the edge's `/metrics`, and the alerts from the [monitoring guide](https://github.com/chrisleekr/edge-proxy/blob/main/docs/operate/monitoring.md) scoped to this release's edges. The rules require the ServiceMonitor |
+| `metrics.serviceMonitor.enabled`, `metrics.prometheusRule.enabled` | Scraping of the edge's and admin's `/metrics`, and the alerts from the [monitoring guide](https://github.com/chrisleekr/edge-proxy/blob/main/docs/operate/monitoring.md) scoped to this release's edges and admin. The rules require the ServiceMonitor |
 | `route.admin.enabled` | An HTTPRoute to admin, with optional `filters` (see `values.yaml` for the Istio `X-Forwarded-For` filter that sign-in throttling needs) |
 | `route.admin.oauth2Proxy.enabled` | An Istio `CUSTOM` AuthorizationPolicy in the gateway's namespace that sends admin's hosts through an ext_authz provider such as oauth2-proxy |
 
@@ -102,8 +107,9 @@ With `bootstrap.generateSecrets: false` the edge token is created in admin, so t
 | `edge.extraVolumes`, `edge.extraVolumeMounts`, `admin.extraVolumes`, `admin.extraVolumeMounts` | `[]` | For a bootstrap file or a password blocklist |
 | `edge.topologySpreadConstraints` | `null` (zone and node spread) | `[]` disables |
 | `serviceAccount.create`, `.name`, `.annotations` | `true`, release fullname, `{}` | |
-| `edge.resources` | requests `50m`/`64Mi`, limit `256Mi` | No CPU limit. Raise the memory limit with `MAX_STREAMS` |
+| `edge.resources` | requests `50m`/`64Mi`, limit `512Mi` | No CPU limit. Raise the memory limit, and `GOMEMLIMIT`, with `MAX_STREAMS` or `MAX_INFLIGHT`. Chart 0.6.0 raised the default `GOMEMLIMIT` to `460MiB`: a release that overrides `limits.memory` must also set `edge.env.GOMEMLIMIT` to about 90% of it, or Go stops collecting before the hard limit and `MAX_INFLIGHT` is sized for memory the pod does not have |
 | `admin.trustedProxies` | `""` | `ADMIN_TRUSTED_PROXIES`, admin's own HTTPS proxy |
+| `admin.alertmanagerURL` | `""` | `ALERTMANAGER_URL`: admin sends [anomaly notifications](https://github.com/chrisleekr/edge-proxy/blob/main/docs/operate/notifications.md) to this Alertmanager. Empty shows them in admin only |
 | `admin.resources` | requests `25m`/`64Mi`, limit `128Mi` | |
 | `bootstrap.generateSecrets` | `true` | Generate missing Secrets in a hook Job |
 | `bootstrap.adminUsername` | `admin` | First admin, created only while admin has no users |
@@ -113,6 +119,12 @@ With `bootstrap.generateSecrets: false` the edge token is created in admin, so t
 | `logShipper.image` | `timberio/vector`, pinned by digest | The shipper's image |
 | `logShipper.nodeSelector`, `logShipper.tolerations` | the edge's | Where the shipper runs; it must run on every node that runs an edge |
 | `logShipper.dataDir` | `/var/lib/edge-proxy-log-shipper` | Node directory for read positions; the release's namespace and name are appended |
+| `autopilot.enabled` | `false` | Run the autopilot runner. Admin gets `AUTOPILOT_TOKEN_FILE` with the same token |
+| `autopilot.image` | `chrisleekr/edge-proxy-autopilot`, tag `Chart.appVersion` | The runner's image |
+| `autopilot.existingSecret` | `""` | Required when enabled: the model credentials |
+| `autopilot.concurrency`, `.caseTimeout`, `.maxTurns` | `1`, `10m`, `30` | `AUTOPILOT_CONCURRENCY` (1 to 4), `AUTOPILOT_CASE_TIMEOUT` (1s to 1h), `AUTOPILOT_MAX_TURNS` (1 to 100) |
+| `autopilot.resources` | requests `100m`/`256Mi`, limits `1` CPU/`1Gi` | One Claude run. Multiply the limits by `concurrency` |
+| `autopilot.podAnnotations`, `.nodeSelector`, `.tolerations`, `.affinity` | `{}`, `{}`, `[]`, `{}` | |
 | `migrations.enabled` | `true` | Run `admin migrate` in an init container before admin starts |
 | `migrations.runtimeRole` | `edge_app` | The role admin connects as |
 | `postgres.cnpg.enabled` | `false` | Create a CloudNativePG `Cluster`. Admin connects to `<cluster>-rw` with `PGUSER`/`PGPASSWORD` from the runtime role Secret |
