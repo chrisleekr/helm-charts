@@ -375,6 +375,8 @@ networkPolicy:
   #       gateway.networking.k8s.io/gateway-name: public
   # metricsFrom lists the peers allowed to reach the edge's internal port and
   # admin's metrics port (/metrics), normally Prometheus. Empty admits none.
+  # Both ports are unauthenticated, so without networkPolicy.enabled any pod that
+  # can reach the Services can read them.
   metricsFrom: []
   # adminFrom lists peers allowed to reach admin besides the edge pods, for
   # example the gateway when route.admin is enabled.

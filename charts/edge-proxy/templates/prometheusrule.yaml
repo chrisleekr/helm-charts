@@ -124,5 +124,5 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "Admin job {{ "{{" }} $labels.job {{ "}}" }} failed; check the background job failed log line"
+            summary: "Admin job {{ "{{" }} $labels.exported_job {{ "}}" }} failed; check the background job failed log line"
 {{- end }}

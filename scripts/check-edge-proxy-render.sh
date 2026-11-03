@@ -202,6 +202,9 @@ admin_np='select(.kind == "NetworkPolicy" and .metadata.labels."app.kubernetes.i
   || fail charts/edge-proxy/templates/servicemonitor.yaml "admin must be scraped on its metrics port"
 leader=$(yq e -N 'select(.kind == "PrometheusRule") | .spec.groups[0].rules[] | select(.alert == "EdgeProxyAdminNoLeader") | .expr' "$rendered")
 grep -qF "service=\"$admin_svc\"" <<<"$leader" || fail charts/edge-proxy/templates/prometheusrule.yaml "admin alerts must select service=\"$admin_svc\", got: $leader"
+# Prometheus keeps its own job label (the Service), so admin's job label arrives as exported_job.
+jobsum=$(yq e -N 'select(.kind == "PrometheusRule") | .spec.groups[0].rules[] | select(.alert == "EdgeProxyAdminJobFailures") | .annotations.summary' "$rendered")
+grep -qF '$labels.exported_job' <<<"$jobsum" || fail charts/edge-proxy/templates/prometheusrule.yaml "EdgeProxyAdminJobFailures must name the failed job by exported_job, got: $jobsum"
 
 # 13. The oauth2-proxy gate lives in the gateway's namespace, targets the
 #     Gateway, and covers each admin host with and without a port. It cannot
@@ -351,6 +354,8 @@ admin=$(yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels
 admin_svc=$(yq e -N 'select(.kind == "Service" and .metadata.labels."app.kubernetes.io/component" == "admin") | .metadata.name' "$rendered")
 runner_env() { yq e ".containers[0].env[] | select(.name == \"$1\") | .value" <<<"$runner"; }
 autopilot_secret=$(generated_autopilot_secret)
+grep -qF '"stringData": {"AUTOPILOT_TOKEN"' "$rendered" \
+  || fail charts/edge-proxy/templates/bootstrap-secrets.yaml "the bootstrap Job must create AUTOPILOT_TOKEN in the generated Secret"
 [ -n "$autopilot_secret" ] && [ "$(yq e '.volumes[] | select(.name == "token") | .secret.secretName' <<<"$runner")" = "$autopilot_secret" ] \
   || fail charts/edge-proxy/templates/autopilot-deployment.yaml "the runner's token must come from the generated '$autopilot_secret'"
 [ "$(yq e '.volumes[] | select(.name == "autopilot-token") | .secret.secretName + ":" + .secret.items[0].key' <<<"$admin")" = "$autopilot_secret:AUTOPILOT_TOKEN" ] \

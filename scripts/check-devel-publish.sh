@@ -39,7 +39,7 @@ for appversion in 0.0.0 1.2.3; do
   [ "$(helm show chart sre-platform-0.0.0-dev-01234567.tgz | yq '.appVersion')" = "$appversion" ]
   [ "$(yq '.appVersion' charts/sre-platform/Chart.yaml)" = "$appversion" ]
   # other-chart changed in the same commit and is still withheld at 0.0.0.
-  [ ! -e other-chart-2.0.0-dev-01234567.tgz ]
+  [ ! -e other-chart-0.0.0-dev-01234567.tgz ]
 done
 # edge-proxy changed only in the first commit and is published at 0.0.0.
 [ -e edge-proxy-0.0.0-dev-01234567.tgz ]
