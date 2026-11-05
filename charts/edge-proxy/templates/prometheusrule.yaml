@@ -47,6 +47,9 @@ spec:
         # restart. for: 5m keeps restarts quiet: after a short outage the
         # failures leave the window before 5m. A sustained outage keeps >= 3
         # in the window (4-5 polls per 5m at the 1m cap) and fires at about 5.5m.
+        # Limit: if admin hangs instead of refusing, each poll waits out the
+        # 30s client timeout, failures come every 78-102s, the window can drop
+        # to 2 and reset for:, so this may not fire.
         - alert: EdgeProxySnapshotPollErrors
           expr: increase(edge_snapshot_poll_errors_total{ {{- $sel -}} }[5m]) >= 3
           for: 5m
