@@ -42,11 +42,14 @@ spec:
           annotations:
             summary: Edges run different policy versions; some cannot reach admin
             runbook_url: {{ $runbooks }}#admin-or-postgres-down
-        # One or two failed polls, such as during an admin restart, are not an
-        # outage. increase() extrapolates over the window, so 2 failures can
-        # read about 2.4 while 3 read at least 3: >= 3 fires on the third.
+        # The poller backs off (5s << failures, capped at 1m), so 3 failures
+        # take only about 30s of admin downtime, shorter than an admin pod
+        # restart. for: 5m keeps restarts quiet: after a short outage the
+        # failures leave the window before 5m. A sustained outage keeps >= 3
+        # in the window (4-5 polls per 5m at the 1m cap) and fires at about 5.5m.
         - alert: EdgeProxySnapshotPollErrors
           expr: increase(edge_snapshot_poll_errors_total{ {{- $sel -}} }[5m]) >= 3
+          for: 5m
           labels:
             severity: warning
           annotations:

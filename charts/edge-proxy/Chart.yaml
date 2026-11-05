@@ -28,7 +28,7 @@ keywords:
 annotations:
   artifacthub.io/changes: |
     - kind: fixed
-      description: "EdgeProxySnapshotPollErrors fires on 3 or more failed polls in 5 minutes on an edge, not on a single failed poll."
+      description: "EdgeProxySnapshotPollErrors fires when an edge has 3 or more failed polls in 5 minutes for 5 minutes, not on a single failed poll or an admin restart."
     - kind: added
       description: "Optional autopilot runner Deployment (autopilot.enabled), admin /metrics on port 9091 with ServiceMonitor scraping, admin alerts, and admin.alertmanagerURL."
     - kind: changed
