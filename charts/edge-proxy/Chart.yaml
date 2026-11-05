@@ -3,7 +3,7 @@ name: edge-proxy
 description: >-
   A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between a CDN and the load balancer or gateway that routes your services, and its admin service
 type: application
-version: 0.6.0
+version: 0.6.1
 # matchLabelKeys in the edge topology spread is on by default from 1.27.
 kubeVersion: ">=1.27.0-0"
 appVersion: "1.1.0"
@@ -27,6 +27,8 @@ keywords:
   - kubernetes
 annotations:
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "EdgeProxySnapshotPollErrors fires when an edge has 3 or more failed polls in 5 minutes for 5 minutes, not on a single failed poll or an admin restart shorter than about 2 minutes."
     - kind: added
       description: "Optional autopilot runner Deployment (autopilot.enabled), admin /metrics on port 9091 with ServiceMonitor scraping, admin alerts, and admin.alertmanagerURL."
     - kind: changed
