@@ -900,6 +900,51 @@ entries:
   edge-proxy:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: "Sync to edge-proxy v1.2.0: **admin:** add attention acks, autopilot case switches and DRAIN_DELAY (#24); **edge:** add trusted client allowlist (snapshot schema 6) (#23); **ui:** rework admin navigation and add allowlist, autopilot and attention controls (#25); **loadtest:** replace config_rules in the autopilot load-full setup (#21). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.2.0"
+        - kind: fixed
+          description: "EdgeProxySnapshotPollErrors fires when an edge has 3 or more failed polls in 5 minutes for 5 minutes, not on a single failed poll or an admin restart shorter than about 2 minutes."
+        - kind: added
+          description: "Optional autopilot runner Deployment (autopilot.enabled), admin /metrics on port 9091 with ServiceMonitor scraping, admin alerts, and admin.alertmanagerURL."
+        - kind: changed
+          description: "Raise the edge memory limit to 512Mi and GOMEMLIMIT to 460MiB, and cap the log shipper sink at concurrency 2 with a 1000-event buffer."
+        - kind: changed
+          description: "Sync to edge-proxy v1.1.0: admin anomaly notifications, overlay rules and the autopilot API (#16); the autopilot runner image (#17); edge client signals and limits (#15); OpenTelemetry tracing (#12); admin UI pages (#18). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.1.0"
+        - kind: changed
+          description: "Sync to edge-proxy v1.0.0: single UPSTREAM_URL edge, observed routes, and admin bootstrap (backend) (#2); **ui:** redesign admin UI with dashboard, routes view and docs screenshot gate (#3). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.0.0"
+        - kind: added
+          description: "Initial release."
+    apiVersion: v2
+    appVersion: 1.2.0
+    created: "2026-11-10T10:26:02.759819684Z"
+    dependencies:
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: 0.12.0
+    description: A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that
+      sits between a CDN and the load balancer or gateway that routes your services,
+      and its admin service
+    digest: e37dc1fd2a0ddefa35b62146ce5b1ae0d3e26606e0352011c6ee90a3905d6bd1
+    home: https://github.com/chrisleekr/edge-proxy
+    keywords:
+    - reverse-proxy
+    - rate-limiting
+    - waf
+    - kubernetes
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: edge-proxy
+    sources:
+    - https://github.com/chrisleekr/edge-proxy
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/edge-proxy-0.6.2/edge-proxy-0.6.2.tgz
+    version: 0.6.2
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: "EdgeProxySnapshotPollErrors fires when an edge has 3 or more failed polls in 5 minutes for 5 minutes, not on a single failed poll or an admin restart shorter than about 2 minutes."
         - kind: added
@@ -4319,4 +4364,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-11-05T21:44:12.214278348Z"
+generated: "2026-11-10T10:26:02.760066495Z"
