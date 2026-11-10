@@ -3,10 +3,10 @@ name: edge-proxy
 description: >-
   A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between a CDN and the load balancer or gateway that routes your services, and its admin service
 type: application
-version: 0.6.1
+version: 0.6.2
 # matchLabelKeys in the edge topology spread is on by default from 1.27.
 kubeVersion: ">=1.27.0-0"
-appVersion: "1.1.0"
+appVersion: "1.2.0"
 home: https://github.com/chrisleekr/edge-proxy
 sources:
   - https://github.com/chrisleekr/edge-proxy
@@ -27,6 +27,8 @@ keywords:
   - kubernetes
 annotations:
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to edge-proxy v1.2.0: **admin:** add attention acks, autopilot case switches and DRAIN_DELAY (#24); **edge:** add trusted client allowlist (snapshot schema 6) (#23); **ui:** rework admin navigation and add allowlist, autopilot and attention controls (#25); **loadtest:** replace config_rules in the autopilot load-full setup (#21). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.2.0"
     - kind: fixed
       description: "EdgeProxySnapshotPollErrors fires when an edge has 3 or more failed polls in 5 minutes for 5 minutes, not on a single failed poll or an admin restart shorter than about 2 minutes."
     - kind: added
