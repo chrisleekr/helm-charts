@@ -1015,6 +1015,57 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: "Valkey subchart 0.12.0 to 1.0.0. `valkey.valkeyConfig` is now `valkey.extraConfig`, which the subchart refuses to render under the old name. A `valkey.networkPolicy` override needs `enabled`, `allowExternal` and `extraIngress`: the subchart ignores `ingress` and renders no policy unless enabled. Upgrade with a complete values file, not `--reuse-values`. Upgrade guide: https://github.com/valkey-io/valkey-helm/blob/valkey-1.0.0/valkey/UPGRADE.md"
+        - kind: changed
+          description: "Log shipper Vector 0.59.0 to 0.62.0, and the bootstrap hook's curl 8.22.0 to 8.23.0."
+        - kind: changed
+          description: "Sync to edge-proxy v1.3.0: **admin:** add a Traffic map of requests by viewer country (#30); **admin:** show crawler range refresh status and alert when a source goes stale (#29). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.3.0"
+        - kind: changed
+          description: "Sync to edge-proxy v1.2.0: **admin:** add attention acks, autopilot case switches and DRAIN_DELAY (#24); **edge:** add trusted client allowlist (snapshot schema 6) (#23); **ui:** rework admin navigation and add allowlist, autopilot and attention controls (#25); **loadtest:** replace config_rules in the autopilot load-full setup (#21). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.2.0"
+        - kind: fixed
+          description: "EdgeProxySnapshotPollErrors fires when an edge has 3 or more failed polls in 5 minutes for 5 minutes, not on a single failed poll or an admin restart shorter than about 2 minutes."
+        - kind: added
+          description: "Optional autopilot runner Deployment (autopilot.enabled), admin /metrics on port 9091 with ServiceMonitor scraping, admin alerts, and admin.alertmanagerURL."
+        - kind: changed
+          description: "Raise the edge memory limit to 512Mi and GOMEMLIMIT to 460MiB, and cap the log shipper sink at concurrency 2 with a 1000-event buffer."
+        - kind: changed
+          description: "Sync to edge-proxy v1.1.0: admin anomaly notifications, overlay rules and the autopilot API (#16); the autopilot runner image (#17); edge client signals and limits (#15); OpenTelemetry tracing (#12); admin UI pages (#18). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.1.0"
+        - kind: changed
+          description: "Sync to edge-proxy v1.0.0: single UPSTREAM_URL edge, observed routes, and admin bootstrap (backend) (#2); **ui:** redesign admin UI with dashboard, routes view and docs screenshot gate (#3). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.0.0"
+        - kind: added
+          description: "Initial release."
+    apiVersion: v2
+    appVersion: 1.3.0
+    created: "2026-11-21T04:38:01.422005131Z"
+    dependencies:
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: 1.0.0
+    description: A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that
+      sits between a CDN and the load balancer or gateway that routes your services,
+      and its admin service
+    digest: ffaf6a20dedf9aea6972813b9b72880b3c050f46ca58f7a779068a303dec6d68
+    home: https://github.com/chrisleekr/edge-proxy
+    keywords:
+    - reverse-proxy
+    - rate-limiting
+    - waf
+    - kubernetes
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: edge-proxy
+    sources:
+    - https://github.com/chrisleekr/edge-proxy
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/edge-proxy-0.7.0/edge-proxy-0.7.0.tgz
+    version: 0.7.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: "Sync to edge-proxy v1.3.0: **admin:** add a Traffic map of requests by viewer country (#30); **admin:** show crawler range refresh status and alert when a source goes stale (#29). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.3.0"
         - kind: changed
           description: "Sync to edge-proxy v1.2.0: **admin:** add attention acks, autopilot case switches and DRAIN_DELAY (#24); **edge:** add trusted client allowlist (snapshot schema 6) (#23); **ui:** rework admin navigation and add allowlist, autopilot and attention controls (#25); **loadtest:** replace config_rules in the autopilot load-full setup (#21). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.2.0"
@@ -4690,4 +4741,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-11-15T13:08:06.387677596Z"
+generated: "2026-11-21T04:38:01.422103462Z"
