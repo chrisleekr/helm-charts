@@ -3,10 +3,10 @@ name: edge-proxy
 description: >-
   A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between a CDN and the load balancer or gateway that routes your services, and its admin service
 type: application
-version: 0.7.0
+version: 0.7.1
 # matchLabelKeys in the edge topology spread is on by default from 1.27.
 kubeVersion: ">=1.27.0-0"
-appVersion: "1.3.0"
+appVersion: "1.4.0"
 home: https://github.com/chrisleekr/edge-proxy
 sources:
   - https://github.com/chrisleekr/edge-proxy
@@ -27,6 +27,8 @@ keywords:
   - kubernetes
 annotations:
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Sync to edge-proxy v1.4.0: add IP lists, client.ip_lists and per-edge bans for trap rules (#37); add value lists, a Value lists page and a Policy nav group for IP lists (#41); **admin:** replace the Traffic map with a full-screen War room (#43); **autopilot:** split the verdict into summary, needs_you and details, and scope CI (#35); **edge:** add browser floor, CDN header signals and a shared-key guard for autopilot (#36); name log-only counts logged and list matched rules, action and decided_by in the access log (#42); rename denylists to IP lists, add typed IP lists and always-allow rules (#40). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.4.0"
     - kind: changed
       description: "Valkey subchart 0.12.0 to 1.0.0. `valkey.valkeyConfig` is now `valkey.extraConfig`, which the subchart refuses to render under the old name. A `valkey.networkPolicy` override needs `enabled`, `allowExternal` and `extraIngress`: the subchart ignores `ingress` and renders no policy unless enabled. Upgrade with a complete values file, not `--reuse-values`. Upgrade guide: https://github.com/valkey-io/valkey-helm/blob/valkey-1.0.0/valkey/UPGRADE.md"
     - kind: changed
