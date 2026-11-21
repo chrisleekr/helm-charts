@@ -186,7 +186,7 @@ bootstrap:
   # image runs the hook Job. It needs sh, tr, head, base64 and curl.
   image:
     repository: curlimages/curl
-    tag: 8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+    tag: 8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -212,7 +212,7 @@ logShipper:
   existingSecret: ""
   image:
     repository: timberio/vector
-    tag: 0.59.0-distroless-libc@sha256:54a7c01056e98305fce80545ace22779035747af9e89114508330fe94f829831
+    tag: 0.62.0-distroless-libc@sha256:22100806cedabab3768edd6ac919be1a3a026b1020c5b280174a54573572db9d
     pullPolicy: IfNotPresent
   # dataDir on the node keeps Vector's read positions, so a restart neither
   # repeats nor skips lines. The release's namespace and name are appended.
@@ -326,17 +326,18 @@ postgres:
 # valkey adds Valkey from the project-maintained chart; other keys pass through:
 # https://github.com/valkey-io/valkey-helm/tree/main/valkey
 # Rate-limit state needs no persistence. ACL auth is off, so the network policy
-# admits only edge pods. Subchart values cannot be templated, so the selector
-# is literal: with nameOverride, set valkey.networkPolicy.ingress to match (the
-# render fails otherwise), and edge pods of another edge-proxy release in the
-# same namespace can also reach this Valkey.
+# admits only edge pods and pods labelled <release>-valkey-client: "true".
+# Subchart values cannot be templated, so the edge selector is literal: with
+# nameOverride, set valkey.networkPolicy.extraIngress to match (the render
+# fails otherwise), and edge pods of another edge-proxy release in the same
+# namespace can also reach this Valkey.
 valkey:
   enabled: false
-  # valkeyConfig caps memory below the container limit. At about 124 bytes per
+  # extraConfig caps memory below the container limit. At about 124 bytes per
   # key, a spread of client IPs would otherwise grow Valkey until it is killed,
   # losing every counter. volatile-ttl evicts the counters nearest expiry first.
   # save "" skips snapshots that an emptyDir would discard anyway.
-  valkeyConfig: |
+  extraConfig: |
     maxmemory 100mb
     maxmemory-policy volatile-ttl
     save ""
@@ -346,8 +347,15 @@ valkey:
       memory: 32Mi
     limits:
       memory: 128Mi
+  # Without persistence there is no volume to hand over, so a rolling update
+  # avoids the Recreate default's downtime on every upgrade.
+  deploymentStrategy: RollingUpdate
+  # The subchart renders no policy unless enabled. allowExternal: false admits
+  # only its own client-labelled and Valkey pods; extraIngress adds the edges.
   networkPolicy:
-    ingress:
+    enabled: true
+    allowExternal: false
+    extraIngress:
       - from:
           - podSelector:
               matchLabels:

@@ -120,11 +120,21 @@ svc=$(yq e -N 'select(.kind == "Service" and .metadata.labels."app.kubernetes.io
 edge=$(yq e -N 'select(.kind == "Deployment" and .spec.template.metadata.labels."app.kubernetes.io/component" == "edge") | .spec.template' "$rendered")
 vurl=$(yq e '[.spec.containers[0].env[] | select(.name == "VALKEY_URL")] | .[] | .value' <<<"$edge")
 [ "$vurl" = "valkey://$svc:6379" ] || fail charts/edge-proxy/templates/edge-deployment.yaml "VALKEY_URL must be valkey://$svc:6379, got '$vurl'"
-allowed=$(yq e -N 'select(.kind == "NetworkPolicy") | .spec.ingress[0].from[0].podSelector.matchLabels | to_entries | .[] | .key + "=" + .value' "$rendered")
-while IFS= read -r pair; do
-  [ "$(yq e ".metadata.labels.\"${pair%%=*}\"" <<<"$edge")" = "${pair#*=}" ] \
-    || fail charts/edge-proxy/values.yaml "valkey.networkPolicy selector $pair does not match the edge pods"
-done <<<"$allowed"
+# The subchart lists its own client and replica selectors before
+# extraIngress, so any one pod selector the edge pods satisfy admits them. No
+# policy at all also fails: the subchart renders none unless enabled.
+selectors=$(yq e -N 'select(.kind == "NetworkPolicy" and .metadata.labels."app.kubernetes.io/name" == "valkey") | .spec.ingress[].from[] | select(has("podSelector") and (has("namespaceSelector") | not)) | .podSelector.matchLabels | to_entries | map(.key + "=" + .value) | join(",")' "$rendered")
+admitted=
+while IFS= read -r selector; do
+  [ -n "$selector" ] || continue
+  match=1
+  IFS=, read -ra pairs <<<"$selector"
+  for pair in "${pairs[@]}"; do
+    [ "$(yq e ".metadata.labels.\"${pair%%=*}\"" <<<"$edge")" = "${pair#*=}" ] || match=
+  done
+  [ -n "$match" ] && admitted=1
+done <<<"$selectors"
+[ -n "$admitted" ] || fail charts/edge-proxy/values.yaml "no valkey.networkPolicy ingress selector matches the edge pods"
 # valkey.nameOverride renames the subchart's Service, and VALKEY_URL must follow.
 helm template "$chart" -f "$values" --set valkey.enabled=true --set valkey.nameOverride=kv > "$rendered"
 svc=$(yq e -N 'select(.kind == "Service" and .metadata.labels."app.kubernetes.io/name" == "kv" and .spec.clusterIP != "None") | .metadata.name' "$rendered" | head -1)
@@ -389,8 +399,8 @@ helm template "$chart" -f "$values" --set autopilot.enabled=true --set autopilot
 # 19. The shipper's transform passes Vector's own unit tests: access lines are
 #     posted as their JSON object, and every other line is dropped. The pinned
 #     binary must be the version the chart deploys.
-vector_version=0.59.0
-vector_sha256=a8dbc43c18ae25d0b23a712c9262f3aad904e352b1db5e7db1d9c4aecab59496 # x86_64-unknown-linux-musl
+vector_version=0.62.0
+vector_sha256=41fd728f007bbac1f5d12e9fcea569879d1fb8819f3b55f62c54173b3bc0a6f9 # x86_64-unknown-linux-musl
 [ "$(yq e '.logShipper.image.tag' "$chart/values.yaml" | cut -d- -f1)" = "$vector_version" ] \
   || fail scripts/check-edge-proxy-render.sh "update vector_version and vector_sha256 to logShipper.image.tag's version"
 vdir=$(mktemp -d)

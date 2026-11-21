@@ -3,7 +3,7 @@ name: edge-proxy
 description: >-
   A Helm chart for Edge Proxy, a policy-enforcing reverse proxy that sits between a CDN and the load balancer or gateway that routes your services, and its admin service
 type: application
-version: 0.6.3
+version: 0.7.0
 # matchLabelKeys in the edge topology spread is on by default from 1.27.
 kubeVersion: ">=1.27.0-0"
 appVersion: "1.3.0"
@@ -17,7 +17,7 @@ maintainers:
 # chart replaced Bitnami's after Bitnami stopped publishing free images.
 dependencies:
   - name: valkey
-    version: 0.12.0
+    version: 1.0.0
     repository: https://valkey.io/valkey-helm/
     condition: valkey.enabled
 keywords:
@@ -27,6 +27,10 @@ keywords:
   - kubernetes
 annotations:
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Valkey subchart 0.12.0 to 1.0.0. `valkey.valkeyConfig` is now `valkey.extraConfig`, which the subchart refuses to render under the old name. A `valkey.networkPolicy` override needs `enabled`, `allowExternal` and `extraIngress`: the subchart ignores `ingress` and renders no policy unless enabled. Upgrade with a complete values file, not `--reuse-values`. Upgrade guide: https://github.com/valkey-io/valkey-helm/blob/valkey-1.0.0/valkey/UPGRADE.md"
+    - kind: changed
+      description: "Log shipper Vector 0.59.0 to 0.62.0, and the bootstrap hook's curl 8.22.0 to 8.23.0."
     - kind: changed
       description: "Sync to edge-proxy v1.3.0: **admin:** add a Traffic map of requests by viewer country (#30); **admin:** show crawler range refresh status and alert when a source goes stale (#29). Release notes: https://github.com/chrisleekr/edge-proxy/releases/tag/v1.3.0"
     - kind: changed
