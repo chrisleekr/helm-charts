@@ -4584,6 +4584,38 @@ entries:
         - kind: removed
           description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed, so upgrading deletes any existing Ingress. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
     apiVersion: v2
+    appVersion: 3.8.54
+    created: "2026-11-22T13:44:28.812924565Z"
+    description: A Helm chart for OmniRoute - a self-hostable AI gateway
+    digest: 691e5a3d2fce496cc207edfacfbd46378623da2e8fb375768ab2432f0f7f8a30
+    home: https://omniroute.online
+    icon: https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/public/icon-512.png
+    keywords:
+    - ai
+    - ai-gateway
+    - llm
+    - llm-gateway
+    - llm-router
+    - proxy
+    - openai
+    - anthropic
+    - omniroute
+    kubeVersion: '>= 1.31.0'
+    maintainers:
+    - name: Chris Lee
+      url: https://github.com/chrisleekr
+    name: omniroute
+    sources:
+    - https://github.com/diegosouzapw/OmniRoute
+    type: application
+    urls:
+    - https://github.com/chrisleekr/helm-charts/releases/download/omniroute-0.3.4/omniroute-0.3.4.tgz
+    version: 0.3.4
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: removed
+          description: "BREAKING: Ingress replaced by a Gateway API HTTPRoute (route.*). ingress.* values are removed, so upgrading deletes any existing Ingress. Set route.enabled and route.parentRefs; set route.hostnames unless the listener already pins the host. TLS moves to the Gateway listener (extraObjects)."
+    apiVersion: v2
     appVersion: 3.8.53
     created: "2026-11-15T13:08:06.387540303Z"
     description: A Helm chart for OmniRoute - a self-hostable AI gateway
@@ -4912,4 +4944,4 @@ entries:
     urls:
     - https://github.com/chrisleekr/helm-charts/releases/download/woodle-map-0.0.1/woodle-map-0.0.1.tgz
     version: 0.0.1
-generated: "2026-11-21T14:42:56.073378838Z"
+generated: "2026-11-22T13:44:28.813076139Z"
